@@ -1,0 +1,94 @@
+"""Constants for the Radar Hail Risk integration."""
+
+from __future__ import annotations
+
+from typing import Final
+
+DOMAIN: Final = "radar_hail_risk"
+INTEGRATION_NAME: Final = "Radar Hail Risk"
+
+PLATFORMS: Final = ["sensor", "binary_sensor", "device_tracker"]
+
+CONF_LIGHTNING_DISTANCE_ENTITY_ID: Final = "lightning_distance_entity_id"
+CONF_LIGHTNING_COUNTER_ENTITY_ID: Final = "lightning_counter_entity_id"
+CONF_ANALYSIS_RADIUS_KM: Final = "analysis_radius_km"
+CONF_LIGHTNING_TRIGGER_RADIUS_KM: Final = "lightning_trigger_radius_km"
+CONF_MIN_ANALYSIS_INTERVAL_SECONDS: Final = "min_analysis_interval_seconds"
+CONF_STALE_CLEAR_SECONDS: Final = "stale_clear_seconds"
+CONF_RAINVIEWER_ZOOM: Final = "rainviewer_zoom"
+CONF_RAINVIEWER_FRAMES: Final = "rainviewer_frames"
+CONF_CORE_WATCH_DBZ: Final = "core_watch_dbz"
+CONF_CORE_WARNING_DBZ: Final = "core_warning_dbz"
+CONF_CORE_URGENT_DBZ: Final = "core_urgent_dbz"
+CONF_WARNING_CORE_DISTANCE_KM: Final = "warning_core_distance_km"
+CONF_URGENT_CORE_DISTANCE_KM: Final = "urgent_core_distance_km"
+CONF_WARNING_LIGHTNING_DISTANCE_KM: Final = "warning_lightning_distance_km"
+CONF_URGENT_LIGHTNING_DISTANCE_KM: Final = "urgent_lightning_distance_km"
+
+DEFAULT_ANALYSIS_RADIUS_KM: Final = 50
+DEFAULT_LIGHTNING_TRIGGER_RADIUS_KM: Final = 30
+DEFAULT_MIN_ANALYSIS_INTERVAL_SECONDS: Final = 60
+DEFAULT_STALE_CLEAR_SECONDS: Final = 900
+DEFAULT_RAINVIEWER_ZOOM: Final = 7
+DEFAULT_RAINVIEWER_FRAMES: Final = 4
+DEFAULT_CORE_WATCH_DBZ: Final = 50
+DEFAULT_CORE_WARNING_DBZ: Final = 55
+DEFAULT_CORE_URGENT_DBZ: Final = 60
+DEFAULT_WARNING_CORE_DISTANCE_KM: Final = 25
+DEFAULT_URGENT_CORE_DISTANCE_KM: Final = 15
+DEFAULT_WARNING_LIGHTNING_DISTANCE_KM: Final = 20
+DEFAULT_URGENT_LIGHTNING_DISTANCE_KM: Final = 8
+
+OPTIONAL_CONF_DEFAULTS: Final = {
+    CONF_ANALYSIS_RADIUS_KM: DEFAULT_ANALYSIS_RADIUS_KM,
+    CONF_LIGHTNING_TRIGGER_RADIUS_KM: DEFAULT_LIGHTNING_TRIGGER_RADIUS_KM,
+    CONF_MIN_ANALYSIS_INTERVAL_SECONDS: DEFAULT_MIN_ANALYSIS_INTERVAL_SECONDS,
+    CONF_STALE_CLEAR_SECONDS: DEFAULT_STALE_CLEAR_SECONDS,
+    CONF_RAINVIEWER_ZOOM: DEFAULT_RAINVIEWER_ZOOM,
+    CONF_RAINVIEWER_FRAMES: DEFAULT_RAINVIEWER_FRAMES,
+    CONF_CORE_WATCH_DBZ: DEFAULT_CORE_WATCH_DBZ,
+    CONF_CORE_WARNING_DBZ: DEFAULT_CORE_WARNING_DBZ,
+    CONF_CORE_URGENT_DBZ: DEFAULT_CORE_URGENT_DBZ,
+    CONF_WARNING_CORE_DISTANCE_KM: DEFAULT_WARNING_CORE_DISTANCE_KM,
+    CONF_URGENT_CORE_DISTANCE_KM: DEFAULT_URGENT_CORE_DISTANCE_KM,
+    CONF_WARNING_LIGHTNING_DISTANCE_KM: DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
+    CONF_URGENT_LIGHTNING_DISTANCE_KM: DEFAULT_URGENT_LIGHTNING_DISTANCE_KM,
+}
+
+ATTR_LEVEL: Final = "level"
+ATTR_SUMMARY: Final = "summary"
+ATTR_MAX_DBZ: Final = "max_dbz"
+ATTR_CORE_DISTANCE_KM: Final = "core_distance_km"
+ATTR_LIGHTNING_DISTANCE_KM: Final = "lightning_distance_km"
+ATTR_FRAME_AGE_SECONDS: Final = "frame_age_seconds"
+ATTR_FRAME_TIME: Final = "frame_time"
+ATTR_FRAMES_ANALYZED: Final = "frames_analyzed"
+ATTR_SELECTED_CORE_THRESHOLD_DBZ: Final = "selected_core_threshold_dbz"
+ATTR_SELECTED_CORE_DISTANCE_KM: Final = "selected_core_distance_km"
+ATTR_SELECTED_CORE_LATITUDE: Final = "selected_core_latitude"
+ATTR_SELECTED_CORE_LONGITUDE: Final = "selected_core_longitude"
+ATTR_LIGHTNING_TRIGGERED: Final = "lightning_triggered"
+ATTR_LIGHTNING_COUNTER_DELTA: Final = "lightning_counter_delta"
+ATTR_STALE: Final = "is_stale"
+ATTR_LAST_ERROR: Final = "last_error"
+ATTR_LIGHTNING_DIAGNOSTICS: Final = "lightning_diagnostics"
+ATTR_RAINVIEWER_DIAGNOSTICS: Final = "radar_diagnostics"
+
+RISK_LEVEL_NONE: Final = "none"
+RISK_LEVEL_WATCH: Final = "watch"
+RISK_LEVEL_WARNING: Final = "warning"
+RISK_LEVEL_URGENT: Final = "urgent"
+RISK_LEVEL_UNAVAILABLE: Final = "unavailable"
+
+RISK_LEVELS = [
+    RISK_LEVEL_NONE,
+    RISK_LEVEL_WATCH,
+    RISK_LEVEL_WARNING,
+    RISK_LEVEL_URGENT,
+    RISK_LEVEL_UNAVAILABLE,
+]
+
+SERVICE_FORCE_UPDATE: Final = "force_update"
+
+COORDINATOR_KEY: Final = "coordinator"
+DATA_KEY_RESULT: Final = "hail_risk_result"

@@ -1,0 +1,104 @@
+blueprint:
+  name: Radar Hail Risk notification
+  description: >
+    Sends a mobile/app notification when Radar Hail Risk reaches watch, warning,
+    or urgent. The blueprint is opt-in and does not modify dashboards or helpers.
+  domain: automation
+  source_url: https://github.com/petrvnk/radar-hail-risk/blob/main/blueprints/automation/radar_hail_risk/hail_risk_notification.yaml
+  input:
+    risk_level_sensor:
+      name: Risk level sensor
+      description: >
+        Sensor entity that exposes the risk level: none, watch, warning, urgent,
+        or unavailable.
+      selector:
+        entity:
+          domain: sensor
+    risk_summary_sensor:
+      name: Risk summary sensor
+      description: Optional summary sensor used in the notification body.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    notify_service:
+      name: Notify service
+      description: "Example: notify.mobile_app_phone or notify.persistent_notification."
+      selector:
+        text:
+    minimum_level:
+      name: Minimum level to notify
+      description: Choose when the automation starts notifying.
+      default: warning
+      selector:
+        select:
+          options:
+            - watch
+            - warning
+            - urgent
+    title_language:
+      name: Title language
+      description: Notification title language.
+      default: en
+      selector:
+        select:
+          options:
+            - en
+            - cs
+    cooldown_minutes:
+      name: Cooldown minutes
+      description: Minimum time between repeated notifications from this automation.
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 360
+          unit_of_measurement: min
+          mode: slider
+
+mode: single
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input risk_level_sensor
+
+variables:
+  risk_level_entity: !input risk_level_sensor
+  summary_entity: !input risk_summary_sensor
+  minimum_level: !input minimum_level
+  title_language: !input title_language
+  cooldown_minutes: !input cooldown_minutes
+  current_level: "{{ states(risk_level_entity) }}"
+  summary_text: >-
+    {% if summary_entity %}
+      {{ states(summary_entity) }}
+    {% else %}
+      {{ state_attr(risk_level_entity, 'summary') or current_level }}
+    {% endif %}
+  level_rank: >-
+    {{ {'none': 0, 'unavailable': 0, 'watch': 1, 'warning': 2, 'urgent': 3}.get(current_level, 0) }}
+  min_rank: >-
+    {{ {'watch': 1, 'warning': 2, 'urgent': 3}.get(minimum_level, 2) }}
+  title_text: >-
+    {% if title_language == 'cs' %}
+      {% if current_level == 'urgent' %}Nebezpečí krup{% elif current_level == 'warning' %}Varování před kroupami{% elif current_level == 'watch' %}Sledování bouřky{% else %}Radar Hail Risk{% endif %}
+    {% else %}
+      {% if current_level == 'urgent' %}Hail risk urgent{% elif current_level == 'warning' %}Hail risk warning{% elif current_level == 'watch' %}Storm watch{% else %}Radar Hail Risk{% endif %}
+    {% endif %}
+
+action:
+  - condition: template
+    value_template: "{{ level_rank | int >= min_rank | int }}"
+  - condition: template
+    value_template: >-
+      {% set last = this.attributes.last_triggered %}
+      {{ last is none or cooldown_minutes | int(0) == 0 or (now() - last).total_seconds() >= cooldown_minutes | int * 60 }}
+  - service: !input notify_service
+    data:
+      title: "{{ title_text }}"
+      message: "{{ summary_text }}"
+      data:
+        tag: radar_hail_risk
+        group: weather
+        notification_icon: mdi:weather-hail

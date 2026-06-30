@@ -1,0 +1,57 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Setup Radar Hail Risk",
+        "description": "Connect lightning sensors and set baseline thresholds."
+      },
+      "options": {
+        "title": "Radar Hail Risk options",
+        "description": "Adjust thresholds and analysis behavior."
+      }
+    },
+    "error": {
+      "entity_not_found": "Selected entity was not found in Home Assistant.",
+      "invalid_value": "One or more values are not valid numbers."
+    },
+    "abort": {
+      "already_configured": "This integration is already configured for this distance entity."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Radar Hail Risk options",
+        "description": "Tune analysis thresholds and stale-clear behavior."
+      }
+    }
+  },
+  "system_health": {
+    "info": {
+      "version": "Current integration version"
+    }
+  },
+  "services": {
+    "force_update": {
+      "name": "Force risk update",
+      "description": "Manually trigger the coordinator to re-evaluate hail risk." 
+    }
+  },
+  "entity": {
+    "sensor": {
+      "radar_hail_risk_level": {"name": "Radar Hail Risk Level"},
+      "radar_hail_risk_summary": {"name": "Radar Hail Risk Summary"},
+      "radar_hail_max_dbz": {"name": "Radar Hail Risk Max dBZ"},
+      "radar_hail_core_distance": {"name": "Radar Hail Core Distance"},
+      "radar_hail_lightning_distance": {"name": "Lightning Distance"},
+      "radar_hail_frame_age": {"name": "Radar Frame Age"},
+      "radar_hail_last_error": {"name": "Radar Hail Last Error"}
+    },
+    "binary_sensor": {
+      "radar_hail_data_stale": {"name": "Radar Hail Data Stale"}
+    },
+    "device_tracker": {
+      "radar_hail_storm_core": {"name": "Radar Hail Storm Core"}
+    }
+  }
+}
