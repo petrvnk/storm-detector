@@ -5,7 +5,7 @@
   "documentation": "https://github.com/petrvnk/radar-hail-risk",
   "issue_tracker": "https://github.com/petrvnk/radar-hail-risk/issues",
   "codeowners": ["@petrvnk"],
-  "requirements": ["Pillow>=10,<12"],
+  "requirements": [],
   "dependencies": [],
   "config_flow": true,
   "iot_class": "local_polling",
