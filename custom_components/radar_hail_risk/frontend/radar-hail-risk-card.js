@@ -47,7 +47,7 @@ class RadarHailRiskCard extends HTMLElement {
     if (!this.shadowRoot || !this._hass || !this.config) return;
     const c = this.config;
     const levelState = this.state(c.level_entity);
-    const level = this.safe(levelState?.state, 'unavailable');
+    const level = this.levelValue(levelState?.state);
     const attrs = levelState?.attributes || {};
     const summary = this.state(c.summary_entity)?.state || attrs.summary || 'Bez aktuálního shrnutí';
     const maxDbz = this.number(this.state(c.max_dbz_entity)?.state);
@@ -89,8 +89,8 @@ class RadarHailRiskCard extends HTMLElement {
             <div class="summary">${this.escape(summary)}</div>
           </div>
           <div class="badge ${active ? 'active' : ''}">
-            <span>${active ? 'ACTIVE' : 'MONITOR'}</span>
-            <strong>${stale ? 'STALE' : 'LIVE'}</strong>
+            <span>${active ? 'AKTIVNÍ' : 'MONITOR'}</span>
+            <strong>${stale ? 'OBNOVA' : 'ŽIVĚ'}</strong>
           </div>
         </section>
 
@@ -119,9 +119,9 @@ class RadarHailRiskCard extends HTMLElement {
         ${this.coreList(stormCores)}
 
         <section class="chips">
-          ${this.chip('Radar', source.radar || 'unknown')}
-          ${this.chip('Blesky', source.lightning || 'unknown')}
-          ${this.chip('Data', stale ? 'stale' : 'fresh')}
+          ${this.chip('Radar', this.sourceLabel(source.radar || 'unknown'))}
+          ${this.chip('Blesky', this.sourceLabel(source.lightning || 'unknown'))}
+          ${this.chip('Data', stale ? 'obnovuji' : 'aktuální')}
           ${confidence == null ? '' : this.chip('Confidence', `${Math.round(confidence)} %`)}
         </section>
 
@@ -151,8 +151,14 @@ class RadarHailRiskCard extends HTMLElement {
     return entityId ? this._hass?.states?.[entityId] : undefined;
   }
 
+  levelValue(value) {
+    const normalized = String(value ?? '').toLowerCase();
+    if (['none', 'watch', 'warning', 'urgent', 'unavailable'].includes(normalized)) return normalized;
+    return 'unavailable';
+  }
+
   safe(value, fallback) {
-    if (value == null || ['unknown', 'unavailable', 'none', ''].includes(String(value))) return fallback;
+    if (value == null || ['unknown', 'unavailable', ''].includes(String(value))) return fallback;
     return String(value);
   }
 
@@ -163,13 +169,13 @@ class RadarHailRiskCard extends HTMLElement {
   }
 
   statusLabel(level, stale) {
-    if (stale) return 'DATA ISSUE';
+    if (stale) return 'ČEKÁM NA RADAR';
     return {
-      urgent: 'URGENT RISK',
-      warning: 'WARNING',
-      watch: 'WATCH',
-      none: 'CLEAR',
-      unavailable: 'UNAVAILABLE',
+      urgent: 'VYSOKÉ RIZIKO',
+      warning: 'VAROVÁNÍ',
+      watch: 'SLEDOVAT',
+      none: 'V KLIDU',
+      unavailable: 'ČEKÁM NA DATA',
     }[level] || String(level).toUpperCase();
   }
 
@@ -204,8 +210,20 @@ class RadarHailRiskCard extends HTMLElement {
 
   chip(label, value) {
     const normalized = String(value).toLowerCase();
-    const cls = normalized.includes('ok') || normalized === 'fresh' ? 'ok' : normalized.includes('stale') || normalized.includes('error') || normalized.includes('unavailable') ? 'bad' : 'neutral';
+    const cls = normalized.includes('ok') || normalized.includes('aktuální') || normalized.includes('žádoucí') ? 'ok' : normalized.includes('stale') || normalized.includes('error') || normalized.includes('unavailable') || normalized.includes('obnovuji') || normalized.includes('čekám') ? 'bad' : 'neutral';
     return `<div class="chip ${cls}"><span>${this.escape(label)}</span><strong>${this.escape(value)}</strong></div>`;
+  }
+
+  sourceLabel(value) {
+    const normalized = String(value).toLowerCase();
+    return {
+      ok: 'OK',
+      stale: 'čekám',
+      degraded: 'omezeně',
+      error: 'chyba',
+      not_configured: 'vypnuto',
+      unknown: 'neznámé',
+    }[normalized] || value;
   }
 
   coreList(stormCores) {

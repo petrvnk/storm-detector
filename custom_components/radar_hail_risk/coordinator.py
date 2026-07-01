@@ -539,7 +539,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     radar_diagnostics=radar_diagnostics,
                     lightning_diagnostics=tuple(lightning_diagnostics),
                 )
-                source_data_stale = bool(radar_stale or lightning_stale)
+                source_data_stale = bool(radar_stale)
 
                 level = classify_from_thresholds(
                     max_dbz=max_dbz,

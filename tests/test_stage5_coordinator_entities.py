@@ -564,6 +564,7 @@ async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:
     assert payload[ATTR_LIGHTNING_TRIGGERED] is False
     assert payload[ATTR_LAST_ERROR] is None
     assert payload[ATTR_SUMMARY] == "Urgent risk"
+    assert payload[ATTR_STALE] is False
     assert "stale_distance_entity" in payload[ATTR_LIGHTNING_DIAGNOSTICS]
     assert "stale_counter_entity" in payload[ATTR_LIGHTNING_DIAGNOSTICS]
 
