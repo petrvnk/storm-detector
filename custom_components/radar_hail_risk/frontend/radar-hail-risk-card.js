@@ -29,7 +29,9 @@ class RadarHailRiskCard extends HTMLElement {
       home_label: 'Domov',
       ...config,
     };
-    this.attachShadow({ mode: 'open' });
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: 'open' });
+    }
   }
 
   set hass(hass) {
