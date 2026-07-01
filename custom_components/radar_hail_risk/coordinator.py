@@ -255,7 +255,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
 
                 radar_diagnostics: list[str] = []
                 lightning_diagnostics: Iterable[str] = ()
-                general_diagnostics: list[str] = []
+
 
                 analysis = None
                 try:
@@ -347,8 +347,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         lightning_triggered = bool(lightning_snapshot.trigger_active)
                         if lightning_triggered:
                             lightning_counter_delta = None
-                        if lightning_snapshot.has_new_strike:
-                            general_diagnostics.append("lightning_strike_delta")
+
 
                 summary_lightning_diagnostics = () if lightning_stale else tuple(
                     diagnostic
@@ -359,7 +358,6 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                 diagnostics = [
                     *radar_diagnostics,
                     *summary_lightning_diagnostics,
-                    *general_diagnostics,
                 ]
                 has_radar_signal = any(value is not None for value in (max_dbz, selected_distance))
                 has_lightning_signal = lightning_distance_km is not None

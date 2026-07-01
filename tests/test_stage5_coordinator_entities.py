@@ -157,6 +157,44 @@ async def test_coordinator_payload_includes_risk_summary_and_entities() -> None:
     assert tracker.longitude == 14.5
 
 
+async def test_lightning_counter_delta_is_not_exposed_as_user_facing_diagnostic() -> None:
+    hass = FakeHass()
+    now = datetime.now(timezone.utc)
+    hass.set_state("sensor.lightning_distance", "4.5", last_updated=now)
+    hass.set_state("sensor.lightning_count", "12", last_updated=now)
+
+    async def _fake_meta(*_args: object, **_kwargs: object):
+        return {"radar": {"past": []}, "host": "https://tilecache.rainviewer.com"}
+
+    async def _fake_color(*_args: object, **_kwargs: object):
+        return {"#ffffff": 0}
+
+    with patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        _fake_meta,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        _fake_color,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        lambda *_args, **_kwargs: _analysis_payload(),
+    ):
+        coordinator = RadarHailRiskCoordinator(
+            hass,
+            None,
+            "Radar Hail Risk",
+            FakeEntry(),
+            session_factory=FakeSessionContext,
+        )
+        await coordinator._async_update_data()
+        hass.set_state("sensor.lightning_count", "13", last_updated=now)
+        payload = await coordinator._async_update_data()
+
+    assert "lightning_strike_delta" not in payload[ATTR_SUMMARY]
+    assert "lightning_strike_delta" not in payload["diagnostics"]
+    assert payload[ATTR_LAST_ERROR] is None
+
+
 async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:
     hass = FakeHass()
     now = datetime.now(timezone.utc)
