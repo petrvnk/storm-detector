@@ -9,10 +9,12 @@ from unittest.mock import patch
 import pytest
 from custom_components.radar_hail_risk.config_flow import RadarHailRiskOptionsFlowHandler
 from custom_components.radar_hail_risk.const import (
+    ATTR_DEGRADATION_REASONS,
     ATTR_LIGHTNING_DIAGNOSTICS,
     ATTR_LIGHTNING_DISTANCE_KM,
     ATTR_LOCATION_SOURCE,
     ATTR_RAINVIEWER_DIAGNOSTICS,
+    ATTR_SOURCE_STATUS,
     ATTR_STALE,
     CONF_ANALYSIS_RADIUS_KM,
     CONF_LOCATION_ENTITY_ID,
@@ -175,6 +177,12 @@ async def test_coordinator_degrades_to_lightning_when_radar_source_fails() -> No
     assert payload[ATTR_STALE] is False
     assert "radar_source_error" in payload[ATTR_RAINVIEWER_DIAGNOSTICS]
     assert payload[ATTR_LIGHTNING_DIAGNOSTICS] == ()
+    assert payload[ATTR_SOURCE_STATUS] == {
+        "location": "ok",
+        "radar": "degraded",
+        "lightning": "ok",
+    }
+    assert "radar_source_error" in payload[ATTR_DEGRADATION_REASONS]
     assert "rainviewer unavailable" not in payload["last_error"]
 
 
@@ -251,4 +259,60 @@ async def test_missing_configured_location_entity_degrades_cleanly() -> None:
     assert payload["level"] == "unavailable"
     assert payload[ATTR_STALE] is True
     assert payload[ATTR_LOCATION_SOURCE] == "zone.missing"
+    assert payload[ATTR_SOURCE_STATUS] == {
+        "location": "error",
+        "radar": "skipped",
+        "lightning": "skipped",
+    }
+    assert payload[ATTR_DEGRADATION_REASONS] == ("missing_location_entity",)
     assert payload["diagnostics"] == ["missing_location_entity"]
+
+
+@pytest.mark.asyncio
+async def test_radar_only_mode_marks_lightning_not_configured_without_degradation_reason() -> None:
+    hass = FakeHass()
+
+    class RadarOnlyEntry(FakeEntry):
+        data = {CONF_ANALYSIS_RADIUS_KM: 40}
+        options = {}
+
+    async def _fake_meta(*_args: object, **_kwargs: object):
+        return {"radar": {"past": []}, "host": "https://tilecache.rainviewer.com"}
+
+    async def _fake_color(*_args: object, **_kwargs: object):
+        return {"#ffffff": 0}
+
+    def _fake_analysis(*_args: object, **_kwargs: object):
+        return SimpleNamespace(
+            max_dbz=40,
+            selected_core_threshold_dbz=None,
+            selected_core_distance_km=None,
+            selected_core_latitude=None,
+            selected_core_longitude=None,
+            frame_age_seconds=10,
+            frame_time=1710000000,
+            frames_analyzed=2,
+        )
+
+    with patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        _fake_meta,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        _fake_color,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        _fake_analysis,
+    ):
+        coordinator = RadarHailRiskCoordinator(
+            hass,
+            None,
+            "Radar Hail Risk",
+            RadarOnlyEntry(),
+            session_factory=FakeSessionContext,
+        )
+        payload = await coordinator._async_update_data()
+
+    assert payload[ATTR_SOURCE_STATUS]["lightning"] == "not_configured"
+    assert payload[ATTR_LIGHTNING_DIAGNOSTICS] == ("lightning_not_configured",)
+    assert "lightning_not_configured" not in payload[ATTR_DEGRADATION_REASONS]

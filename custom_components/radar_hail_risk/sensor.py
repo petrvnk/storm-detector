@@ -6,6 +6,7 @@ from typing import Any
 
 from .const import (
     ATTR_CORE_DISTANCE_KM,
+    ATTR_DEGRADATION_REASONS,
     ATTR_FRAME_AGE_SECONDS,
     ATTR_FRAME_TIME,
     ATTR_FRAMES_ANALYZED,
@@ -19,6 +20,7 @@ from .const import (
     ATTR_SELECTED_CORE_LATITUDE,
     ATTR_SELECTED_CORE_LONGITUDE,
     ATTR_SELECTED_CORE_THRESHOLD_DBZ,
+    ATTR_SOURCE_STATUS,
     ATTR_STALE,
     ATTR_SUMMARY,
     DATA_KEY_RESULT,
@@ -119,6 +121,8 @@ class RadarHailRiskSensorBase(CoordinatorEntity[Any], SensorEntity):
             ATTR_FRAME_TIME: data.get(ATTR_FRAME_TIME),
             ATTR_FRAMES_ANALYZED: data.get(ATTR_FRAMES_ANALYZED),
             ATTR_LOCATION_SOURCE: data.get(ATTR_LOCATION_SOURCE),
+            ATTR_SOURCE_STATUS: data.get(ATTR_SOURCE_STATUS),
+            ATTR_DEGRADATION_REASONS: data.get(ATTR_DEGRADATION_REASONS),
         }
 
 

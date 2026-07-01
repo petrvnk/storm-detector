@@ -75,6 +75,8 @@ ATTR_LAST_ERROR: Final = "last_error"
 ATTR_LIGHTNING_DIAGNOSTICS: Final = "lightning_diagnostics"
 ATTR_RAINVIEWER_DIAGNOSTICS: Final = "radar_diagnostics"
 ATTR_LOCATION_SOURCE: Final = "location_source"
+ATTR_SOURCE_STATUS: Final = "source_status"
+ATTR_DEGRADATION_REASONS: Final = "degradation_reasons"
 
 RISK_LEVEL_NONE: Final = "none"
 RISK_LEVEL_WATCH: Final = "watch"

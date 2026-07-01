@@ -37,6 +37,17 @@ By default, Radar Hail Risk uses the Home Assistant core location (`hass.config`
 
 If the configured location entity is missing or has no coordinates, the integration degrades to `unavailable` with a diagnostic such as `missing_location_entity` instead of silently falling back to another position.
 
+## Diagnostics and source status
+
+Every risk entity includes support-oriented attributes that help explain degraded behavior:
+
+- `location_source` — `hass.config` or the selected `zone` / `person` / `device_tracker`.
+- `source_status` — compact status for `location`, `radar`, and `lightning` (`ok`, `degraded`, `stale`, `not_configured`, `error`, `skipped`).
+- `degradation_reasons` — machine-readable reason codes such as `radar_source_error`, `stale_radar_frame`, or `missing_location_entity`.
+- `radar_diagnostics` and `lightning_diagnostics` — source-specific debug reason codes.
+
+Home Assistant's diagnostics download for the config entry also includes the selected options and the latest runtime status. It intentionally includes entity IDs and runtime reason codes, but no credentials.
+
 ## Lightning source modes
 
 Radar Hail Risk supports three setup modes:

@@ -9,6 +9,7 @@ from typing import Any, Iterable
 
 from .const import (
     ATTR_CORE_DISTANCE_KM,
+    ATTR_DEGRADATION_REASONS,
     ATTR_FRAME_AGE_SECONDS,
     ATTR_FRAME_TIME,
     ATTR_FRAMES_ANALYZED,
@@ -24,6 +25,7 @@ from .const import (
     ATTR_SELECTED_CORE_LATITUDE,
     ATTR_SELECTED_CORE_LONGITUDE,
     ATTR_SELECTED_CORE_THRESHOLD_DBZ,
+    ATTR_SOURCE_STATUS,
     ATTR_STALE,
     ATTR_SUMMARY,
     CONF_ANALYSIS_RADIUS_KM,
@@ -194,6 +196,8 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             if extras
             else (),
             ATTR_LOCATION_SOURCE: extras.get(ATTR_LOCATION_SOURCE) if extras else None,
+            ATTR_SOURCE_STATUS: extras.get(ATTR_SOURCE_STATUS) if extras else {},
+            ATTR_DEGRADATION_REASONS: extras.get(ATTR_DEGRADATION_REASONS) if extras else (),
             ATTR_STALE: result.is_stale,
             "update_count": self._update_count,
         }
@@ -247,7 +251,15 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     is_stale=True,
                     diagnostics=(location_error,),
                 ),
-                extras={ATTR_LOCATION_SOURCE: location_source},
+                extras={
+                    ATTR_LOCATION_SOURCE: location_source,
+                    ATTR_SOURCE_STATUS: {
+                        "location": "error",
+                        "radar": "skipped",
+                        "lightning": "skipped",
+                    },
+                    ATTR_DEGRADATION_REASONS: (location_error,),
+                },
             )
 
         if self._session_factory is None:
@@ -380,6 +392,23 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     *radar_diagnostics,
                     *summary_lightning_diagnostics,
                 ]
+                source_status = {
+                    "location": "ok",
+                    "radar": _radar_source_status(
+                        diagnostics=radar_diagnostics,
+                        has_analysis=analysis is not None,
+                        is_stale=radar_stale,
+                    ),
+                    "lightning": _lightning_source_status(
+                        snapshot_configured=lightning_snapshot is not None,
+                        diagnostics=tuple(lightning_diagnostics),
+                        is_stale=lightning_stale,
+                    ),
+                }
+                degradation_reasons = _degradation_reasons(
+                    radar_diagnostics=radar_diagnostics,
+                    lightning_diagnostics=tuple(lightning_diagnostics),
+                )
                 has_radar_signal = any(value is not None for value in (max_dbz, selected_distance))
                 has_lightning_signal = lightning_distance_km is not None
                 all_available_sources_stale = bool(
@@ -458,6 +487,8 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         ATTR_LIGHTNING_DIAGNOSTICS: tuple(lightning_diagnostics),
                         ATTR_RAINVIEWER_DIAGNOSTICS: tuple(radar_diagnostics),
                         ATTR_LOCATION_SOURCE: location_source,
+                        ATTR_SOURCE_STATUS: source_status,
+                        ATTR_DEGRADATION_REASONS: degradation_reasons,
                     },
                 )
 
@@ -496,6 +527,52 @@ def _location_from_state(state: Any) -> tuple[float, float] | None:
         return float(lat), float(lon)
     except Exception:
         return None
+
+
+def _radar_source_status(*, diagnostics: Iterable[str], has_analysis: bool, is_stale: bool) -> str:
+    """Return a compact runtime status for the radar source."""
+
+    diagnostics_tuple = tuple(diagnostics)
+    if is_stale:
+        return "stale"
+    if not has_analysis:
+        return "degraded"
+    if diagnostics_tuple:
+        return "degraded"
+    return "ok"
+
+
+def _lightning_source_status(
+    *, snapshot_configured: bool, diagnostics: Iterable[str], is_stale: bool
+) -> str:
+    """Return a compact runtime status for the optional lightning source."""
+
+    diagnostics_tuple = tuple(diagnostics)
+    if not snapshot_configured:
+        return "not_configured"
+    if is_stale:
+        return "stale"
+    actionable = [item for item in diagnostics_tuple if item != "lightning_not_configured"]
+    if actionable:
+        return "degraded"
+    return "ok"
+
+
+def _degradation_reasons(
+    *, radar_diagnostics: Iterable[str], lightning_diagnostics: Iterable[str]
+) -> tuple[str, ...]:
+    """Return source diagnostics that represent actionable degraded behavior."""
+
+    non_degrading = {
+        "lightning_not_configured",
+        "lightning_strike_delta",
+        "lightning_counter_delta",
+    }
+    return tuple(
+        dict.fromkeys(
+            item for item in (*radar_diagnostics, *lightning_diagnostics) if item not in non_degrading
+        )
+    )
 
 
 def _iter_hass_states(hass: Any) -> Iterable[Any]:
