@@ -39,9 +39,10 @@ If the configured location entity is missing or has no coordinates, the integrat
 
 ## Diagnostics and source status
 
-Every risk entity includes support-oriented attributes that help explain degraded behavior:
+Every risk entity includes support-oriented attributes that help explain degraded behavior and threshold-aware radar cores:
 
 - `location_source` — `hass.config` or the selected `zone` / `person` / `device_tracker`.
+- `core50_distance_km`, `core55_distance_km`, `core60_distance_km` — distances to threshold-specific radar cores used by the risk model.
 - `source_status` — compact status for `location`, `radar`, and `lightning` (`ok`, `degraded`, `stale`, `not_configured`, `error`, `skipped`).
 - `degradation_reasons` — machine-readable reason codes such as `radar_source_error`, `stale_radar_frame`, or `missing_location_entity`.
 - `radar_diagnostics` and `lightning_diagnostics` — source-specific debug reason codes.

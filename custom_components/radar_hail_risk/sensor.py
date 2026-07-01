@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from .const import (
+    ATTR_CORE50_DISTANCE_KM,
+    ATTR_CORE55_DISTANCE_KM,
+    ATTR_CORE60_DISTANCE_KM,
     ATTR_CORE_DISTANCE_KM,
     ATTR_DEGRADATION_REASONS,
     ATTR_FRAME_AGE_SECONDS,
@@ -110,6 +113,9 @@ class RadarHailRiskSensorBase(CoordinatorEntity[Any], SensorEntity):
         return {
             ATTR_SUMMARY: data.get(ATTR_SUMMARY),
             ATTR_STALE: bool(data.get(ATTR_STALE, False)),
+            ATTR_CORE50_DISTANCE_KM: data.get(ATTR_CORE50_DISTANCE_KM),
+            ATTR_CORE55_DISTANCE_KM: data.get(ATTR_CORE55_DISTANCE_KM),
+            ATTR_CORE60_DISTANCE_KM: data.get(ATTR_CORE60_DISTANCE_KM),
             ATTR_SELECTED_CORE_DISTANCE_KM: data.get(ATTR_SELECTED_CORE_DISTANCE_KM),
             ATTR_SELECTED_CORE_LATITUDE: data.get(ATTR_SELECTED_CORE_LATITUDE),
             ATTR_SELECTED_CORE_LONGITUDE: data.get(ATTR_SELECTED_CORE_LONGITUDE),

@@ -46,6 +46,9 @@ class HailRiskResult:
     summary: str
     max_dbz: int | None = None
     core_distance_km: float | None = None
+    core50_distance_km: float | None = None
+    core55_distance_km: float | None = None
+    core60_distance_km: float | None = None
     lightning_distance_km: float | None = None
     frame_age_seconds: int | None = None
     selected_core_threshold_dbz: int | None = None
@@ -75,14 +78,20 @@ def classify_from_thresholds(
     urgent_lightning_distance_km: int,
     lightning_triggered: bool | None = None,
     lightning_counter_delta: int | None = None,
+    core50_distance_km: float | None = None,
+    core55_distance_km: float | None = None,
+    core60_distance_km: float | None = None,
 ) -> RiskLevel:
     """Classify current risk level from staged thresholds.
 
     The function intentionally keeps all inputs explicit so the integration can evolve
-    risk heuristics without changing the call shape.
+    risk heuristics without changing the call shape.  Radar core distance is
+    threshold-aware: 50+ dBZ cores can only create WATCH, 55+ nearby cores create
+    WARNING, and only 60+ nearby cores can create URGENT.
     """
 
-    if max_dbz is None and core_distance_km is None and lightning_distance_km is None:
+    core50_distance_km = core50_distance_km if core50_distance_km is not None else core_distance_km
+    if max_dbz is None and core50_distance_km is None and lightning_distance_km is None:
         return "unavailable"
 
     if (
@@ -99,20 +108,22 @@ def classify_from_thresholds(
             return RISK_LEVEL_URGENT
         return RISK_LEVEL_WARNING
 
-    if max_dbz is not None and max_dbz >= urgent_dbz:
-        return RISK_LEVEL_URGENT
-    if core_distance_km is not None and core_distance_km <= urgent_core_distance_km:
+    if core60_distance_km is not None and core60_distance_km <= urgent_core_distance_km:
         return RISK_LEVEL_URGENT
     if lightning_distance_km is not None and lightning_distance_km <= urgent_lightning_distance_km:
         return RISK_LEVEL_URGENT
 
-    if max_dbz is not None and max_dbz >= warning_dbz:
+    if core60_distance_km is not None and core60_distance_km <= warning_core_distance_km:
         return RISK_LEVEL_WARNING
-    if core_distance_km is not None and core_distance_km <= warning_core_distance_km:
+    if core55_distance_km is not None and core55_distance_km <= warning_core_distance_km:
         return RISK_LEVEL_WARNING
     if lightning_distance_km is not None and lightning_distance_km <= warning_lightning_distance_km:
         return RISK_LEVEL_WARNING
 
+    if core60_distance_km is not None or core55_distance_km is not None:
+        return RISK_LEVEL_WATCH
+    if core50_distance_km is not None:
+        return RISK_LEVEL_WATCH
     if max_dbz is not None and max_dbz >= watch_dbz:
         return RISK_LEVEL_WATCH
 

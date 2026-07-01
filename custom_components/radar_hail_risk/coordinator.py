@@ -8,6 +8,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Iterable
 
 from .const import (
+    ATTR_CORE50_DISTANCE_KM,
+    ATTR_CORE55_DISTANCE_KM,
+    ATTR_CORE60_DISTANCE_KM,
     ATTR_CORE_DISTANCE_KM,
     ATTR_DEGRADATION_REASONS,
     ATTR_FRAME_AGE_SECONDS,
@@ -179,6 +182,9 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             ATTR_SUMMARY: result.summary,
             ATTR_MAX_DBZ: result.max_dbz,
             ATTR_CORE_DISTANCE_KM: result.core_distance_km,
+            ATTR_CORE50_DISTANCE_KM: result.core50_distance_km,
+            ATTR_CORE55_DISTANCE_KM: result.core55_distance_km,
+            ATTR_CORE60_DISTANCE_KM: result.core60_distance_km,
             ATTR_LIGHTNING_DISTANCE_KM: result.lightning_distance_km,
             ATTR_FRAME_AGE_SECONDS: result.frame_age_seconds,
             ATTR_FRAME_TIME: result.frame_time,
@@ -345,14 +351,17 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                 if analysis is None:
                     radar_diagnostics.append("no_recent_analysis")
 
-                max_dbz = analysis.max_dbz if analysis else None
-                selected_threshold = analysis.selected_core_threshold_dbz if analysis else None
-                selected_distance = analysis.selected_core_distance_km if analysis else None
-                selected_lat = analysis.selected_core_latitude if analysis else None
-                selected_lon = analysis.selected_core_longitude if analysis else None
-                frame_age = analysis.frame_age_seconds if analysis else None
-                frame_time = analysis.frame_time if analysis else None
-                frames_analyzed = analysis.frames_analyzed if analysis else None
+                raw_max_dbz = getattr(analysis, "max_dbz", None) if analysis else None
+                raw_core50_distance = getattr(analysis, "core50_distance_km", None) if analysis else None
+                raw_core55_distance = getattr(analysis, "core55_distance_km", None) if analysis else None
+                raw_core60_distance = getattr(analysis, "core60_distance_km", None) if analysis else None
+                raw_selected_threshold = getattr(analysis, "selected_core_threshold_dbz", None) if analysis else None
+                raw_selected_distance = getattr(analysis, "selected_core_distance_km", None) if analysis else None
+                raw_selected_lat = getattr(analysis, "selected_core_latitude", None) if analysis else None
+                raw_selected_lon = getattr(analysis, "selected_core_longitude", None) if analysis else None
+                frame_age = getattr(analysis, "frame_age_seconds", None) if analysis else None
+                frame_time = getattr(analysis, "frame_time", None) if analysis else None
+                frames_analyzed = getattr(analysis, "frames_analyzed", None) if analysis else None
 
                 stale_after = normalize_optional_int(
                     cfg.get(CONF_STALE_CLEAR_SECONDS),
@@ -365,6 +374,32 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     radar_stale = False
                 if radar_stale:
                     radar_diagnostics.append("stale_radar_frame")
+
+                if raw_core50_distance is None and raw_selected_threshold == 50:
+                    raw_core50_distance = raw_selected_distance
+                if raw_core55_distance is None and raw_selected_threshold == 55:
+                    raw_core55_distance = raw_selected_distance
+                if raw_core60_distance is None and raw_selected_threshold == 60:
+                    raw_core60_distance = raw_selected_distance
+
+                if radar_stale:
+                    max_dbz = None
+                    core50_distance = None
+                    core55_distance = None
+                    core60_distance = None
+                    selected_threshold = None
+                    selected_distance = None
+                    selected_lat = None
+                    selected_lon = None
+                else:
+                    max_dbz = raw_max_dbz
+                    core50_distance = raw_core50_distance
+                    core55_distance = raw_core55_distance
+                    core60_distance = raw_core60_distance
+                    selected_threshold = raw_selected_threshold
+                    selected_distance = raw_selected_distance
+                    selected_lat = raw_selected_lat
+                    selected_lon = raw_selected_lon
 
                 lightning_snapshot = self._build_lightning_snapshot(now)
                 lightning_distance_km = None
@@ -409,7 +444,16 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     radar_diagnostics=radar_diagnostics,
                     lightning_diagnostics=tuple(lightning_diagnostics),
                 )
-                has_radar_signal = any(value is not None for value in (max_dbz, selected_distance))
+                has_radar_signal = any(
+                    value is not None
+                    for value in (
+                        raw_max_dbz,
+                        raw_selected_distance,
+                        raw_core50_distance,
+                        raw_core55_distance,
+                        raw_core60_distance,
+                    )
+                )
                 has_lightning_signal = lightning_distance_km is not None
                 all_available_sources_stale = bool(
                     (has_radar_signal and radar_stale and not has_lightning_signal)
@@ -451,6 +495,9 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     ),
                     lightning_triggered=lightning_triggered,
                     lightning_counter_delta=lightning_counter_delta,
+                    core50_distance_km=core50_distance,
+                    core55_distance_km=core55_distance,
+                    core60_distance_km=core60_distance,
                 )
 
                 summary = build_summary(
@@ -469,6 +516,9 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         summary=summary,
                         max_dbz=max_dbz,
                         core_distance_km=selected_distance,
+                        core50_distance_km=core50_distance,
+                        core55_distance_km=core55_distance,
+                        core60_distance_km=core60_distance,
                         lightning_distance_km=lightning_distance_km,
                         frame_age_seconds=frame_age,
                         selected_core_threshold_dbz=selected_threshold,

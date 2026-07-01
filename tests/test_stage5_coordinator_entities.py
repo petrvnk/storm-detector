@@ -11,6 +11,9 @@ from custom_components.radar_hail_risk.binary_sensor import (
     RadarHailRiskActiveBinarySensor,
 )
 from custom_components.radar_hail_risk.const import (
+    ATTR_CORE50_DISTANCE_KM,
+    ATTR_CORE55_DISTANCE_KM,
+    ATTR_CORE60_DISTANCE_KM,
     ATTR_FRAME_AGE_SECONDS,
     ATTR_LAST_ERROR,
     ATTR_LIGHTNING_COUNTER_DELTA,
@@ -230,6 +233,131 @@ def test_near_watch_radar_core_is_not_green_ok() -> None:
     )
 
 
+def test_threshold_aware_core_classifier_does_not_over_escalate_lower_thresholds() -> None:
+    from custom_components.radar_hail_risk.risk import classify_from_thresholds
+
+    base = dict(
+        max_dbz=60,
+        core_distance_km=None,
+        lightning_distance_km=None,
+        watch_dbz=50,
+        warning_dbz=55,
+        urgent_dbz=60,
+        warning_core_distance_km=25,
+        urgent_core_distance_km=15,
+        warning_lightning_distance_km=20,
+        urgent_lightning_distance_km=8,
+    )
+
+    assert classify_from_thresholds(**base, core50_distance_km=3) == RISK_LEVEL_WATCH
+    assert classify_from_thresholds(**base, core55_distance_km=3) == RISK_LEVEL_WARNING
+    assert classify_from_thresholds(**base, core60_distance_km=30) == RISK_LEVEL_WATCH
+    assert classify_from_thresholds(**base, core60_distance_km=10) == "urgent"
+
+
+async def test_stale_radar_is_gated_out_of_classification_and_active_sensor() -> None:
+    hass = FakeHass()
+    stale_age = DEFAULT_STALE_CLEAR_SECONDS + 30
+
+    async def _fake_meta(*_args: object, **_kwargs: object):
+        return {"radar": {"past": []}, "host": "https://tilecache.rainviewer.com"}
+
+    async def _fake_color(*_args: object, **_kwargs: object):
+        return {"#ffffff": 0}
+
+    stale_urgent_radar = SimpleNamespace(
+        max_dbz=65,
+        core50_distance_km=4,
+        core55_distance_km=4,
+        core60_distance_km=4,
+        selected_core_threshold_dbz=60,
+        selected_core_distance_km=4,
+        selected_core_latitude=50.1,
+        selected_core_longitude=14.5,
+        frame_age_seconds=stale_age,
+        frame_time=1710000000,
+        frames_analyzed=4,
+    )
+
+    with patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        _fake_meta,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        _fake_color,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        lambda *_args, **_kwargs: stale_urgent_radar,
+    ):
+        coordinator = RadarHailRiskCoordinator(
+            hass,
+            None,
+            "Radar Hail Risk",
+            FakeRadarOnlyEntry(),
+            session_factory=FakeSessionContext,
+        )
+        payload = await coordinator._async_update_data()
+
+    assert payload["level"] == RISK_LEVEL_UNAVAILABLE
+    assert payload[ATTR_MAX_DBZ] is None
+    assert payload[ATTR_CORE60_DISTANCE_KM] is None
+    assert payload[ATTR_STALE] is True
+    assert payload["source_status"]["radar"] == "stale"
+
+    active_bin = RadarHailRiskActiveBinarySensor(coordinator, FakeEntry())
+    coordinator.data = payload
+    active_bin._coordinator = coordinator
+    assert active_bin.is_on is False
+
+
+async def test_coordinator_exposes_threshold_specific_core_distances() -> None:
+    hass = FakeHass()
+
+    async def _fake_meta(*_args: object, **_kwargs: object):
+        return {"radar": {"past": []}, "host": "https://tilecache.rainviewer.com"}
+
+    async def _fake_color(*_args: object, **_kwargs: object):
+        return {"#ffffff": 0}
+
+    analysis = SimpleNamespace(
+        max_dbz=61,
+        core50_distance_km=28,
+        core55_distance_km=28,
+        core60_distance_km=28,
+        selected_core_threshold_dbz=60,
+        selected_core_distance_km=28,
+        selected_core_latitude=50.1,
+        selected_core_longitude=14.5,
+        frame_age_seconds=60,
+        frame_time=1710000000,
+        frames_analyzed=4,
+    )
+
+    with patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        _fake_meta,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        _fake_color,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        lambda *_args, **_kwargs: analysis,
+    ):
+        coordinator = RadarHailRiskCoordinator(
+            hass,
+            None,
+            "Radar Hail Risk",
+            FakeRadarOnlyEntry(),
+            session_factory=FakeSessionContext,
+        )
+        payload = await coordinator._async_update_data()
+
+    assert payload["level"] == RISK_LEVEL_WATCH
+    assert payload[ATTR_CORE50_DISTANCE_KM] == 28
+    assert payload[ATTR_CORE55_DISTANCE_KM] == 28
+    assert payload[ATTR_CORE60_DISTANCE_KM] == 28
+
+
 async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:
     hass = FakeHass()
     now = datetime.now(timezone.utc)
@@ -245,8 +373,11 @@ async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:
 
     urgent_radar = SimpleNamespace(
         max_dbz=60,
-        selected_core_threshold_dbz=55,
-        selected_core_distance_km=34.8,
+        core50_distance_km=10,
+        core55_distance_km=10,
+        core60_distance_km=10,
+        selected_core_threshold_dbz=60,
+        selected_core_distance_km=10,
         selected_core_latitude=50.1,
         selected_core_longitude=14.5,
         frame_age_seconds=180,
@@ -378,8 +509,8 @@ async def test_none_level_classifies_stable_none() -> None:
 
     analysis = SimpleNamespace(
         max_dbz=45,
-        selected_core_threshold_dbz=55,
-        selected_core_distance_km=999,
+        selected_core_threshold_dbz=None,
+        selected_core_distance_km=None,
         selected_core_latitude=None,
         selected_core_longitude=None,
         frame_age_seconds=10,
@@ -407,6 +538,6 @@ async def test_none_level_classifies_stable_none() -> None:
         payload = await coordinator._async_update_data()
 
     assert payload["level"] == RISK_LEVEL_NONE
-    assert payload["selected_core_distance_km"] == 999
+    assert payload["selected_core_distance_km"] is None
     assert payload[ATTR_LIGHTNING_TRIGGERED] is False
     assert payload[ATTR_LIGHTNING_COUNTER_DELTA] == 0

@@ -11,6 +11,7 @@ Initial HACS-readiness build.
 - Blitzortung-compatible Home Assistant lightning source normalization with radar-only fallback.
 - DataUpdateCoordinator and sensor/binary sensor/device tracker entities.
 - Diagnostics/resilience helpers for stale and degraded source data.
+- Threshold-aware risk model that treats 50+/55+/60+ dBZ cores differently and gates stale radar data out of active classification.
 - Manual Lovelace dashboard snippets in `README.md`.
 - Opt-in notification blueprint with Czech and English titles.
 - HACS validation GitHub Actions workflow.
