@@ -33,7 +33,7 @@ Current implemented slices:
 
 ## Lightning source modes
 
-Radar Hail Risk has no local daemon, cron job, or external service requirement. It supports three public-shareable modes:
+Radar Hail Risk supports three setup modes:
 
 | Mode | Requirement | Behavior |
 |---|---|---|
@@ -165,7 +165,7 @@ The blueprint supports Czech titles:
 - Radar reflectivity can miss local conditions or overestimate hail risk.
 - RainViewer and Blitzortung-compatible data may be delayed, unavailable, unknown after restart, or stale.
 - Do not trigger safety-critical actions without local validation and fallback logic.
-- If migrating from an older local watcher, keep the watcher disabled after this integration is verified to avoid duplicate sensors/alerts.
+- Use only one active alerting setup at a time to avoid duplicate sensors/alerts.
 
 ## Credits
 
@@ -175,7 +175,7 @@ The blueprint supports Czech titles:
 
 ## Release readiness
 
-See [`docs/release-checklist.md`](docs/release-checklist.md) before publishing a tag or migrating from a local watcher.
+See [`docs/release-checklist.md`](docs/release-checklist.md) before publishing a tag.
 
 Required local verification:
 

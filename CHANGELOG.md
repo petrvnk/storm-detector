@@ -20,4 +20,4 @@ Initial HACS-readiness build.
 
 - This is a pre-release integration and should be validated in a real Home Assistant instance before relying on it for protective actions.
 - Hail risk is heuristic and based on radar reflectivity plus lightning context; it is not an official weather warning.
-- Migration from any local watcher/script should happen only after parity verification in the target Home Assistant environment.
+- Migration from another hail-risk alerting setup should happen only after parity verification in the target Home Assistant environment.

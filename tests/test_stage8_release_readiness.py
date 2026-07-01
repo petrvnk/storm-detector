@@ -49,7 +49,7 @@ def test_readme_contains_release_limitations_credits_and_migration_notes() -> No
     assert "Credits" in readme
     assert "RainViewer" in readme
     assert "Blitzortung-compatible" in readme
-    assert "If migrating from an older local watcher" in readme
+    assert "Use only one active alerting setup" in readme
     assert "radar-only mode" in readme
     assert "hacs/action@main" in readme
 
@@ -58,7 +58,7 @@ def test_release_checklist_covers_runtime_and_migration_verification() -> None:
     checklist = (ROOT / "docs" / "release-checklist.md").read_text(encoding="utf-8")
 
     assert "Home Assistant runtime verification" in checklist
-    assert "Migration from local watcher" in checklist
-    assert "Compare local watcher risk level" in checklist
+    assert "Migration from another alerting setup" in checklist
+    assert "Compare the previous risk level" in checklist
     assert "HACS validation" in checklist
     assert "not an official warning source" in checklist

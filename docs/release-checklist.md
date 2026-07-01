@@ -21,14 +21,14 @@ Use this checklist before publishing a HACS release tag.
 - [ ] Verify entities update and survive Home Assistant restart.
 - [ ] Verify the notification blueprint can be imported and triggered manually.
 
-## Migration from local watcher
+## Migration from another alerting setup
 
-Do not remove or disable an existing local watcher until parity is confirmed:
+Avoid duplicate notifications when replacing an existing hail-risk setup:
 
-- [ ] Compare local watcher risk level vs integration risk level during at least one storm/radar event.
+- [ ] Compare the previous risk level vs integration risk level during at least one storm/radar event.
 - [ ] Confirm notifications are at least as useful and not noisier.
 - [ ] Confirm stale/missing data behavior is safe and explainable.
-- [ ] Only then disable the local watcher service/script.
+- [ ] Only then disable the previous alerting setup.
 
 ## Release
 
