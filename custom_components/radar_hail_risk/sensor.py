@@ -74,7 +74,7 @@ class RadarHailRiskSensorBase(CoordinatorEntity[Any], SensorEntity):
 
     @property
     def name(self) -> str:
-        return f"Radar Hail Risk {self._title}"
+        return self._title
 
     @property
     def device_info(self) -> DeviceInfo:

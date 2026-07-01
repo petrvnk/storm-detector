@@ -1,4 +1,4 @@
-"""Config flow and options flow placeholders for radar_hail_risk."""
+"""Config and options flow for radar_hail_risk."""
 
 from __future__ import annotations
 
@@ -59,10 +59,11 @@ from .const import (
     DOMAIN,
     OPTIONAL_CONF_DEFAULTS,
 )
+from .lightning import autodetect_blitzortung_entities
 
 
 class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Configuration flow placeholder for adding the integration."""
+    """Configuration flow for adding the integration."""
 
     VERSION = 1
 
@@ -70,7 +71,14 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle the initial user step."""
 
         if user_input is not None:
-            await self.async_set_unique_id(user_input[CONF_LIGHTNING_DISTANCE_ENTITY_ID])
+            user_input = _clean_optional_entity_ids(user_input)
+            if _has_partial_lightning_config(user_input):
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=vol.Schema(self._base_schema()) if vol else dict,
+                    errors={"base": "lightning_pair_required"},
+                )
+            await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
             return self.async_create_entry(title="Radar Hail Risk", data=user_input)
 
@@ -85,24 +93,29 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return RadarHailRiskOptionsFlowHandler(config_entry)
 
-    @staticmethod
-    def _base_schema() -> dict[str, Any]:
-        """Return the Stage 2 setup schema."""
+    def _base_schema(self) -> dict[str, Any]:
+        """Return the setup schema with optional autodetected Blitzortung sensors."""
+
+        candidates = autodetect_blitzortung_entities(_iter_hass_states(getattr(self, "hass", None)))
 
         if not vol:
             return {
-                CONF_LIGHTNING_DISTANCE_ENTITY_ID: str,
-                CONF_LIGHTNING_COUNTER_ENTITY_ID: str,
+                CONF_LIGHTNING_DISTANCE_ENTITY_ID: candidates.distance_entity_id or str,
+                CONF_LIGHTNING_COUNTER_ENTITY_ID: candidates.counter_entity_id or str,
                 **OPTIONAL_CONF_DEFAULTS,
             }
 
         return {
-            vol.Required(CONF_LIGHTNING_DISTANCE_ENTITY_ID): selector.EntitySelector(
+            _optional_entity_key(
+                CONF_LIGHTNING_DISTANCE_ENTITY_ID, candidates.distance_entity_id
+            ): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain="sensor", device_class="distance", multiple=False
                 )
             ),
-            vol.Required(CONF_LIGHTNING_COUNTER_ENTITY_ID): selector.EntitySelector(
+            _optional_entity_key(
+                CONF_LIGHTNING_COUNTER_ENTITY_ID, candidates.counter_entity_id
+            ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", multiple=False)
             ),
             vol.Optional(
@@ -140,7 +153,7 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class RadarHailRiskOptionsFlowHandler(OptionsFlow):
-    """Options flow placeholder for post-setup thresholds."""
+    """Options flow for post-setup thresholds and lightning source selection."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         self.config_entry = config_entry
@@ -149,6 +162,14 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
         """Handle options updates."""
 
         if user_input is not None:
+            user_input = _clean_optional_entity_ids(user_input)
+            if _has_partial_lightning_config(user_input):
+                current_options = self._current_options()
+                return self.async_show_form(
+                    step_id="init",
+                    data_schema=vol.Schema(self._options_schema(current_options)) if vol else dict,
+                    errors={"base": "lightning_pair_required"},
+                )
             return self.async_create_entry(title="Radar Hail Risk", data=user_input)
 
         current_options = self._current_options()
@@ -172,11 +193,71 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
 
         if not vol:
             return {
-                key: current_options.get(key, value)
-                for key, value in OPTIONAL_CONF_DEFAULTS.items()
+                CONF_LIGHTNING_DISTANCE_ENTITY_ID: current_options.get(
+                    CONF_LIGHTNING_DISTANCE_ENTITY_ID, ""
+                ),
+                CONF_LIGHTNING_COUNTER_ENTITY_ID: current_options.get(
+                    CONF_LIGHTNING_COUNTER_ENTITY_ID, ""
+                ),
+                **{
+                    key: current_options.get(key, value)
+                    for key, value in OPTIONAL_CONF_DEFAULTS.items()
+                },
             }
 
         return {
-            vol.Optional(key, default=current_options.get(key, value)): int
-            for key, value in OPTIONAL_CONF_DEFAULTS.items()
+            _optional_entity_key(
+                CONF_LIGHTNING_DISTANCE_ENTITY_ID,
+                current_options.get(CONF_LIGHTNING_DISTANCE_ENTITY_ID),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor", device_class="distance", multiple=False
+                )
+            ),
+            _optional_entity_key(
+                CONF_LIGHTNING_COUNTER_ENTITY_ID,
+                current_options.get(CONF_LIGHTNING_COUNTER_ENTITY_ID),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", multiple=False)
+            ),
+            **{
+                vol.Optional(key, default=current_options.get(key, value)): int
+                for key, value in OPTIONAL_CONF_DEFAULTS.items()
+            },
         }
+
+
+def _clean_optional_entity_ids(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Drop blank optional lightning entity selectors from flow input."""
+
+    cleaned = dict(user_input)
+    for key in (CONF_LIGHTNING_DISTANCE_ENTITY_ID, CONF_LIGHTNING_COUNTER_ENTITY_ID):
+        value = cleaned.get(key)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            cleaned.pop(key, None)
+    return cleaned
+
+
+def _has_partial_lightning_config(user_input: dict[str, Any]) -> bool:
+    """Return true when exactly one lightning source entity was provided."""
+
+    distance = user_input.get(CONF_LIGHTNING_DISTANCE_ENTITY_ID)
+    counter = user_input.get(CONF_LIGHTNING_COUNTER_ENTITY_ID)
+    return bool(distance) != bool(counter)
+
+
+def _optional_entity_key(name: str, default: str | None) -> Any:
+    if default:
+        return vol.Optional(name, default=default)
+    return vol.Optional(name)
+
+
+def _iter_hass_states(hass: Any) -> list[Any]:
+    states = getattr(hass, "states", None)
+    async_all = getattr(states, "async_all", None)
+    if callable(async_all):
+        return list(async_all())
+    all_states = getattr(states, "all", None)
+    if callable(all_states):
+        return list(all_states())
+    return []

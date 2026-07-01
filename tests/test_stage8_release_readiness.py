@@ -49,7 +49,8 @@ def test_readme_contains_release_limitations_credits_and_migration_notes() -> No
     assert "Credits" in readme
     assert "RainViewer" in readme
     assert "Blitzortung-compatible" in readme
-    assert "Keep any existing local watcher enabled until parity is verified" in readme
+    assert "If migrating from an older local watcher" in readme
+    assert "radar-only mode" in readme
     assert "hacs/action@main" in readme
 
 

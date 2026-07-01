@@ -7,6 +7,7 @@
   "codeowners": ["@petrvnk"],
   "requirements": [],
   "dependencies": [],
+  "after_dependencies": ["blitzortung"],
   "config_flow": true,
   "iot_class": "local_polling",
   "loggers": ["custom_components.radar_hail_risk"]

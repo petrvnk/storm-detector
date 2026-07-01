@@ -16,8 +16,8 @@ Use this checklist before publishing a HACS release tag.
 - [ ] Install as a HACS custom repository in a test Home Assistant instance.
 - [ ] Add the integration through the UI config flow.
 - [ ] Verify RainViewer metadata/tile fetching works for the configured location.
-- [ ] Verify Blitzortung-compatible distance/counter entities are selected or configured.
-- [ ] Verify stale/degraded source diagnostics are visible.
+- [ ] Verify Blitzortung-compatible distance/counter entities are autodetected, selectable manually, or both fields can be left empty for radar-only mode.
+- [ ] Verify `unknown`/`unavailable` lightning distance states do not appear as hard integration errors.
 - [ ] Verify entities update and survive Home Assistant restart.
 - [ ] Verify the notification blueprint can be imported and triggered manually.
 

@@ -12,6 +12,7 @@ from custom_components.radar_hail_risk.binary_sensor import (
 )
 from custom_components.radar_hail_risk.const import (
     ATTR_FRAME_AGE_SECONDS,
+    ATTR_LAST_ERROR,
     ATTR_LIGHTNING_COUNTER_DELTA,
     ATTR_LIGHTNING_DISTANCE_KM,
     ATTR_LIGHTNING_TRIGGERED,
@@ -38,10 +39,11 @@ class FakeHass:
 
     @property
     def states(self) -> SimpleNamespace:
-        return SimpleNamespace(get=self._states.get)
+        return SimpleNamespace(get=self._states.get, async_all=lambda: list(self._states.values()))
 
     def set_state(self, entity_id: str, value: str, *, last_updated: datetime) -> None:
         self._states[entity_id] = SimpleNamespace(
+            entity_id=entity_id,
             state=value,
             last_updated=last_updated,
             attributes={},
@@ -65,6 +67,12 @@ class FakeEntry:
         "lightning_distance_entity_id": "sensor.lightning_distance",
         "lightning_counter_entity_id": "sensor.lightning_count",
     }
+    options = {}
+
+
+class FakeRadarOnlyEntry:
+    entry_id = "entry-radar-only"
+    data = {}
     options = {}
 
 
@@ -157,6 +165,76 @@ async def test_coordinator_without_coordinates_is_unavailable() -> None:
     assert payload["level"] == RISK_LEVEL_UNAVAILABLE
     assert payload["diagnostics"] == ["missing_hass_location"]
     assert payload[ATTR_STALE] is True
+
+
+async def test_coordinator_autodetects_blitzortung_like_lightning_entities() -> None:
+    hass = FakeHass()
+    now = datetime.now(timezone.utc)
+    hass.set_state("sensor.home_lightning_distance", "12", last_updated=now)
+    hass.set_state("sensor.home_lightning_counter", "7", last_updated=now)
+
+    async def _fake_meta(*_args: object, **_kwargs: object):
+        return {"radar": {"past": []}, "host": "https://tilecache.rainviewer.com"}
+
+    async def _fake_color(*_args: object, **_kwargs: object):
+        return {}
+
+    with patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        _fake_meta,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        _fake_color,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        lambda *_args, **_kwargs: _analysis_payload(),
+    ):
+        coordinator = RadarHailRiskCoordinator(
+            hass,
+            None,
+            "Radar Hail Risk",
+            FakeRadarOnlyEntry(),
+            session_factory=FakeSessionContext,
+        )
+        payload = await coordinator._async_update_data()
+
+    assert payload[ATTR_LIGHTNING_DISTANCE_KM] == 12
+    assert payload[ATTR_LIGHTNING_TRIGGERED] is True
+    assert "lightning_not_configured" not in payload[ATTR_SUMMARY]
+
+
+async def test_radar_only_mode_does_not_surface_lightning_not_configured_as_error() -> None:
+    hass = FakeHass()
+
+    async def _fake_meta(*_args: object, **_kwargs: object):
+        return {"radar": {"past": []}, "host": "https://tilecache.rainviewer.com"}
+
+    async def _fake_color(*_args: object, **_kwargs: object):
+        return {}
+
+    with patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        _fake_meta,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        _fake_color,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        lambda *_args, **_kwargs: _analysis_payload(),
+    ):
+        coordinator = RadarHailRiskCoordinator(
+            hass,
+            None,
+            "Radar Hail Risk",
+            FakeRadarOnlyEntry(),
+            session_factory=FakeSessionContext,
+        )
+        payload = await coordinator._async_update_data()
+
+    assert payload[ATTR_LIGHTNING_DISTANCE_KM] is None
+    assert payload["lightning_diagnostics"] == ("lightning_not_configured",)
+    assert "lightning_not_configured" not in payload[ATTR_SUMMARY]
+    assert payload[ATTR_LAST_ERROR] is None or "lightning_not_configured" not in payload[ATTR_LAST_ERROR]
 
 
 async def test_none_level_classifies_stable_none() -> None:

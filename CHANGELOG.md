@@ -8,7 +8,7 @@ Initial HACS-readiness build.
 
 - Home Assistant custom integration metadata and config/options flow.
 - RainViewer radar metadata/tile helpers and storm-core detection.
-- Blitzortung-compatible Home Assistant lightning source normalization.
+- Blitzortung-compatible Home Assistant lightning source normalization with radar-only fallback.
 - DataUpdateCoordinator and sensor/binary sensor/device tracker entities.
 - Diagnostics/resilience helpers for stale and degraded source data.
 - Manual Lovelace dashboard snippets in `README.md`.

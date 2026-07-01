@@ -38,6 +38,16 @@ def normalize_numeric_state(value: Any) -> float | None:
     return None
 
 
+def is_empty_state(value: Any) -> bool:
+    """Return true for normal HA empty states that should not be reported as errors."""
+
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in {"unknown", "unavailable", "none", "null", "-", ""}
+    return False
+
+
 def normalize_counter_state(value: Any) -> int | None:
     """Normalize counter-like values to non-negative integers."""
 
@@ -123,12 +133,14 @@ def build_lightning_snapshot(
     if counter_state is None:
         diagnostics.append("missing_counter_entity")
 
-    distance = normalize_numeric_state(_extract_state_value(distance_state))
-    counter = normalize_counter_state(_extract_state_value(counter_state))
+    raw_distance = _extract_state_value(distance_state)
+    raw_counter = _extract_state_value(counter_state)
+    distance = normalize_numeric_state(raw_distance)
+    counter = normalize_counter_state(raw_counter)
 
-    if distance_state is not None and distance is None:
+    if distance_state is not None and distance is None and not is_empty_state(raw_distance):
         diagnostics.append("invalid_distance_state")
-    if counter_state is not None and counter is None:
+    if counter_state is not None and counter is None and not is_empty_state(raw_counter):
         diagnostics.append("invalid_counter_state")
 
     distance_age = _state_age_seconds(distance_state, now)

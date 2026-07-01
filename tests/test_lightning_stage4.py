@@ -97,13 +97,26 @@ def test_build_lightning_snapshot_marks_stale_source_and_suppresses_trigger() ->
 def test_build_lightning_snapshot_reports_missing_and_invalid_entities() -> None:
     snapshot = build_lightning_snapshot(
         distance_state=None,
-        counter_state={"state": "unavailable"},
+        counter_state={"state": "not-a-number"},
     )
 
     assert snapshot.source_available is False
     assert snapshot.trigger_active is False
     assert "missing_distance_entity" in snapshot.diagnostics
     assert "invalid_counter_state" in snapshot.diagnostics
+
+
+def test_build_lightning_snapshot_treats_unknown_distance_as_empty_not_invalid() -> None:
+    snapshot = build_lightning_snapshot(
+        distance_state={"state": "unknown"},
+        counter_state={"state": "0"},
+    )
+
+    assert snapshot.source_available is True
+    assert snapshot.distance_km is None
+    assert snapshot.counter == 0
+    assert snapshot.trigger_active is False
+    assert "invalid_distance_state" not in snapshot.diagnostics
 
 
 def test_autodetect_blitzortung_entities_prefers_lightning_sensors() -> None:

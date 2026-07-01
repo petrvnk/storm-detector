@@ -39,7 +39,8 @@ async def async_setup_entry(hass: Any, config_entry: ConfigEntry, async_add_enti
 class RadarHailStormCoreTracker(CoordinatorEntity[Any], TrackerEntity):
     """Expose the nearest detected hail core position for map rendering."""
 
-    _attr_name = "Radar Hail Storm Core"
+    _attr_has_entity_name = True
+    _attr_name = "Storm Core"
 
     def __init__(self, coordinator: Any | None = None, config_entry: ConfigEntry | None = None) -> None:
         super().__init__(coordinator)

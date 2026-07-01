@@ -40,7 +40,8 @@ async def async_setup_entry(hass: Any, config_entry: Any, async_add_entities: An
 class RadarHailDataStaleBinarySensor(CoordinatorEntity[Any], BinarySensorEntity):
     """Reports whether source data is stale."""
 
-    _attr_name = "Radar Hail Data Stale"
+    _attr_has_entity_name = True
+    _attr_name = "Data Stale"
     _attr_icon = "mdi:clock-alert-outline"
 
     def __init__(self, coordinator: Any | None = None, config_entry: Any | None = None) -> None:
@@ -79,7 +80,8 @@ class RadarHailDataStaleBinarySensor(CoordinatorEntity[Any], BinarySensorEntity)
 class RadarHailRiskActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity):
     """True when risk is at least watch level and not stale/unavailable."""
 
-    _attr_name = "Radar Hail Risk Active"
+    _attr_has_entity_name = True
+    _attr_name = "Active"
     _attr_icon = "mdi:weather-hail"
 
     def __init__(self, coordinator: Any | None = None, config_entry: Any | None = None) -> None:

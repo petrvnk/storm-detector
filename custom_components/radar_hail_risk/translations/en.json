@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Setup Radar Hail Risk",
-        "description": "Connect lightning sensors and set baseline thresholds."
+        "description": "Select optional lightning sensors and set baseline thresholds. Leave both lightning fields empty for radar-only mode."
       },
       "options": {
         "title": "Radar Hail Risk options",
@@ -12,7 +12,8 @@
     },
     "error": {
       "entity_not_found": "Selected entity was not found in Home Assistant.",
-      "invalid_value": "One or more values are not valid numbers."
+      "invalid_value": "One or more values are not valid numbers.",
+      "lightning_pair_required": "Select both lightning distance and lightning counter, or leave both empty for radar-only mode."
     },
     "abort": {
       "already_configured": "This integration is already configured for this distance entity."

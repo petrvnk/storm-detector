@@ -3,10 +3,10 @@
 Home Assistant custom integration for local hail/storm-core risk estimation using:
 
 - **RainViewer radar** for reflectivity / storm-core detection
-- **Blitzortung-compatible Home Assistant sensors** for nearby lightning context
+- **optional Blitzortung-compatible Home Assistant sensors** for nearby lightning context
 - **Home Assistant location/config entry options** for local thresholds
 
-Open-Meteo is intentionally **not** part of the hail-risk decision path.
+Open-Meteo is intentionally **not** part of the hail-risk decision path. The integration can run in radar-only mode; Blitzortung is recommended for better confidence but is not required.
 
 ## Status
 
@@ -29,6 +29,21 @@ Current implemented slices:
 4. Install **Radar Hail Risk**.
 5. Restart Home Assistant.
 6. Settings → Devices & services → Add integration → **Radar Hail Risk**.
+7. Optional but recommended: install/configure a Blitzortung-compatible integration and select its distance/counter sensors. If you skip this, Radar Hail Risk runs in radar-only mode.
+
+## Lightning source modes
+
+Radar Hail Risk has no local daemon, cron job, or external service requirement. It supports three public-shareable modes:
+
+| Mode | Requirement | Behavior |
+|---|---|---|
+| Radar only | Home Assistant + internet access to RainViewer | Computes radar reflectivity risk without lightning confidence. |
+| Radar + Blitzortung | Blitzortung-compatible HA sensors | Adds nearest-lightning distance/counter trigger context. |
+| Manual lightning sensors | Any HA sensors with distance + counter values | Uses the selected sensors instead of autodetection. |
+
+The config flow tries to autodetect sensors such as `sensor.*_lightning_distance` and `sensor.*_lightning_counter`. You can leave both fields blank for radar-only mode. If you set one lightning entity, set both.
+
+Normal HA empty states such as `unknown`/`unavailable` from the lightning distance sensor are treated as “no current lightning distance”, not as integration failures.
 
 ## Entities
 
@@ -148,9 +163,9 @@ The blueprint supports Czech titles:
 
 - Radar Hail Risk is a heuristic integration, not an official warning source.
 - Radar reflectivity can miss local conditions or overestimate hail risk.
-- RainViewer and Blitzortung-compatible data may be delayed, unavailable, or stale.
+- RainViewer and Blitzortung-compatible data may be delayed, unavailable, unknown after restart, or stale.
 - Do not trigger safety-critical actions without local validation and fallback logic.
-- Keep any existing local watcher enabled until parity is verified in Home Assistant.
+- If migrating from an older local watcher, keep the watcher disabled after this integration is verified to avoid duplicate sensors/alerts.
 
 ## Credits
 

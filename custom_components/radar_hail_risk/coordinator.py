@@ -56,7 +56,7 @@ from .const import (
     RISK_LEVEL_UNAVAILABLE,
 )
 from .ha_fallback import FallbackDataUpdateCoordinator, FallbackUpdateFailed
-from .lightning import HomeAssistantLightningSource
+from .lightning import HomeAssistantLightningSource, autodetect_blitzortung_entities
 from .rainviewer import analyze_recent_frames, fetch_radar_metadata, fetch_rainviewer_color_lookup
 from .risk import (
     HailRiskResult,
@@ -103,6 +103,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
         self.entry_id = getattr(entry, "entry_id", "default")
         self._session_factory = session_factory
         self._lightning_source: HomeAssistantLightningSource | None = None
+        self._lightning_source_key: tuple[str, str] | None = None
         self._update_count = 0
 
         config = self._effective_config()
@@ -181,6 +182,11 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
         counter_entity_id = config.get(CONF_LIGHTNING_COUNTER_ENTITY_ID)
 
         if not distance_entity_id or not counter_entity_id:
+            candidates = autodetect_blitzortung_entities(_iter_hass_states(self.hass))
+            distance_entity_id = distance_entity_id or candidates.distance_entity_id
+            counter_entity_id = counter_entity_id or candidates.counter_entity_id
+
+        if not distance_entity_id or not counter_entity_id:
             return None
 
         trigger_radius_km = normalize_optional_float(
@@ -192,13 +198,15 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             default=DEFAULT_STALE_CLEAR_SECONDS,
         )
 
-        if self._lightning_source is None:
+        source_key = (str(distance_entity_id), str(counter_entity_id))
+        if self._lightning_source is None or self._lightning_source_key != source_key:
             self._lightning_source = HomeAssistantLightningSource(
                 distance_entity_id=str(distance_entity_id),
                 counter_entity_id=str(counter_entity_id),
                 trigger_radius_km=trigger_radius_km,
                 stale_after_seconds=stale_after_seconds,
             )
+            self._lightning_source_key = source_key
 
         return self._lightning_source.read(self.hass, now=now)
 
@@ -341,9 +349,15 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     if lightning_snapshot.has_new_strike:
                         general_diagnostics.append("lightning_strike_delta")
 
+                summary_lightning_diagnostics = tuple(
+                    diagnostic
+                    for diagnostic in lightning_diagnostics
+                    if diagnostic != "lightning_not_configured"
+                )
+
                 diagnostics = [
                     *radar_diagnostics,
-                    *lightning_diagnostics,
+                    *summary_lightning_diagnostics,
                     *general_diagnostics,
                 ]
                 has_radar_signal = any(value is not None for value in (max_dbz, selected_distance))
@@ -439,3 +453,16 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     await session_ctx.close()
                 except Exception:
                     pass
+
+
+def _iter_hass_states(hass: Any) -> Iterable[Any]:
+    """Return all HA states when available for runtime lightning autodetection."""
+
+    states = getattr(hass, "states", None)
+    async_all = getattr(states, "async_all", None)
+    if callable(async_all):
+        return async_all()
+    all_states = getattr(states, "all", None)
+    if callable(all_states):
+        return all_states()
+    return ()
