@@ -100,7 +100,7 @@ Entity IDs may differ depending on Home Assistant naming. The examples below ass
 | `sensor.radar_hail_risk_lightning_distance` | normalized lightning distance |
 | `sensor.radar_hail_risk_frame_age` | age of analyzed radar frame |
 | `binary_sensor.radar_hail_risk_active` | true when the risk level is active |
-| `binary_sensor.radar_hail_data_stale` | true when source data is stale |
+| `binary_sensor.radar_hail_risk_data_stale` | true when source data is stale |
 
 Adjust entity IDs in examples to match your Home Assistant instance.
 

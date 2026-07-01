@@ -10,7 +10,7 @@ class RadarHailRiskCard extends HTMLElement {
       lightning_distance_entity: 'sensor.radar_hail_risk_lightning_distance',
       frame_age_entity: 'sensor.radar_hail_risk_frame_age',
       active_entity: 'binary_sensor.radar_hail_risk_active',
-      stale_entity: 'binary_sensor.radar_hail_data_stale',
+      stale_entity: 'binary_sensor.radar_hail_risk_data_stale',
     };
   }
 
@@ -25,7 +25,7 @@ class RadarHailRiskCard extends HTMLElement {
       lightning_distance_entity: 'sensor.radar_hail_risk_lightning_distance',
       frame_age_entity: 'sensor.radar_hail_risk_frame_age',
       active_entity: 'binary_sensor.radar_hail_risk_active',
-      stale_entity: 'binary_sensor.radar_hail_data_stale',
+      stale_entity: 'binary_sensor.radar_hail_risk_data_stale',
       home_label: 'Domov',
       ...config,
     };
