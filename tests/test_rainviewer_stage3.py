@@ -255,6 +255,69 @@ async def test_analyze_single_frame_aggregates_across_tiles_not_largest_tile_onl
 
 
 @pytest.mark.asyncio
+async def test_analyze_recent_frames_uses_latest_frame_max_for_current_risk() -> None:
+    """Older hail cores must not keep the live dashboard in WARNING after they moved away."""
+
+    zoom = 7
+    tile_size = 512
+    tx0 = 30
+    ty0 = 30
+    center_lat, center_lon = global_px_to_latlon(
+        tx0 * tile_size + 256.0,
+        ty0 * tile_size + 256.0,
+        zoom,
+    )
+
+    lookup = {(1, 1, 1, 255): 40, (255, 0, 0, 255): 57}
+    latest_tile = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
+    latest_tile.putpixel((256, 256), (1, 1, 1, 255))
+    latest_buf = io.BytesIO()
+    latest_tile.save(latest_buf, format="PNG")
+
+    older_tile = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
+    older_tile.putpixel((256, 256), (255, 0, 0, 255))
+    older_buf = io.BytesIO()
+    older_tile.save(older_buf, format="PNG")
+
+    host = "https://tilecache.rainviewer.com"
+    metadata = {
+        "host": host,
+        "radar": {
+            "past": [
+                {"time": 2000, "path": "/latest"},
+                {"time": 1900, "path": "/older"},
+            ]
+        },
+    }
+    session = FakeSession(
+        {
+            f"{host}/latest/512/{zoom}/{tx0}/{ty0}/2/1_1.png": FakeResponse(
+                200, bytes_payload=latest_buf.getvalue()
+            ),
+            f"{host}/older/512/{zoom}/{tx0}/{ty0}/2/1_1.png": FakeResponse(
+                200, bytes_payload=older_buf.getvalue()
+            ),
+        }
+    )
+
+    result = await analyze_recent_frames(
+        session,
+        metadata,
+        center_latitude=center_lat,
+        center_longitude=center_lon,
+        analysis_radius_km=1,
+        required_frames=2,
+        zoom=zoom,
+        color_lookup=lookup,
+        now=2100,
+    )
+
+    assert result is not None
+    assert result.max_dbz == 40
+    assert result.selected_core_distance_km is None
+
+
+@pytest.mark.asyncio
 async def test_analyze_recent_frames_returns_none_for_missing_coverage() -> None:
     center_lat, center_lon = global_px_to_latlon(12345.1, 54321.1, 7)
     center_px = latlon_to_global_px(center_lat, center_lon, 7)

@@ -767,9 +767,12 @@ async def analyze_recent_frames(
     if not frame_results:
         return None
 
-    # Keep newest-to-oldest in select_recent_frames; use newest valid frame
+    # Keep newest-to-oldest in select_recent_frames; use newest valid frame for the
+    # user-facing current risk. Older frames are analyzed for robustness/coverage, but
+    # their historic max dBZ must not keep WARNING active after the latest radar frame
+    # no longer contains a hail core.
     latest = frame_results[0]
-    max_dbz = max(r.max_dbz for r in frame_results if r.max_dbz is not None)
+    max_dbz = latest.max_dbz
     if max_dbz is None:
         return None
 
