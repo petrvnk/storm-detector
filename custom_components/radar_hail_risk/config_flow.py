@@ -201,7 +201,7 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
     """Options flow for post-setup thresholds and lightning source selection."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
-        self.config_entry = config_entry
+        self._config_entry = config_entry
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Handle options updates."""
@@ -236,8 +236,8 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
         """Return defaults merged with setup data and saved options."""
 
         current = dict(OPTIONAL_CONF_DEFAULTS)
-        current.update(getattr(self.config_entry, "data", {}) or {})
-        current.update(getattr(self.config_entry, "options", {}) or {})
+        current.update(getattr(self._config_entry, "data", {}) or {})
+        current.update(getattr(self._config_entry, "options", {}) or {})
         return current
 
     @staticmethod

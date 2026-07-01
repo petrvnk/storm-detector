@@ -111,6 +111,18 @@ class FlakySession:
         )
 
 
+class ReadOnlyConfigEntryOptionsFlow(RadarHailRiskOptionsFlowHandler):
+    @property
+    def config_entry(self) -> object:
+        return object()
+
+
+def test_options_flow_does_not_assign_home_assistant_config_entry_property() -> None:
+    flow = ReadOnlyConfigEntryOptionsFlow(FakeEntry())
+
+    assert flow._current_options()[CONF_ANALYSIS_RADIUS_KM] == 40
+
+
 @pytest.mark.asyncio
 async def test_options_flow_uses_existing_options_as_defaults() -> None:
     flow = RadarHailRiskOptionsFlowHandler(FakeEntry())
