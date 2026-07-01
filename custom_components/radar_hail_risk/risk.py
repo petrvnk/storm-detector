@@ -135,6 +135,17 @@ def classify_from_thresholds(
         return RISK_LEVEL_WARNING
     if lightning_distance_km is not None and lightning_distance_km <= warning_lightning_distance_km:
         return RISK_LEVEL_WARNING
+    if (
+        max_dbz is not None
+        and max_dbz >= urgent_dbz
+        and core50_distance_km is not None
+        and core50_distance_km <= urgent_core_distance_km
+    ):
+        # RainViewer's discrete color table can split compact hail cores: the nearest
+        # 50+ dBZ edge may be overhead while the nearest 55+/60+ connected component
+        # is just outside the strict warning radius. Do not leave a high-reflectivity
+        # storm overhead as WATCH only.
+        return RISK_LEVEL_WARNING
 
     if core60_distance_km is not None or core55_distance_km is not None:
         return RISK_LEVEL_WATCH

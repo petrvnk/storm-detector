@@ -257,7 +257,8 @@ def test_threshold_aware_core_classifier_does_not_over_escalate_lower_thresholds
         urgent_lightning_distance_km=8,
     )
 
-    assert classify_from_thresholds(**base, core50_distance_km=3) == RISK_LEVEL_WATCH
+    assert classify_from_thresholds(**base, core50_distance_km=3) == RISK_LEVEL_WARNING
+    assert classify_from_thresholds(**{**base, "max_dbz": 54}, core50_distance_km=3) == RISK_LEVEL_WATCH
     assert classify_from_thresholds(**base, core55_distance_km=3) == RISK_LEVEL_WARNING
     assert classify_from_thresholds(**base, core60_distance_km=30) == RISK_LEVEL_WATCH
     assert classify_from_thresholds(**base, core60_distance_km=10) == "urgent"
