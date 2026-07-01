@@ -6,10 +6,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pytest
 from custom_components.radar_hail_risk.lightning import (
     HomeAssistantLightningSource,
     autodetect_blitzortung_entities,
     build_lightning_snapshot,
+    destination_point,
+    haversine_km,
+    normalize_azimuth_state,
     normalize_counter_state,
     normalize_numeric_state,
 )
@@ -42,6 +46,14 @@ def test_numeric_and_counter_normalization() -> None:
     assert normalize_numeric_state("-") is None
     assert normalize_counter_state("3.9") == 3
     assert normalize_counter_state("-4") == 0
+    assert normalize_azimuth_state("370") == 10
+
+
+def test_destination_point_projects_lightning_bearing() -> None:
+    lat, lon = destination_point(50.0, 14.0, 10.0, 90.0)
+
+    assert haversine_km(50.0, 14.0, lat, lon) == pytest.approx(10.0, abs=0.01)
+    assert lon > 14.0
 
 
 def test_build_lightning_snapshot_triggers_inside_radius() -> None:
@@ -60,6 +72,7 @@ def test_build_lightning_snapshot_triggers_inside_radius() -> None:
     snapshot = build_lightning_snapshot(
         distance_state=distance_state,
         counter_state=counter_state,
+        azimuth_state={"state": "90", "last_updated": now - timedelta(seconds=15)},
         previous_counter=6,
         trigger_radius_km=30,
         stale_after_seconds=900,
@@ -69,6 +82,7 @@ def test_build_lightning_snapshot_triggers_inside_radius() -> None:
     assert snapshot.source_available is True
     assert snapshot.distance_km == 12.4
     assert snapshot.counter == 8
+    assert snapshot.azimuth_degrees == 90
     assert snapshot.counter_delta == 2
     assert snapshot.has_new_strike is True
     assert snapshot.trigger_active is True
@@ -141,11 +155,18 @@ def test_autodetect_blitzortung_entities_prefers_lightning_sensors() -> None:
                 {"friendly_name": "Home Lightning Counter"},
                 now,
             ),
+            FakeState(
+                "sensor.home_lightning_azimuth",
+                "90",
+                {"friendly_name": "Home Lightning Azimuth"},
+                now,
+            ),
         ]
     )
 
     assert candidates.distance_entity_id == "sensor.home_lightning_distance"
     assert candidates.counter_entity_id == "sensor.home_lightning_counter"
+    assert candidates.azimuth_entity_id == "sensor.home_lightning_azimuth"
 
 
 def test_home_assistant_lightning_source_reads_and_tracks_previous_counter() -> None:
@@ -153,6 +174,7 @@ def test_home_assistant_lightning_source_reads_and_tracks_previous_counter() -> 
     source = HomeAssistantLightningSource(
         distance_entity_id="sensor.home_lightning_distance",
         counter_entity_id="sensor.home_lightning_counter",
+        azimuth_entity_id="sensor.home_lightning_azimuth",
         trigger_radius_km=30,
         stale_after_seconds=900,
     )
@@ -170,12 +192,19 @@ def test_home_assistant_lightning_source_reads_and_tracks_previous_counter() -> 
                 {"friendly_name": "Home Lightning Counter"},
                 now,
             ),
+            "sensor.home_lightning_azimuth": FakeState(
+                "sensor.home_lightning_azimuth",
+                "180",
+                {"friendly_name": "Home Lightning Azimuth"},
+                now,
+            ),
         }
     )
 
     first = source.read(hass, now=now)
     assert first.previous_counter is None
     assert first.counter == 4
+    assert first.azimuth_degrees == 180
     assert first.trigger_active is True
 
     hass.states._states["sensor.home_lightning_counter"].state = "6"

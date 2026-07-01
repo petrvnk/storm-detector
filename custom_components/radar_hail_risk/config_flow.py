@@ -32,6 +32,7 @@ from .const import (
     CONF_CORE_URGENT_DBZ,
     CONF_CORE_WARNING_DBZ,
     CONF_CORE_WATCH_DBZ,
+    CONF_LIGHTNING_AZIMUTH_ENTITY_ID,
     CONF_LIGHTNING_COUNTER_ENTITY_ID,
     CONF_LIGHTNING_DISTANCE_ENTITY_ID,
     CONF_LIGHTNING_TRIGGER_RADIUS_KM,
@@ -104,6 +105,7 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_LOCATION_ENTITY_ID: "",
                 CONF_LIGHTNING_DISTANCE_ENTITY_ID: candidates.distance_entity_id or str,
                 CONF_LIGHTNING_COUNTER_ENTITY_ID: candidates.counter_entity_id or str,
+                CONF_LIGHTNING_AZIMUTH_ENTITY_ID: candidates.azimuth_entity_id or str,
                 **OPTIONAL_CONF_DEFAULTS,
             }
 
@@ -122,6 +124,11 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
             _optional_entity_key(
                 CONF_LIGHTNING_COUNTER_ENTITY_ID, candidates.counter_entity_id
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", multiple=False)
+            ),
+            _optional_entity_key(
+                CONF_LIGHTNING_AZIMUTH_ENTITY_ID, candidates.azimuth_entity_id
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", multiple=False)
             ),
@@ -207,6 +214,9 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
                 CONF_LIGHTNING_COUNTER_ENTITY_ID: current_options.get(
                     CONF_LIGHTNING_COUNTER_ENTITY_ID, ""
                 ),
+                CONF_LIGHTNING_AZIMUTH_ENTITY_ID: current_options.get(
+                    CONF_LIGHTNING_AZIMUTH_ENTITY_ID, ""
+                ),
                 **{
                     key: current_options.get(key, value)
                     for key, value in OPTIONAL_CONF_DEFAULTS.items()
@@ -236,6 +246,12 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", multiple=False)
             ),
+            _optional_entity_key(
+                CONF_LIGHTNING_AZIMUTH_ENTITY_ID,
+                current_options.get(CONF_LIGHTNING_AZIMUTH_ENTITY_ID),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", multiple=False)
+            ),
             **{
                 vol.Optional(key, default=current_options.get(key, value)): int
                 for key, value in OPTIONAL_CONF_DEFAULTS.items()
@@ -251,6 +267,7 @@ def _clean_optional_entity_ids(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_LOCATION_ENTITY_ID,
         CONF_LIGHTNING_DISTANCE_ENTITY_ID,
         CONF_LIGHTNING_COUNTER_ENTITY_ID,
+        CONF_LIGHTNING_AZIMUTH_ENTITY_ID,
     ):
         value = cleaned.get(key)
         if value is None or (isinstance(value, str) and not value.strip()):

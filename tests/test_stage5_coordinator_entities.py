@@ -16,9 +16,13 @@ from custom_components.radar_hail_risk.const import (
     ATTR_CORE60_DISTANCE_KM,
     ATTR_FRAME_AGE_SECONDS,
     ATTR_LAST_ERROR,
+    ATTR_LIGHTNING_AZIMUTH_DEGREES,
+    ATTR_LIGHTNING_CORE_DISTANCE_KM,
     ATTR_LIGHTNING_COUNTER_DELTA,
     ATTR_LIGHTNING_DIAGNOSTICS,
     ATTR_LIGHTNING_DISTANCE_KM,
+    ATTR_LIGHTNING_LATITUDE,
+    ATTR_LIGHTNING_LONGITUDE,
     ATTR_LIGHTNING_TRIGGERED,
     ATTR_MAX_DBZ,
     ATTR_SELECTED_CORE_LATITUDE,
@@ -26,6 +30,7 @@ from custom_components.radar_hail_risk.const import (
     ATTR_SELECTED_CORE_THRESHOLD_DBZ,
     ATTR_STALE,
     ATTR_SUMMARY,
+    CONF_LIGHTNING_AZIMUTH_ENTITY_ID,
     DEFAULT_STALE_CLEAR_SECONDS,
     DOMAIN,
     RISK_LEVEL_NONE,
@@ -356,6 +361,78 @@ async def test_coordinator_exposes_threshold_specific_core_distances() -> None:
     assert payload[ATTR_CORE50_DISTANCE_KM] == 28
     assert payload[ATTR_CORE55_DISTANCE_KM] == 28
     assert payload[ATTR_CORE60_DISTANCE_KM] == 28
+
+
+async def test_coordinator_projects_lightning_azimuth_and_correlates_with_core() -> None:
+    hass = FakeHass()
+    now = datetime.now(timezone.utc)
+    hass.set_state("sensor.lightning_distance", "10", last_updated=now)
+    hass.set_state("sensor.lightning_count", "5", last_updated=now)
+    hass.set_state("sensor.lightning_azimuth", "90", last_updated=now)
+
+    async def _fake_meta(*_args: object, **_kwargs: object):
+        return {"radar": {"past": []}, "host": "https://tilecache.rainviewer.com"}
+
+    async def _fake_color(*_args: object, **_kwargs: object):
+        return {"#ffffff": 0}
+
+    analysis = SimpleNamespace(
+        max_dbz=60,
+        core50_distance_km=10,
+        core55_distance_km=10,
+        core60_distance_km=10,
+        selected_core_threshold_dbz=60,
+        selected_core_distance_km=10,
+        selected_core_latitude=50.0755,
+        selected_core_longitude=14.58,
+        selected_core_area_km2=1.0,
+        selected_core_pixel_count=2,
+        selected_core_max_dbz=60,
+        core_count=1,
+        storm_motion_bearing=None,
+        storm_motion_speed_kmh=None,
+        storm_approaching=None,
+        storm_eta_minutes=None,
+        dbz_trend=None,
+        distance_trend=None,
+        frame_age_seconds=60,
+        frame_time=1710000000,
+        frames_analyzed=4,
+    )
+    entry = SimpleNamespace(
+        entry_id="entry-lightning-azimuth",
+        data={
+            "lightning_distance_entity_id": "sensor.lightning_distance",
+            "lightning_counter_entity_id": "sensor.lightning_count",
+            CONF_LIGHTNING_AZIMUTH_ENTITY_ID: "sensor.lightning_azimuth",
+        },
+        options={},
+    )
+
+    with patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        _fake_meta,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        _fake_color,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        lambda *_args, **_kwargs: analysis,
+    ):
+        coordinator = RadarHailRiskCoordinator(
+            hass,
+            None,
+            "Radar Hail Risk",
+            entry,
+            session_factory=FakeSessionContext,
+        )
+        payload = await coordinator._async_update_data()
+
+    assert payload[ATTR_LIGHTNING_DISTANCE_KM] == 10
+    assert payload[ATTR_LIGHTNING_AZIMUTH_DEGREES] == 90
+    assert payload[ATTR_LIGHTNING_LATITUDE] is not None
+    assert payload[ATTR_LIGHTNING_LONGITUDE] is not None
+    assert payload[ATTR_LIGHTNING_CORE_DISTANCE_KM] is not None
 
 
 async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:

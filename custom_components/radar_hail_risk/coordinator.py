@@ -20,9 +20,13 @@ from .const import (
     ATTR_FRAME_TIME,
     ATTR_FRAMES_ANALYZED,
     ATTR_LAST_ERROR,
+    ATTR_LIGHTNING_AZIMUTH_DEGREES,
+    ATTR_LIGHTNING_CORE_DISTANCE_KM,
     ATTR_LIGHTNING_COUNTER_DELTA,
     ATTR_LIGHTNING_DIAGNOSTICS,
     ATTR_LIGHTNING_DISTANCE_KM,
+    ATTR_LIGHTNING_LATITUDE,
+    ATTR_LIGHTNING_LONGITUDE,
     ATTR_LIGHTNING_TRIGGERED,
     ATTR_LOCATION_SOURCE,
     ATTR_MAX_DBZ,
@@ -45,6 +49,7 @@ from .const import (
     CONF_CORE_URGENT_DBZ,
     CONF_CORE_WARNING_DBZ,
     CONF_CORE_WATCH_DBZ,
+    CONF_LIGHTNING_AZIMUTH_ENTITY_ID,
     CONF_LIGHTNING_COUNTER_ENTITY_ID,
     CONF_LIGHTNING_DISTANCE_ENTITY_ID,
     CONF_LIGHTNING_TRIGGER_RADIUS_KM,
@@ -73,7 +78,12 @@ from .const import (
     RISK_LEVEL_UNAVAILABLE,
 )
 from .ha_fallback import FallbackDataUpdateCoordinator, FallbackUpdateFailed
-from .lightning import HomeAssistantLightningSource, autodetect_blitzortung_entities
+from .lightning import (
+    HomeAssistantLightningSource,
+    autodetect_blitzortung_entities,
+    destination_point,
+    haversine_km,
+)
 from .rainviewer import analyze_recent_frames, fetch_radar_metadata, fetch_rainviewer_color_lookup
 from .risk import (
     HailRiskResult,
@@ -121,7 +131,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
         self.entry_id = getattr(entry, "entry_id", "default")
         self._session_factory = session_factory
         self._lightning_source: HomeAssistantLightningSource | None = None
-        self._lightning_source_key: tuple[str, str] | None = None
+        self._lightning_source_key: tuple[str, ...] | None = None
         self._update_count = 0
 
         config = self._effective_config()
@@ -196,6 +206,10 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             ATTR_CORE55_DISTANCE_KM: result.core55_distance_km,
             ATTR_CORE60_DISTANCE_KM: result.core60_distance_km,
             ATTR_LIGHTNING_DISTANCE_KM: result.lightning_distance_km,
+            ATTR_LIGHTNING_AZIMUTH_DEGREES: result.lightning_azimuth_degrees,
+            ATTR_LIGHTNING_LATITUDE: result.lightning_latitude,
+            ATTR_LIGHTNING_LONGITUDE: result.lightning_longitude,
+            ATTR_LIGHTNING_CORE_DISTANCE_KM: result.lightning_core_distance_km,
             ATTR_FRAME_AGE_SECONDS: result.frame_age_seconds,
             ATTR_FRAME_TIME: result.frame_time,
             ATTR_FRAMES_ANALYZED: result.frames_analyzed,
@@ -232,11 +246,13 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
         config = self._effective_config()
         distance_entity_id = config.get(CONF_LIGHTNING_DISTANCE_ENTITY_ID)
         counter_entity_id = config.get(CONF_LIGHTNING_COUNTER_ENTITY_ID)
+        azimuth_entity_id = config.get(CONF_LIGHTNING_AZIMUTH_ENTITY_ID)
 
-        if not distance_entity_id or not counter_entity_id:
+        if not distance_entity_id or not counter_entity_id or not azimuth_entity_id:
             candidates = autodetect_blitzortung_entities(_iter_hass_states(self.hass))
             distance_entity_id = distance_entity_id or candidates.distance_entity_id
             counter_entity_id = counter_entity_id or candidates.counter_entity_id
+            azimuth_entity_id = azimuth_entity_id or candidates.azimuth_entity_id
 
         if not distance_entity_id or not counter_entity_id:
             return None
@@ -250,11 +266,12 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             default=DEFAULT_STALE_CLEAR_SECONDS,
         )
 
-        source_key = (str(distance_entity_id), str(counter_entity_id))
+        source_key = (str(distance_entity_id), str(counter_entity_id), str(azimuth_entity_id or ""))
         if self._lightning_source is None or self._lightning_source_key != source_key:
             self._lightning_source = HomeAssistantLightningSource(
                 distance_entity_id=str(distance_entity_id),
                 counter_entity_id=str(counter_entity_id),
+                azimuth_entity_id=str(azimuth_entity_id) if azimuth_entity_id else None,
                 trigger_radius_km=trigger_radius_km,
                 stale_after_seconds=stale_after_seconds,
             )
@@ -453,6 +470,10 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
 
                 lightning_snapshot = self._build_lightning_snapshot(now)
                 lightning_distance_km = None
+                lightning_azimuth_degrees = None
+                lightning_latitude = None
+                lightning_longitude = None
+                lightning_core_distance_km = None
                 lightning_counter_delta = None
                 lightning_triggered = False
                 lightning_stale = False
@@ -463,6 +484,21 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     lightning_diagnostics = tuple(lightning_snapshot.diagnostics)
                     if not lightning_stale:
                         lightning_distance_km = lightning_snapshot.distance_km
+                        lightning_azimuth_degrees = lightning_snapshot.azimuth_degrees
+                        if lightning_distance_km is not None and lightning_azimuth_degrees is not None:
+                            lightning_latitude, lightning_longitude = destination_point(
+                                location_lat,
+                                location_lon,
+                                lightning_distance_km,
+                                lightning_azimuth_degrees,
+                            )
+                            if selected_lat is not None and selected_lon is not None:
+                                lightning_core_distance_km = haversine_km(
+                                    lightning_latitude,
+                                    lightning_longitude,
+                                    selected_lat,
+                                    selected_lon,
+                                )
                         lightning_counter_delta = lightning_snapshot.counter_delta
                         lightning_triggered = bool(lightning_snapshot.trigger_active)
                         if lightning_triggered:
@@ -570,6 +606,10 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         core55_distance_km=core55_distance,
                         core60_distance_km=core60_distance,
                         lightning_distance_km=lightning_distance_km,
+                        lightning_azimuth_degrees=lightning_azimuth_degrees,
+                        lightning_latitude=lightning_latitude,
+                        lightning_longitude=lightning_longitude,
+                        lightning_core_distance_km=lightning_core_distance_km,
                         frame_age_seconds=frame_age,
                         selected_core_threshold_dbz=selected_threshold,
                         selected_core_distance_km=selected_distance,

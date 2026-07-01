@@ -8,6 +8,7 @@ use as trigger/context.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Iterable
@@ -58,12 +59,56 @@ def normalize_counter_state(value: Any) -> int | None:
     return max(integer, 0)
 
 
+def normalize_azimuth_state(value: Any) -> float | None:
+    """Normalize lightning azimuth/bearing to 0..360 degrees."""
+
+    normalized = normalize_numeric_state(value)
+    if normalized is None:
+        return None
+    return float(normalized % 360)
+
+
+def destination_point(
+    latitude: float, longitude: float, distance_km: float, bearing_degrees: float
+) -> tuple[float, float]:
+    """Project a point from lat/lon using distance and bearing."""
+
+    radius_km = 6371.0088
+    angular_distance = distance_km / radius_km
+    bearing = math.radians(bearing_degrees)
+    lat1 = math.radians(latitude)
+    lon1 = math.radians(longitude)
+
+    lat2 = math.asin(
+        math.sin(lat1) * math.cos(angular_distance)
+        + math.cos(lat1) * math.sin(angular_distance) * math.cos(bearing)
+    )
+    lon2 = lon1 + math.atan2(
+        math.sin(bearing) * math.sin(angular_distance) * math.cos(lat1),
+        math.cos(angular_distance) - math.sin(lat1) * math.sin(lat2),
+    )
+    return math.degrees(lat2), ((math.degrees(lon2) + 540) % 360) - 180
+
+
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Distance between two lat/lon points in km."""
+
+    radius_km = 6371.0088
+    p1 = math.radians(lat1)
+    p2 = math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * radius_km * math.asin(min(1.0, math.sqrt(a)))
+
+
 @dataclass(frozen=True)
 class LightningEntityCandidates:
     """Autodetected entity IDs for Blitzortung-compatible sources."""
 
     distance_entity_id: str | None = None
     counter_entity_id: str | None = None
+    azimuth_entity_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +117,7 @@ class LightningSnapshot:
 
     distance_km: float | None
     counter: int | None
+    azimuth_degrees: float | None = None
     previous_counter: int | None = None
     trigger_radius_km: float = 30.0
     source_available: bool = False
@@ -113,6 +159,7 @@ def build_lightning_snapshot(
     *,
     distance_state: Any,
     counter_state: Any,
+    azimuth_state: Any = None,
     previous_counter: int | None = None,
     trigger_radius_km: float = 30.0,
     stale_after_seconds: int = 900,
@@ -135,13 +182,17 @@ def build_lightning_snapshot(
 
     raw_distance = _extract_state_value(distance_state)
     raw_counter = _extract_state_value(counter_state)
+    raw_azimuth = _extract_state_value(azimuth_state)
     distance = normalize_numeric_state(raw_distance)
     counter = normalize_counter_state(raw_counter)
+    azimuth = normalize_azimuth_state(raw_azimuth)
 
     if distance_state is not None and distance is None and not is_empty_state(raw_distance):
         diagnostics.append("invalid_distance_state")
     if counter_state is not None and counter is None and not is_empty_state(raw_counter):
         diagnostics.append("invalid_counter_state")
+    if azimuth_state is not None and azimuth is None and not is_empty_state(raw_azimuth):
+        diagnostics.append("invalid_azimuth_state")
 
     distance_age = _state_age_seconds(distance_state, now)
     counter_age = _state_age_seconds(counter_state, now)
@@ -161,6 +212,7 @@ def build_lightning_snapshot(
     return LightningSnapshot(
         distance_km=distance,
         counter=counter,
+        azimuth_degrees=azimuth,
         previous_counter=previous_counter,
         trigger_radius_km=trigger_radius_km,
         source_available=source_available,
@@ -181,6 +233,7 @@ def autodetect_blitzortung_entities(states: Iterable[Any]) -> LightningEntityCan
 
     distance: str | None = None
     counter: str | None = None
+    azimuth: str | None = None
 
     for state in states:
         entity_id = _extract_entity_id(state)
@@ -217,8 +270,18 @@ def autodetect_blitzortung_entities(states: Iterable[Any]) -> LightningEntityCan
             or "blesk" in haystack
         ):
             counter = entity_id
+            continue
 
-    return LightningEntityCandidates(distance_entity_id=distance, counter_entity_id=counter)
+        if azimuth is None and (
+            "azimuth" in haystack or "bearing" in haystack or "direction" in haystack
+        ):
+            azimuth = entity_id
+
+    return LightningEntityCandidates(
+        distance_entity_id=distance,
+        counter_entity_id=counter,
+        azimuth_entity_id=azimuth,
+    )
 
 
 class HomeAssistantLightningSource:
@@ -229,11 +292,13 @@ class HomeAssistantLightningSource:
         *,
         distance_entity_id: str,
         counter_entity_id: str,
+        azimuth_entity_id: str | None = None,
         trigger_radius_km: float = 30.0,
         stale_after_seconds: int = 900,
     ) -> None:
         self.distance_entity_id = distance_entity_id
         self.counter_entity_id = counter_entity_id
+        self.azimuth_entity_id = azimuth_entity_id
         self.trigger_radius_km = trigger_radius_km
         self.stale_after_seconds = stale_after_seconds
         self.previous_counter: int | None = None
@@ -247,6 +312,7 @@ class HomeAssistantLightningSource:
             snapshot = build_lightning_snapshot(
                 distance_state=None,
                 counter_state=None,
+                azimuth_state=None,
                 previous_counter=self.previous_counter,
                 trigger_radius_km=self.trigger_radius_km,
                 stale_after_seconds=self.stale_after_seconds,
@@ -257,6 +323,7 @@ class HomeAssistantLightningSource:
         snapshot = build_lightning_snapshot(
             distance_state=getter(self.distance_entity_id),
             counter_state=getter(self.counter_entity_id),
+            azimuth_state=getter(self.azimuth_entity_id) if self.azimuth_entity_id else None,
             previous_counter=self.previous_counter,
             trigger_radius_km=self.trigger_radius_km,
             stale_after_seconds=self.stale_after_seconds,
@@ -271,6 +338,7 @@ def _with_extra_diagnostic(snapshot: LightningSnapshot, diagnostic: str) -> Ligh
     return LightningSnapshot(
         distance_km=snapshot.distance_km,
         counter=snapshot.counter,
+        azimuth_degrees=snapshot.azimuth_degrees,
         previous_counter=snapshot.previous_counter,
         trigger_radius_km=snapshot.trigger_radius_km,
         source_available=snapshot.source_available,

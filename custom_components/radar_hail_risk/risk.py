@@ -50,6 +50,10 @@ class HailRiskResult:
     core55_distance_km: float | None = None
     core60_distance_km: float | None = None
     lightning_distance_km: float | None = None
+    lightning_azimuth_degrees: float | None = None
+    lightning_latitude: float | None = None
+    lightning_longitude: float | None = None
+    lightning_core_distance_km: float | None = None
     frame_age_seconds: int | None = None
     selected_core_threshold_dbz: int | None = None
     selected_core_distance_km: float | None = None

@@ -45,6 +45,7 @@ Every risk entity includes support-oriented attributes that help explain degrade
 - `core50_distance_km`, `core55_distance_km`, `core60_distance_km` — distances to threshold-specific radar cores used by the risk model.
 - `selected_core_area_km2`, `selected_core_pixel_count`, `selected_core_max_dbz`, `core_count` — connected-component storm-core metadata used to distinguish compact cores from isolated pixels.
 - `storm_motion_bearing`, `storm_motion_speed_kmh`, `storm_approaching`, `storm_eta_minutes`, `dbz_trend`, `distance_trend` — motion/trend estimate from recent radar frames when enough frame history is available.
+- `lightning_azimuth_degrees`, `lightning_latitude`, `lightning_longitude`, `lightning_core_distance_km` — optional strike-position estimate and radar-core correlation when a lightning azimuth/bearing entity is configured.
 - `source_status` — compact status for `location`, `radar`, and `lightning` (`ok`, `degraded`, `stale`, `not_configured`, `error`, `skipped`).
 - `degradation_reasons` — machine-readable reason codes such as `radar_source_error`, `stale_radar_frame`, or `missing_location_entity`.
 - `radar_diagnostics` and `lightning_diagnostics` — source-specific debug reason codes.
