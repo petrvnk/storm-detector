@@ -112,7 +112,19 @@ These snippets are **manual examples only**: the integration provides entities o
 examples/lovelace/native-card.yaml      # native HA cards, no custom dependencies
 examples/lovelace/mushroom-card.yaml    # Mushroom card variant
 examples/lovelace/weather-tab.yaml      # detailed weather/storm view
+examples/radar-hail-risk-card.yaml      # custom JS Lovelace card config
 ```
+
+### Custom Lovelace card
+
+A polished cockpit-style web component is available in `frontend/radar-hail-risk-card.js`. Add it as a Lovelace resource (for example through HACS/custom hosting or a `/local/` copy) and use:
+
+```yaml
+type: custom:radar-hail-risk-card
+title: Krupové riziko
+```
+
+The card reads the default Radar Hail Risk entities and renders status, radar/source health, core distances, lightning distance, frame age, confidence, and a compact SVG storm visualization.
 
 ### Minimal glance card
 
