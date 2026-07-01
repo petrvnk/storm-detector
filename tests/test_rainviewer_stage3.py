@@ -446,6 +446,134 @@ async def test_analyze_recent_frames_uses_latest_frame_max_for_current_risk() ->
 
 
 @pytest.mark.asyncio
+async def test_analyze_recent_frames_estimates_approaching_motion_and_trends() -> None:
+    zoom = 7
+    tile_size = 512
+    tx0 = 31
+    ty0 = 31
+    center_lat, center_lon = global_px_to_latlon(
+        tx0 * tile_size + 256.0,
+        ty0 * tile_size + 256.0,
+        zoom,
+    )
+
+    lookup = {(255, 0, 0, 255): 60, (255, 128, 0, 255): 55}
+    latest_tile = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
+    latest_tile.putpixel((258, 256), (255, 0, 0, 255))
+    latest_buf = io.BytesIO()
+    latest_tile.save(latest_buf, format="PNG")
+
+    older_tile = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
+    older_tile.putpixel((278, 256), (255, 128, 0, 255))
+    older_buf = io.BytesIO()
+    older_tile.save(older_buf, format="PNG")
+
+    host = "https://tilecache.rainviewer.com"
+    metadata = {
+        "host": host,
+        "radar": {
+            "past": [
+                {"time": 2000, "path": "/latest-motion"},
+                {"time": 1400, "path": "/older-motion"},
+            ]
+        },
+    }
+    session = FakeSession(
+        {
+            f"{host}/latest-motion/512/{zoom}/{tx0}/{ty0}/2/1_1.png": FakeResponse(
+                200, bytes_payload=latest_buf.getvalue()
+            ),
+            f"{host}/older-motion/512/{zoom}/{tx0}/{ty0}/2/1_1.png": FakeResponse(
+                200, bytes_payload=older_buf.getvalue()
+            ),
+        }
+    )
+
+    result = await analyze_recent_frames(
+        session,
+        metadata,
+        center_latitude=center_lat,
+        center_longitude=center_lon,
+        analysis_radius_km=50,
+        required_frames=2,
+        zoom=zoom,
+        color_lookup=lookup,
+        now=2100,
+    )
+
+    assert result is not None
+    assert result.storm_motion_bearing is not None
+    assert result.storm_motion_speed_kmh is not None
+    assert result.storm_motion_speed_kmh > 0
+    assert result.storm_approaching is True
+    assert result.storm_eta_minutes is not None
+    assert result.dbz_trend == "rising"
+    assert result.distance_trend == "approaching"
+
+
+@pytest.mark.asyncio
+async def test_analyze_recent_frames_estimates_receding_motion() -> None:
+    zoom = 7
+    tile_size = 512
+    tx0 = 32
+    ty0 = 32
+    center_lat, center_lon = global_px_to_latlon(
+        tx0 * tile_size + 256.0,
+        ty0 * tile_size + 256.0,
+        zoom,
+    )
+
+    lookup = {(255, 0, 0, 255): 60}
+    latest_tile = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
+    latest_tile.putpixel((278, 256), (255, 0, 0, 255))
+    latest_buf = io.BytesIO()
+    latest_tile.save(latest_buf, format="PNG")
+
+    older_tile = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
+    older_tile.putpixel((258, 256), (255, 0, 0, 255))
+    older_buf = io.BytesIO()
+    older_tile.save(older_buf, format="PNG")
+
+    host = "https://tilecache.rainviewer.com"
+    metadata = {
+        "host": host,
+        "radar": {
+            "past": [
+                {"time": 2000, "path": "/latest-recede"},
+                {"time": 1400, "path": "/older-recede"},
+            ]
+        },
+    }
+    session = FakeSession(
+        {
+            f"{host}/latest-recede/512/{zoom}/{tx0}/{ty0}/2/1_1.png": FakeResponse(
+                200, bytes_payload=latest_buf.getvalue()
+            ),
+            f"{host}/older-recede/512/{zoom}/{tx0}/{ty0}/2/1_1.png": FakeResponse(
+                200, bytes_payload=older_buf.getvalue()
+            ),
+        }
+    )
+
+    result = await analyze_recent_frames(
+        session,
+        metadata,
+        center_latitude=center_lat,
+        center_longitude=center_lon,
+        analysis_radius_km=50,
+        required_frames=2,
+        zoom=zoom,
+        color_lookup=lookup,
+        now=2100,
+    )
+
+    assert result is not None
+    assert result.storm_approaching is False
+    assert result.storm_eta_minutes is None
+    assert result.distance_trend == "receding"
+
+
+@pytest.mark.asyncio
 async def test_analyze_recent_frames_returns_none_for_missing_coverage() -> None:
     center_lat, center_lon = global_px_to_latlon(12345.1, 54321.1, 7)
     center_px = latlon_to_global_px(center_lat, center_lon, 7)

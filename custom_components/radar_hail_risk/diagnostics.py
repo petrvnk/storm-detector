@@ -30,6 +30,12 @@ _RUNTIME_KEYS = (
     "core_count",
     "selected_core_latitude",
     "selected_core_longitude",
+    "storm_motion_bearing",
+    "storm_motion_speed_kmh",
+    "storm_approaching",
+    "storm_eta_minutes",
+    "dbz_trend",
+    "distance_trend",
     "last_error",
     "update_count",
 )

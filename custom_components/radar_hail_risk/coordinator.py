@@ -13,7 +13,9 @@ from .const import (
     ATTR_CORE60_DISTANCE_KM,
     ATTR_CORE_COUNT,
     ATTR_CORE_DISTANCE_KM,
+    ATTR_DBZ_TREND,
     ATTR_DEGRADATION_REASONS,
+    ATTR_DISTANCE_TREND,
     ATTR_FRAME_AGE_SECONDS,
     ATTR_FRAME_TIME,
     ATTR_FRAMES_ANALYZED,
@@ -34,6 +36,10 @@ from .const import (
     ATTR_SELECTED_CORE_THRESHOLD_DBZ,
     ATTR_SOURCE_STATUS,
     ATTR_STALE,
+    ATTR_STORM_APPROACHING,
+    ATTR_STORM_ETA_MINUTES,
+    ATTR_STORM_MOTION_BEARING,
+    ATTR_STORM_MOTION_SPEED_KMH,
     ATTR_SUMMARY,
     CONF_ANALYSIS_RADIUS_KM,
     CONF_CORE_URGENT_DBZ,
@@ -201,6 +207,12 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             ATTR_CORE_COUNT: result.core_count,
             ATTR_SELECTED_CORE_LATITUDE: result.selected_core_latitude,
             ATTR_SELECTED_CORE_LONGITUDE: result.selected_core_longitude,
+            ATTR_STORM_MOTION_BEARING: result.storm_motion_bearing,
+            ATTR_STORM_MOTION_SPEED_KMH: result.storm_motion_speed_kmh,
+            ATTR_STORM_APPROACHING: result.storm_approaching,
+            ATTR_STORM_ETA_MINUTES: result.storm_eta_minutes,
+            ATTR_DBZ_TREND: result.dbz_trend,
+            ATTR_DISTANCE_TREND: result.distance_trend,
             ATTR_LIGHTNING_TRIGGERED: result.has_lightning_trigger,
             ATTR_LIGHTNING_COUNTER_DELTA: result.lightning_counter_delta,
             ATTR_LIGHTNING_DIAGNOSTICS: extras.get(ATTR_LIGHTNING_DIAGNOSTICS)
@@ -371,6 +383,12 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                 raw_selected_pixels = getattr(analysis, "selected_core_pixel_count", None) if analysis else None
                 raw_selected_max_dbz = getattr(analysis, "selected_core_max_dbz", None) if analysis else None
                 raw_core_count = getattr(analysis, "core_count", None) if analysis else None
+                raw_motion_bearing = getattr(analysis, "storm_motion_bearing", None) if analysis else None
+                raw_motion_speed = getattr(analysis, "storm_motion_speed_kmh", None) if analysis else None
+                raw_approaching = getattr(analysis, "storm_approaching", None) if analysis else None
+                raw_eta = getattr(analysis, "storm_eta_minutes", None) if analysis else None
+                raw_dbz_trend = getattr(analysis, "dbz_trend", None) if analysis else None
+                raw_distance_trend = getattr(analysis, "distance_trend", None) if analysis else None
                 frame_age = getattr(analysis, "frame_age_seconds", None) if analysis else None
                 frame_time = getattr(analysis, "frame_time", None) if analysis else None
                 frames_analyzed = getattr(analysis, "frames_analyzed", None) if analysis else None
@@ -407,6 +425,12 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     selected_pixels = None
                     selected_max_dbz = None
                     core_count = raw_core_count
+                    motion_bearing = None
+                    motion_speed = None
+                    approaching = None
+                    eta = None
+                    dbz_trend = None
+                    distance_trend = None
                 else:
                     max_dbz = raw_max_dbz
                     core50_distance = raw_core50_distance
@@ -420,6 +444,12 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     selected_pixels = raw_selected_pixels
                     selected_max_dbz = raw_selected_max_dbz
                     core_count = raw_core_count
+                    motion_bearing = raw_motion_bearing
+                    motion_speed = raw_motion_speed
+                    approaching = raw_approaching
+                    eta = raw_eta
+                    dbz_trend = raw_dbz_trend
+                    distance_trend = raw_distance_trend
 
                 lightning_snapshot = self._build_lightning_snapshot(now)
                 lightning_distance_km = None
@@ -549,6 +579,12 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         core_count=core_count,
                         selected_core_latitude=selected_lat,
                         selected_core_longitude=selected_lon,
+                        storm_motion_bearing=motion_bearing,
+                        storm_motion_speed_kmh=motion_speed,
+                        storm_approaching=approaching,
+                        storm_eta_minutes=eta,
+                        dbz_trend=dbz_trend,
+                        distance_trend=distance_trend,
                         frames_analyzed=frames_analyzed,
                         frame_time=frame_time,
                         last_error=", ".join(diagnostics) if diagnostics else None,

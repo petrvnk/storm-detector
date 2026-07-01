@@ -59,6 +59,12 @@ class HailRiskResult:
     core_count: int | None = None
     selected_core_latitude: float | None = None
     selected_core_longitude: float | None = None
+    storm_motion_bearing: float | None = None
+    storm_motion_speed_kmh: float | None = None
+    storm_approaching: bool | None = None
+    storm_eta_minutes: int | None = None
+    dbz_trend: str | None = None
+    distance_trend: str | None = None
     frames_analyzed: int | None = None
     frame_time: int | None = None
     last_error: str | None = None

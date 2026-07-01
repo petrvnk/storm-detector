@@ -53,6 +53,18 @@ class StormCore:
 
 
 @dataclass(frozen=True)
+class StormMotion:
+    """Motion/trend estimate for the selected storm core."""
+
+    bearing: float | None
+    speed_kmh: float | None
+    approaching: bool | None
+    eta_minutes: int | None
+    dbz_trend: str | None
+    distance_trend: str | None
+
+
+@dataclass(frozen=True)
 class AnalyzedFrame:
     """Result of one frame radar analysis."""
 
@@ -92,6 +104,12 @@ class RadarAnalysis:
     selected_core_pixel_count: int | None
     selected_core_max_dbz: int | None
     core_count: int
+    storm_motion_bearing: float | None
+    storm_motion_speed_kmh: float | None
+    storm_approaching: bool | None
+    storm_eta_minutes: int | None
+    dbz_trend: str | None
+    distance_trend: str | None
     frames_analyzed: int
 
 
@@ -462,6 +480,17 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
     return 2 * r * math.asin(min(1.0, math.sqrt(a)))
+
+
+def bearing_degrees(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Return initial bearing from point 1 to point 2 in degrees."""
+
+    p1 = math.radians(lat1)
+    p2 = math.radians(lat2)
+    dl = math.radians(lon2 - lon1)
+    y = math.sin(dl) * math.cos(p2)
+    x = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dl)
+    return round((math.degrees(math.atan2(y, x)) + 360) % 360, 1)
 
 
 def _meters_per_pixel(lat: float, zoom: int, tile_size: int = RAINVIEWER_TILE_SIZE) -> float:
@@ -898,6 +927,87 @@ def _select_tile_result_for_core_metadata(results: list[AnalyzedFrame]) -> Analy
     return sorted(candidates, key=sort_key)[0]
 
 
+def _selected_core_sample(frame: AnalyzedFrame) -> tuple[int, float, float, float] | None:
+    """Return threshold, distance, lat, lon for the selected strongest core in a frame."""
+
+    if (
+        frame.core60_distance_km is not None
+        and frame.core60_latitude is not None
+        and frame.core60_longitude is not None
+    ):
+        return (60, frame.core60_distance_km, frame.core60_latitude, frame.core60_longitude)
+    if (
+        frame.core55_distance_km is not None
+        and frame.core55_latitude is not None
+        and frame.core55_longitude is not None
+    ):
+        return (55, frame.core55_distance_km, frame.core55_latitude, frame.core55_longitude)
+    if (
+        frame.core50_distance_km is not None
+        and frame.core50_latitude is not None
+        and frame.core50_longitude is not None
+    ):
+        return (50, frame.core50_distance_km, frame.core50_latitude, frame.core50_longitude)
+    return None
+
+
+def _trend_from_delta(delta: float, *, deadband: float, positive: str, negative: str) -> str:
+    if delta > deadband:
+        return positive
+    if delta < -deadband:
+        return negative
+    return "stable"
+
+
+def _motion_from_frame_results(frame_results: list[AnalyzedFrame]) -> StormMotion:
+    """Estimate motion/trend from newest-to-oldest analyzed frames."""
+
+    if len(frame_results) < 2:
+        return StormMotion(None, None, None, None, None, None)
+
+    latest = frame_results[0]
+    latest_sample = _selected_core_sample(latest)
+    if latest_sample is None:
+        return StormMotion(None, None, None, None, None, None)
+
+    threshold, latest_distance, latest_lat, latest_lon = latest_sample
+    previous: tuple[AnalyzedFrame, tuple[int, float, float, float]] | None = None
+    for frame in frame_results[1:]:
+        sample = _selected_core_sample(frame)
+        if sample is None:
+            continue
+        previous = (frame, sample)
+        break
+    if previous is None:
+        return StormMotion(None, None, None, None, None, None)
+
+    older, older_sample = previous
+    _, older_distance, older_lat, older_lon = older_sample
+    delta_seconds = latest.frame_time - older.frame_time
+    if delta_seconds <= 0:
+        return StormMotion(None, None, None, None, None, None)
+
+    moved_km = haversine_km(older_lat, older_lon, latest_lat, latest_lon)
+    speed_kmh = moved_km / (delta_seconds / 3600)
+    distance_delta = latest_distance - older_distance
+    approaching = distance_delta < -0.5
+    eta_minutes = None
+    if approaching and speed_kmh > 1:
+        eta_minutes = max(0, round((latest_distance / speed_kmh) * 60))
+
+    dbz_delta = (latest.max_dbz or 0) - (older.max_dbz or 0)
+    return StormMotion(
+        bearing=bearing_degrees(older_lat, older_lon, latest_lat, latest_lon),
+        speed_kmh=round(speed_kmh, 1),
+        approaching=approaching,
+        eta_minutes=eta_minutes,
+        dbz_trend=_trend_from_delta(dbz_delta, deadband=2, positive="rising", negative="falling"),
+        distance_trend=_trend_from_delta(
+            distance_delta, deadband=1, positive="receding", negative="approaching"
+        ),
+    )
+
+
 async def analyze_recent_frames(
     session: Any,
     metadata: dict[str, Any],
@@ -987,6 +1097,8 @@ async def analyze_recent_frames(
     if frame_age_seconds < 0:
         frame_age_seconds = 0
 
+    motion = _motion_from_frame_results(frame_results)
+
     return RadarAnalysis(
         frame_time=latest.frame_time,
         frame_age_seconds=frame_age_seconds,
@@ -1002,5 +1114,11 @@ async def analyze_recent_frames(
         selected_core_pixel_count=latest.selected_core_pixel_count,
         selected_core_max_dbz=latest.selected_core_max_dbz,
         core_count=latest.core_count,
+        storm_motion_bearing=motion.bearing,
+        storm_motion_speed_kmh=motion.speed_kmh,
+        storm_approaching=motion.approaching,
+        storm_eta_minutes=motion.eta_minutes,
+        dbz_trend=motion.dbz_trend,
+        distance_trend=motion.distance_trend,
         frames_analyzed=len(frame_results),
     )
