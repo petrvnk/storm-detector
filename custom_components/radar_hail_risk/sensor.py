@@ -44,6 +44,11 @@ from .const import (
     ATTR_SUMMARY,
     DATA_KEY_RESULT,
     DOMAIN,
+    RISK_LEVEL_NONE,
+    RISK_LEVEL_UNAVAILABLE,
+    RISK_LEVEL_URGENT,
+    RISK_LEVEL_WARNING,
+    RISK_LEVEL_WATCH,
 )
 from .ha_fallback import FallbackCoordinatorEntity, FallbackEntity
 
@@ -175,11 +180,17 @@ class RadarHailRiskLevelSensor(RadarHailRiskSensorBase):
     @property
     def icon(self) -> str:
         level = self.native_value
-        if level == "urgent":
+        if level == RISK_LEVEL_URGENT:
             return "mdi:alert-decagram"
-        if level in {"warning", "watch"}:
+        if level in {RISK_LEVEL_WARNING, RISK_LEVEL_WATCH}:
             return "mdi:alert"
-        return "mdi:check-decagram"
+        if level == RISK_LEVEL_UNAVAILABLE or bool(
+            (self._coordinator.data or {}).get(ATTR_STALE, False)
+        ):
+            return "mdi:alert-circle-outline"
+        if level == RISK_LEVEL_NONE:
+            return "mdi:check-decagram"
+        return "mdi:help-circle-outline"
 
 
 class RadarHailRiskSummarySensor(RadarHailRiskSensorBase):

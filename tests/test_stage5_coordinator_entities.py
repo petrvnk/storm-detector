@@ -150,6 +150,7 @@ async def test_coordinator_payload_includes_risk_summary_and_entities() -> None:
     level_sensor._coordinator = coordinator
     assert level_sensor.unique_id == f"{DOMAIN}_entry-stage5_level"
     assert level_sensor.native_value == RISK_LEVEL_WARNING
+    assert level_sensor.icon == "mdi:alert"
     attrs = level_sensor.extra_state_attributes
     assert attrs[ATTR_LIGHTNING_DISTANCE_KM] == 4.5
 
@@ -311,8 +312,13 @@ async def test_stale_radar_is_gated_out_of_classification_and_active_sensor() ->
     assert payload[ATTR_STALE] is True
     assert payload["source_status"]["radar"] == "stale"
 
-    active_bin = RadarHailRiskActiveBinarySensor(coordinator, FakeEntry())
+    level_sensor = RadarHailRiskLevelSensor(coordinator, FakeEntry())
     coordinator.data = payload
+    level_sensor._coordinator = coordinator
+    assert level_sensor.native_value == RISK_LEVEL_UNAVAILABLE
+    assert level_sensor.icon == "mdi:alert-circle-outline"
+
+    active_bin = RadarHailRiskActiveBinarySensor(coordinator, FakeEntry())
     active_bin._coordinator = coordinator
     assert active_bin.is_on is False
 
