@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Setup Radar Hail Risk",
-        "description": "Select optional lightning sensors and set baseline thresholds. Leave both lightning fields empty for radar-only mode."
+        "description": "Optionally select a location entity and lightning sensors, then set baseline thresholds. Leave location blank to use the Home Assistant core location. Leave both lightning fields empty for radar-only mode."
       },
       "options": {
         "title": "Radar Hail Risk options",
@@ -23,7 +23,7 @@
     "step": {
       "init": {
         "title": "Radar Hail Risk options",
-        "description": "Tune analysis thresholds and stale-clear behavior."
+        "description": "Tune location source, analysis thresholds and stale-clear behavior."
       }
     }
   },

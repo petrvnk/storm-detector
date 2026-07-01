@@ -13,6 +13,7 @@ from .const import (
     ATTR_LIGHTNING_COUNTER_DELTA,
     ATTR_LIGHTNING_DISTANCE_KM,
     ATTR_LIGHTNING_TRIGGERED,
+    ATTR_LOCATION_SOURCE,
     ATTR_MAX_DBZ,
     ATTR_SELECTED_CORE_DISTANCE_KM,
     ATTR_SELECTED_CORE_LATITUDE,
@@ -117,6 +118,7 @@ class RadarHailRiskSensorBase(CoordinatorEntity[Any], SensorEntity):
             ATTR_FRAME_AGE_SECONDS: data.get(ATTR_FRAME_AGE_SECONDS),
             ATTR_FRAME_TIME: data.get(ATTR_FRAME_TIME),
             ATTR_FRAMES_ANALYZED: data.get(ATTR_FRAMES_ANALYZED),
+            ATTR_LOCATION_SOURCE: data.get(ATTR_LOCATION_SOURCE),
         }
 
 

@@ -35,6 +35,7 @@ from .const import (
     CONF_LIGHTNING_COUNTER_ENTITY_ID,
     CONF_LIGHTNING_DISTANCE_ENTITY_ID,
     CONF_LIGHTNING_TRIGGER_RADIUS_KM,
+    CONF_LOCATION_ENTITY_ID,
     CONF_MIN_ANALYSIS_INTERVAL_SECONDS,
     CONF_RAINVIEWER_FRAMES,
     CONF_RAINVIEWER_ZOOM,
@@ -100,12 +101,18 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if not vol:
             return {
+                CONF_LOCATION_ENTITY_ID: "",
                 CONF_LIGHTNING_DISTANCE_ENTITY_ID: candidates.distance_entity_id or str,
                 CONF_LIGHTNING_COUNTER_ENTITY_ID: candidates.counter_entity_id or str,
                 **OPTIONAL_CONF_DEFAULTS,
             }
 
         return {
+            _optional_entity_key(CONF_LOCATION_ENTITY_ID, None): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain=["zone", "person", "device_tracker"], multiple=False
+                )
+            ),
             _optional_entity_key(
                 CONF_LIGHTNING_DISTANCE_ENTITY_ID, candidates.distance_entity_id
             ): selector.EntitySelector(
@@ -193,6 +200,7 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
 
         if not vol:
             return {
+                CONF_LOCATION_ENTITY_ID: current_options.get(CONF_LOCATION_ENTITY_ID, ""),
                 CONF_LIGHTNING_DISTANCE_ENTITY_ID: current_options.get(
                     CONF_LIGHTNING_DISTANCE_ENTITY_ID, ""
                 ),
@@ -206,6 +214,14 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
             }
 
         return {
+            _optional_entity_key(
+                CONF_LOCATION_ENTITY_ID,
+                current_options.get(CONF_LOCATION_ENTITY_ID),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain=["zone", "person", "device_tracker"], multiple=False
+                )
+            ),
             _optional_entity_key(
                 CONF_LIGHTNING_DISTANCE_ENTITY_ID,
                 current_options.get(CONF_LIGHTNING_DISTANCE_ENTITY_ID),
@@ -231,7 +247,11 @@ def _clean_optional_entity_ids(user_input: dict[str, Any]) -> dict[str, Any]:
     """Drop blank optional lightning entity selectors from flow input."""
 
     cleaned = dict(user_input)
-    for key in (CONF_LIGHTNING_DISTANCE_ENTITY_ID, CONF_LIGHTNING_COUNTER_ENTITY_ID):
+    for key in (
+        CONF_LOCATION_ENTITY_ID,
+        CONF_LIGHTNING_DISTANCE_ENTITY_ID,
+        CONF_LIGHTNING_COUNTER_ENTITY_ID,
+    ):
         value = cleaned.get(key)
         if value is None or (isinstance(value, str) and not value.strip()):
             cleaned.pop(key, None)

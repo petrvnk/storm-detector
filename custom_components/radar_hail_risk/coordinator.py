@@ -17,6 +17,7 @@ from .const import (
     ATTR_LIGHTNING_DIAGNOSTICS,
     ATTR_LIGHTNING_DISTANCE_KM,
     ATTR_LIGHTNING_TRIGGERED,
+    ATTR_LOCATION_SOURCE,
     ATTR_MAX_DBZ,
     ATTR_RAINVIEWER_DIAGNOSTICS,
     ATTR_SELECTED_CORE_DISTANCE_KM,
@@ -32,6 +33,7 @@ from .const import (
     CONF_LIGHTNING_COUNTER_ENTITY_ID,
     CONF_LIGHTNING_DISTANCE_ENTITY_ID,
     CONF_LIGHTNING_TRIGGER_RADIUS_KM,
+    CONF_LOCATION_ENTITY_ID,
     CONF_MIN_ANALYSIS_INTERVAL_SECONDS,
     CONF_RAINVIEWER_FRAMES,
     CONF_RAINVIEWER_ZOOM,
@@ -129,16 +131,34 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
         merged.update(config)
         return merged
 
-    def _location(self) -> tuple[float, float] | None:
+    def _location(self) -> tuple[float, float, str, str | None]:
+        """Resolve the configured location source.
+
+        When a zone/person/device_tracker is configured, its latitude/longitude
+        attributes become the single source of truth. Otherwise, fall back to the
+        Home Assistant core location.
+        """
+
+        configured_entity = self._effective_config().get(CONF_LOCATION_ENTITY_ID)
+        if configured_entity:
+            state = _get_hass_state(self.hass, str(configured_entity))
+            if state is None:
+                return 0.0, 0.0, str(configured_entity), "missing_location_entity"
+            location = _location_from_state(state)
+            if location is None:
+                return 0.0, 0.0, str(configured_entity), "invalid_location_entity"
+            lat, lon = location
+            return lat, lon, str(configured_entity), None
+
         config = getattr(self.hass, "config", None)
         lat = getattr(config, "latitude", None)
         lon = getattr(config, "longitude", None)
         if lat is None or lon is None:
-            return None
+            return 0.0, 0.0, "hass.config", "missing_hass_location"
         try:
-            return float(lat), float(lon)
+            return float(lat), float(lon), "hass.config", None
         except Exception:
-            return None
+            return 0.0, 0.0, "hass.config", "invalid_hass_location"
 
     def _payload(
         self, result: HailRiskResult, *, extras: dict[str, Any] | None = None
@@ -173,6 +193,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             ATTR_RAINVIEWER_DIAGNOSTICS: extras.get(ATTR_RAINVIEWER_DIAGNOSTICS)
             if extras
             else (),
+            ATTR_LOCATION_SOURCE: extras.get(ATTR_LOCATION_SOURCE) if extras else None,
             ATTR_STALE: result.is_stale,
             "update_count": self._update_count,
         }
@@ -216,16 +237,17 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
 
         self._update_count += 1
         now = datetime.now(UTC)
-        location = self._location()
-        if location is None:
+        location_lat, location_lon, location_source, location_error = self._location()
+        if location_error is not None:
             return self._payload(
                 HailRiskResult(
                     level=RISK_LEVEL_UNAVAILABLE,
-                    summary="Home Assistant location is not configured",
-                    last_error="Home Assistant location is not configured",
+                    summary="Location source is not configured or has no coordinates",
+                    last_error=location_error,
                     is_stale=True,
-                    diagnostics=("missing_hass_location",),
-                )
+                    diagnostics=(location_error,),
+                ),
+                extras={ATTR_LOCATION_SOURCE: location_source},
             )
 
         if self._session_factory is None:
@@ -251,7 +273,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
 
         try:
             async def _run_with_session(session: Any) -> dict[str, Any]:
-                center_latitude, center_longitude = location
+                center_latitude, center_longitude = location_lat, location_lon
                 cfg = self._effective_config()
 
                 radar_diagnostics: list[str] = []
@@ -435,6 +457,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     extras={
                         ATTR_LIGHTNING_DIAGNOSTICS: tuple(lightning_diagnostics),
                         ATTR_RAINVIEWER_DIAGNOSTICS: tuple(radar_diagnostics),
+                        ATTR_LOCATION_SOURCE: location_source,
                     },
                 )
 
@@ -451,6 +474,28 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     await session_ctx.close()
                 except Exception:
                     pass
+
+
+def _get_hass_state(hass: Any, entity_id: str) -> Any | None:
+    states = getattr(hass, "states", None)
+    getter = getattr(states, "get", None)
+    if callable(getter):
+        return getter(entity_id)
+    return None
+
+
+def _location_from_state(state: Any) -> tuple[float, float] | None:
+    attributes = getattr(state, "attributes", {})
+    if not isinstance(attributes, dict):
+        attributes = {}
+    lat = attributes.get("latitude")
+    lon = attributes.get("longitude")
+    if lat is None or lon is None:
+        return None
+    try:
+        return float(lat), float(lon)
+    except Exception:
+        return None
 
 
 def _iter_hass_states(hass: Any) -> Iterable[Any]:

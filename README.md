@@ -31,6 +31,12 @@ Current implemented slices:
 6. Settings → Devices & services → Add integration → **Radar Hail Risk**.
 7. Optional but recommended: install/configure a Blitzortung-compatible integration and select its distance/counter sensors. If you skip this, Radar Hail Risk runs in radar-only mode.
 
+## Location source
+
+By default, Radar Hail Risk uses the Home Assistant core location (`hass.config`) as the single source of truth for radar center and distance calculations. In the options flow you can instead select a `zone`, `person`, or `device_tracker` with latitude/longitude attributes, for example `zone.home`. This is recommended when another integration already owns the canonical home/test location.
+
+If the configured location entity is missing or has no coordinates, the integration degrades to `unavailable` with a diagnostic such as `missing_location_entity` instead of silently falling back to another position.
+
 ## Lightning source modes
 
 Radar Hail Risk supports three setup modes:

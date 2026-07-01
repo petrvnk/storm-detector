@@ -11,9 +11,11 @@ from custom_components.radar_hail_risk.config_flow import RadarHailRiskOptionsFl
 from custom_components.radar_hail_risk.const import (
     ATTR_LIGHTNING_DIAGNOSTICS,
     ATTR_LIGHTNING_DISTANCE_KM,
+    ATTR_LOCATION_SOURCE,
     ATTR_RAINVIEWER_DIAGNOSTICS,
     ATTR_STALE,
     CONF_ANALYSIS_RADIUS_KM,
+    CONF_LOCATION_ENTITY_ID,
     CONF_RAINVIEWER_FRAMES,
     DEFAULT_RAINVIEWER_FRAMES,
     RISK_LEVEL_WARNING,
@@ -33,9 +35,25 @@ class FakeHass:
 
     def set_state(self, entity_id: str, value: str, *, last_updated: datetime) -> None:
         self._states[entity_id] = SimpleNamespace(
+            entity_id=entity_id,
             state=value,
             last_updated=last_updated,
             attributes={},
+        )
+
+    def set_location_state(
+        self,
+        entity_id: str,
+        *,
+        latitude: float,
+        longitude: float,
+        last_updated: datetime,
+    ) -> None:
+        self._states[entity_id] = SimpleNamespace(
+            entity_id=entity_id,
+            state="0",
+            last_updated=last_updated,
+            attributes={"latitude": latitude, "longitude": longitude},
         )
 
 
@@ -101,6 +119,19 @@ async def test_options_flow_uses_existing_options_as_defaults() -> None:
 
 
 @pytest.mark.asyncio
+async def test_options_flow_exposes_location_source_default() -> None:
+    class LocationEntry(FakeEntry):
+        options = {CONF_LOCATION_ENTITY_ID: "zone.home"}
+
+    flow = RadarHailRiskOptionsFlowHandler(LocationEntry())
+
+    result = await flow.async_step_init()
+
+    schema = result["data_schema"]
+    assert schema[CONF_LOCATION_ENTITY_ID] == "zone.home"
+
+
+@pytest.mark.asyncio
 async def test_rainviewer_metadata_retries_transient_errors_without_open_meteo() -> None:
     session = FlakySession()
 
@@ -145,3 +176,79 @@ async def test_coordinator_degrades_to_lightning_when_radar_source_fails() -> No
     assert "radar_source_error" in payload[ATTR_RAINVIEWER_DIAGNOSTICS]
     assert payload[ATTR_LIGHTNING_DIAGNOSTICS] == ()
     assert "rainviewer unavailable" not in payload["last_error"]
+
+
+@pytest.mark.asyncio
+async def test_coordinator_uses_configured_location_entity_as_single_source() -> None:
+    hass = FakeHass()
+    now = datetime.now(timezone.utc)
+    hass.set_location_state("zone.home", latitude=49.144, longitude=15.003, last_updated=now)
+
+    class LocationEntry(FakeEntry):
+        options = {CONF_LOCATION_ENTITY_ID: "zone.home"}
+
+    captured: dict[str, float] = {}
+
+    async def _fake_meta(*_args: object, **_kwargs: object):
+        return {"radar": {"past": []}, "host": "https://tilecache.rainviewer.com"}
+
+    async def _fake_color(*_args: object, **_kwargs: object):
+        return {"#ffffff": 0}
+
+    def _fake_analysis(_session: object, _meta: object, lat: float, lon: float, **_kwargs: object):
+        captured["lat"] = lat
+        captured["lon"] = lon
+        return SimpleNamespace(
+            max_dbz=40,
+            selected_core_threshold_dbz=None,
+            selected_core_distance_km=None,
+            selected_core_latitude=None,
+            selected_core_longitude=None,
+            frame_age_seconds=10,
+            frame_time=1710000000,
+            frames_analyzed=2,
+        )
+
+    with patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        _fake_meta,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        _fake_color,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        _fake_analysis,
+    ):
+        coordinator = RadarHailRiskCoordinator(
+            hass,
+            None,
+            "Radar Hail Risk",
+            LocationEntry(),
+            session_factory=FakeSessionContext,
+        )
+        payload = await coordinator._async_update_data()
+
+    assert captured == {"lat": 49.144, "lon": 15.003}
+    assert payload[ATTR_LOCATION_SOURCE] == "zone.home"
+
+
+@pytest.mark.asyncio
+async def test_missing_configured_location_entity_degrades_cleanly() -> None:
+    hass = FakeHass()
+
+    class LocationEntry(FakeEntry):
+        options = {CONF_LOCATION_ENTITY_ID: "zone.missing"}
+
+    coordinator = RadarHailRiskCoordinator(
+        hass,
+        None,
+        "Radar Hail Risk",
+        LocationEntry(),
+        session_factory=FakeSessionContext,
+    )
+    payload = await coordinator._async_update_data()
+
+    assert payload["level"] == "unavailable"
+    assert payload[ATTR_STALE] is True
+    assert payload[ATTR_LOCATION_SOURCE] == "zone.missing"
+    assert payload["diagnostics"] == ["missing_location_entity"]

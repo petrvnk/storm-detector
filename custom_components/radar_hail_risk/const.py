@@ -11,6 +11,7 @@ PLATFORMS: Final = ["sensor", "binary_sensor", "device_tracker"]
 
 CONF_LIGHTNING_DISTANCE_ENTITY_ID: Final = "lightning_distance_entity_id"
 CONF_LIGHTNING_COUNTER_ENTITY_ID: Final = "lightning_counter_entity_id"
+CONF_LOCATION_ENTITY_ID: Final = "location_entity_id"
 CONF_ANALYSIS_RADIUS_KM: Final = "analysis_radius_km"
 CONF_LIGHTNING_TRIGGER_RADIUS_KM: Final = "lightning_trigger_radius_km"
 CONF_MIN_ANALYSIS_INTERVAL_SECONDS: Final = "min_analysis_interval_seconds"
@@ -73,6 +74,7 @@ ATTR_STALE: Final = "is_stale"
 ATTR_LAST_ERROR: Final = "last_error"
 ATTR_LIGHTNING_DIAGNOSTICS: Final = "lightning_diagnostics"
 ATTR_RAINVIEWER_DIAGNOSTICS: Final = "radar_diagnostics"
+ATTR_LOCATION_SOURCE: Final = "location_source"
 
 RISK_LEVEL_NONE: Final = "none"
 RISK_LEVEL_WATCH: Final = "watch"
