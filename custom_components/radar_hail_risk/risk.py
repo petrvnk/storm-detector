@@ -60,6 +60,7 @@ class HailRiskResult:
     selected_core_area_km2: float | None = None
     selected_core_pixel_count: int | None = None
     selected_core_max_dbz: int | None = None
+    storm_cores: tuple[dict[str, Any], ...] = ()
     core_count: int | None = None
     selected_core_latitude: float | None = None
     selected_core_longitude: float | None = None

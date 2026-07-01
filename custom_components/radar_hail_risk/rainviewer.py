@@ -82,6 +82,7 @@ class AnalyzedFrame:
     selected_core_area_km2: float | None
     selected_core_pixel_count: int | None
     selected_core_max_dbz: int | None
+    storm_cores: tuple[dict[str, int | float], ...]
     core_count: int
     analyzed_pixels: int
 
@@ -103,6 +104,7 @@ class RadarAnalysis:
     selected_core_area_km2: float | None
     selected_core_pixel_count: int | None
     selected_core_max_dbz: int | None
+    storm_cores: tuple[dict[str, int | float], ...]
     core_count: int
     storm_motion_bearing: float | None
     storm_motion_speed_kmh: float | None
@@ -637,6 +639,44 @@ def _component_cores_from_points(
     return cores
 
 
+def _storm_core_summaries(
+    cores: list[StormCore],
+    *,
+    center_latitude: float,
+    center_longitude: float,
+    limit: int = 8,
+) -> tuple[dict[str, int | float], ...]:
+    """Return a compact top-N core list safe for HA attributes and Lovelace."""
+
+    summaries: list[dict[str, int | float]] = []
+    for index, core in enumerate(
+        sorted(cores, key=lambda item: (item.distance_km, -item.max_dbz, -item.pixel_count))[:limit],
+        start=1,
+    ):
+        summaries.append(
+            {
+                "index": index,
+                "threshold_dbz": int(core.threshold_dbz),
+                "max_dbz": int(core.max_dbz),
+                "distance_km": round(float(core.distance_km), 3),
+                "bearing_degrees": round(
+                    bearing_degrees(
+                        center_latitude,
+                        center_longitude,
+                        core.nearest_latitude,
+                        core.nearest_longitude,
+                    ),
+                    1,
+                ),
+                "latitude": round(float(core.nearest_latitude), 6),
+                "longitude": round(float(core.nearest_longitude), 6),
+                "area_km2": round(float(core.area_km2), 3),
+                "pixel_count": int(core.pixel_count),
+            }
+        )
+    return tuple(summaries)
+
+
 def _analyse_dbz_grid(
     dbz_grid: list[list[int | None]],
     tile_origin_px: tuple[float, float],
@@ -731,6 +771,11 @@ def _analyse_dbz_grid(
         selected_pixels = selected_core.pixel_count
         selected_max_dbz = selected_core.max_dbz
     core_count = len(cores50)
+    storm_cores = _storm_core_summaries(
+        cores50,
+        center_latitude=center_latitude,
+        center_longitude=center_longitude,
+    )
 
     return AnalyzedFrame(
         frame_time=frame_time,
@@ -747,6 +792,7 @@ def _analyse_dbz_grid(
         selected_core_area_km2=selected_area,
         selected_core_pixel_count=selected_pixels,
         selected_core_max_dbz=selected_max_dbz,
+        storm_cores=storm_cores,
         core_count=core_count,
         analyzed_pixels=analyzed_pixels,
     )
@@ -882,6 +928,20 @@ async def analyze_single_radar_frame(
         selected_pixels = selected_result.selected_core_pixel_count
         selected_max_dbz = selected_result.selected_core_max_dbz
     core_count = sum(result.core_count for result in tile_results)
+    storm_cores = tuple(
+        sorted(
+            (
+                core
+                for result in tile_results
+                for core in result.storm_cores
+            ),
+            key=lambda item: (
+                float(item.get("distance_km", float("inf"))),
+                -int(item.get("max_dbz", 0)),
+                -int(item.get("pixel_count", 0)),
+            ),
+        )[:8]
+    )
 
     return AnalyzedFrame(
         frame_time=frame_time,
@@ -898,6 +958,7 @@ async def analyze_single_radar_frame(
         selected_core_area_km2=selected_area,
         selected_core_pixel_count=selected_pixels,
         selected_core_max_dbz=selected_max_dbz,
+        storm_cores=storm_cores,
         core_count=core_count,
         analyzed_pixels=frame_pixels_analysed,
     )
@@ -1113,6 +1174,7 @@ async def analyze_recent_frames(
         selected_core_area_km2=latest.selected_core_area_km2,
         selected_core_pixel_count=latest.selected_core_pixel_count,
         selected_core_max_dbz=latest.selected_core_max_dbz,
+        storm_cores=latest.storm_cores,
         core_count=latest.core_count,
         storm_motion_bearing=motion.bearing,
         storm_motion_speed_kmh=motion.speed_kmh,

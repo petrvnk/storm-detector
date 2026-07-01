@@ -280,6 +280,9 @@ async def test_analyze_single_frame_counts_separate_core_components() -> None:
     assert frame_result is not None
     assert frame_result.selected_core_pixel_count == 1
     assert frame_result.core_count == 2
+    assert len(frame_result.storm_cores) == 2
+    assert frame_result.storm_cores[0]["distance_km"] <= frame_result.storm_cores[1]["distance_km"]
+    assert frame_result.storm_cores[0]["bearing_degrees"] >= 0
 
 
 @pytest.mark.asyncio

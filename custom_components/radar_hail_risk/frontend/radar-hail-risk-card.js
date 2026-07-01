@@ -59,6 +59,8 @@ class RadarHailRiskCard extends HTMLElement {
     const core50 = this.number(attrs.core50_distance_km);
     const core55 = this.number(attrs.core55_distance_km);
     const core60 = this.number(attrs.core60_distance_km);
+    const stormCores = Array.isArray(attrs.storm_cores) ? attrs.storm_cores : [];
+    const coreCount = this.number(attrs.core_count) ?? stormCores.length;
     const source = attrs.source_status || {};
     const confidence = this.number(attrs.confidence_score);
     const trend = attrs.distance_trend || '—';
@@ -93,10 +95,10 @@ class RadarHailRiskCard extends HTMLElement {
         </section>
 
         <section class="radar-wrap">
-          ${this.radarSvg({ coreDistance, lightningDistance, bearing, level, approaching, lightningTriggered, theme })}
+          ${this.radarSvg({ coreDistance, lightningDistance, bearing, level, approaching, lightningTriggered, stormCores, theme })}
           <div class="radar-legend">
             <div><span class="dot home"></span>${this.escape(c.home_label)}</div>
-            <div><span class="dot core"></span>Storm core ${coreText}</div>
+            <div><span class="dot core"></span>${coreCount || 0} jader · nejbližší ${coreText}</div>
             <div><span class="dot lightning"></span>Blesk ${lightningText}</div>
           </div>
         </section>
@@ -113,6 +115,8 @@ class RadarHailRiskCard extends HTMLElement {
           ${this.threshold('55+', core55, 25)}
           ${this.threshold('60+', core60, 15)}
         </section>
+
+        ${this.coreList(stormCores)}
 
         <section class="chips">
           ${this.chip('Radar', source.radar || 'unknown')}
@@ -204,11 +208,41 @@ class RadarHailRiskCard extends HTMLElement {
     return `<div class="chip ${cls}"><span>${this.escape(label)}</span><strong>${this.escape(value)}</strong></div>`;
   }
 
-  radarSvg({ coreDistance, lightningDistance, bearing, approaching, lightningTriggered, theme }) {
-    const core = this.point(coreDistance, bearing ?? 315, 58);
+  coreList(stormCores) {
+    if (!Array.isArray(stormCores) || stormCores.length === 0) return '';
+    const rows = stormCores.slice(0, 6).map((core, idx) => {
+      const distance = this.number(core.distance_km);
+      const maxDbz = this.number(core.max_dbz);
+      const area = this.number(core.area_km2);
+      const cls = maxDbz >= 60 ? 'urgent' : maxDbz >= 55 ? 'warning' : 'watch';
+      return `<div class="core-row ${cls}">
+        <span class="core-index">${idx + 1}</span>
+        <strong>${maxDbz == null ? '—' : Math.round(maxDbz)} dBZ</strong>
+        <span>${distance == null ? '—' : distance.toFixed(1) + ' km'}</span>
+        <span>${area == null ? '' : area.toFixed(1) + ' km²'}</span>
+      </div>`;
+    }).join('');
+    return `<section class="core-list"><div class="core-list-title">Bouřková jádra</div>${rows}</section>`;
+  }
+
+  radarSvg({ coreDistance, lightningDistance, bearing, approaching, lightningTriggered, stormCores, theme }) {
+    const fallbackCore = this.point(coreDistance, bearing ?? 315, 58);
+    const coreNodes = (stormCores || []).slice(0, 6).map((core, idx) => {
+      const distance = this.number(core.distance_km);
+      const coreBearing = this.number(core.bearing_degrees) ?? bearing ?? 315;
+      const point = this.point(distance, coreBearing, 58);
+      const maxDbz = this.number(core.max_dbz) ?? 50;
+      const radius = idx === 0 ? 8 : 5.5;
+      const cls = maxDbz >= 60 ? 'core-urgent' : maxDbz >= 55 ? 'core-warning' : 'core-watch';
+      return `<g class="core-group ${cls}">
+        <circle class="core-node" cx="${point.x}" cy="${point.y}" r="${radius}"/>
+        <circle class="core-pulse" cx="${point.x}" cy="${point.y}" r="${radius + 6}"/>
+        <text class="core-label" x="${point.x + 9}" y="${point.y - 7}">${idx + 1}</text>
+      </g>`;
+    }).join('');
+    const fallbackCoreNode = coreDistance == null || coreNodes ? '' : `<circle class="core-node" cx="${fallbackCore.x}" cy="${fallbackCore.y}" r="8"/><circle class="core-pulse" cx="${fallbackCore.x}" cy="${fallbackCore.y}" r="14"/>`;
     const lightning = this.point(lightningDistance, 250, 58);
     const arrow = bearing == null ? '' : `<g transform="rotate(${bearing} 100 100)"><path class="motion-arrow" d="M100 26 L106 44 L100 40 L94 44 Z" /></g>`;
-    const coreNode = coreDistance == null ? '' : `<circle class="core-node" cx="${core.x}" cy="${core.y}" r="8"/><circle class="core-pulse" cx="${core.x}" cy="${core.y}" r="14"/>`;
     const lightningNode = lightningDistance == null ? '' : `<path class="lightning-node ${lightningTriggered ? 'triggered' : ''}" d="M${lightning.x - 5} ${lightning.y - 11} L${lightning.x + 3} ${lightning.y - 11} L${lightning.x - 2} ${lightning.y - 1} L${lightning.x + 7} ${lightning.y - 1} L${lightning.x - 5} ${lightning.y + 13} L${lightning.x - 1} ${lightning.y + 2} L${lightning.x - 9} ${lightning.y + 2} Z"/>`;
     return `
       <svg class="radar" viewBox="0 0 200 200" role="img" aria-label="Radar storm visualization">
@@ -227,7 +261,8 @@ class RadarHailRiskCard extends HTMLElement {
         <line class="axis" x1="28" y1="100" x2="172" y2="100"/>
         ${arrow}
         <circle class="home-node" cx="100" cy="100" r="6"/>
-        ${coreNode}
+        ${fallbackCoreNode}
+        ${coreNodes}
         ${lightningNode}
         <text class="north" x="100" y="20" text-anchor="middle">N</text>
         <text class="range" x="124" y="97">25</text>
@@ -275,6 +310,10 @@ class RadarHailRiskCard extends HTMLElement {
       .axis { stroke:rgba(148,163,184,.12); stroke-width:1; }
       .home-node { fill:#e2e8f0; stroke:#020617; stroke-width:2; }
       .core-node { fill:${theme.accent}; stroke:#fff7ed; stroke-width:1.5; filter:drop-shadow(0 0 10px ${theme.accent}); }
+      .core-group.core-watch .core-node { fill:#facc15; }
+      .core-group.core-warning .core-node { fill:#fb923c; }
+      .core-group.core-urgent .core-node { fill:#fb3b5f; }
+      .core-label { fill:#f8fafc; font-size:10px; font-weight:900; paint-order:stroke; stroke:#020617; stroke-width:3px; }
       .core-pulse { fill:none; stroke:${theme.accent}; stroke-width:2; opacity:.55; }
       .lightning-node { fill:#fbbf24; stroke:#fef3c7; stroke-width:1; opacity:.85; filter:drop-shadow(0 0 8px rgba(251,191,36,.55)); }
       .lightning-node.triggered { fill:#f59e0b; opacity:1; }
@@ -294,6 +333,14 @@ class RadarHailRiskCard extends HTMLElement {
       .threshold { display:flex; justify-content:space-between; align-items:center; }
       .threshold span { color:#94a3b8; font-weight:800; } .threshold strong { color:#e2e8f0; }
       .threshold.hot { border-color:${theme.accent}; background:color-mix(in srgb, ${theme.accent} 14%, rgba(15,23,42,.72)); }
+      .core-list { margin-top:10px; padding:12px; border-radius:18px; background:rgba(15,23,42,.50); border:1px solid rgba(148,163,184,.14); }
+      .core-list-title { color:#94a3b8; font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.12em; margin-bottom:8px; }
+      .core-row { display:grid; grid-template-columns:28px 1fr 1fr 1fr; align-items:center; gap:8px; padding:7px 0; border-top:1px solid rgba(148,163,184,.10); color:#cbd5e1; font-size:13px; }
+      .core-row:first-of-type { border-top:0; }
+      .core-index { width:22px; height:22px; border-radius:999px; display:inline-grid; place-items:center; background:rgba(148,163,184,.16); color:#f8fafc; font-weight:900; }
+      .core-row.watch strong { color:#facc15; }
+      .core-row.warning strong { color:#fb923c; }
+      .core-row.urgent strong { color:#fb3b5f; }
       .chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
       .chip { display:flex; gap:7px; align-items:center; padding:8px 10px; border-radius:999px; }
       .chip span { color:#94a3b8; font-size:11px; } .chip strong { font-size:12px; }

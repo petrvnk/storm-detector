@@ -43,6 +43,7 @@ from .const import (
     ATTR_SOURCE_STATUS,
     ATTR_STALE,
     ATTR_STORM_APPROACHING,
+    ATTR_STORM_CORES,
     ATTR_STORM_ETA_MINUTES,
     ATTR_STORM_MOTION_BEARING,
     ATTR_STORM_MOTION_SPEED_KMH,
@@ -220,6 +221,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             ATTR_SELECTED_CORE_AREA_KM2: result.selected_core_area_km2,
             ATTR_SELECTED_CORE_PIXEL_COUNT: result.selected_core_pixel_count,
             ATTR_SELECTED_CORE_MAX_DBZ: result.selected_core_max_dbz,
+            ATTR_STORM_CORES: list(result.storm_cores or ()),
             ATTR_CORE_COUNT: result.core_count,
             ATTR_SELECTED_CORE_LATITUDE: result.selected_core_latitude,
             ATTR_SELECTED_CORE_LONGITUDE: result.selected_core_longitude,
@@ -403,6 +405,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                 raw_selected_area = getattr(analysis, "selected_core_area_km2", None) if analysis else None
                 raw_selected_pixels = getattr(analysis, "selected_core_pixel_count", None) if analysis else None
                 raw_selected_max_dbz = getattr(analysis, "selected_core_max_dbz", None) if analysis else None
+                raw_storm_cores = getattr(analysis, "storm_cores", ()) if analysis else ()
                 raw_core_count = getattr(analysis, "core_count", None) if analysis else None
                 raw_motion_bearing = getattr(analysis, "storm_motion_bearing", None) if analysis else None
                 raw_motion_speed = getattr(analysis, "storm_motion_speed_kmh", None) if analysis else None
@@ -445,6 +448,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     selected_area = None
                     selected_pixels = None
                     selected_max_dbz = None
+                    storm_cores = ()
                     core_count = raw_core_count
                     motion_bearing = None
                     motion_speed = None
@@ -464,6 +468,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     selected_area = raw_selected_area
                     selected_pixels = raw_selected_pixels
                     selected_max_dbz = raw_selected_max_dbz
+                    storm_cores = raw_storm_cores
                     core_count = raw_core_count
                     motion_bearing = raw_motion_bearing
                     motion_speed = raw_motion_speed
@@ -617,6 +622,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         selected_core_area_km2=selected_area,
                         selected_core_pixel_count=selected_pixels,
                         selected_core_max_dbz=selected_max_dbz,
+                        storm_cores=tuple(storm_cores or ()),
                         core_count=core_count,
                         selected_core_latitude=selected_lat,
                         selected_core_longitude=selected_lon,
