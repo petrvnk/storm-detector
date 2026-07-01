@@ -6,3 +6,5 @@ __pycache__/
 # Home Assistant build artifacts
 .venv/
 .env
+*.egg-info/
+uv.lock

@@ -21,6 +21,20 @@ blueprint:
       selector:
         entity:
           domain: sensor
+    max_dbz_sensor:
+      name: Max dBZ sensor
+      description: Optional sensor with the strongest detected radar reflectivity.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    lightning_distance_sensor:
+      name: Lightning distance sensor
+      description: Optional sensor with normalized nearest lightning distance.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
     notify_service:
       name: Notify service
       description: "Example: notify.mobile_app_phone or notify.persistent_notification."
@@ -66,6 +80,8 @@ trigger:
 variables:
   risk_level_entity: !input risk_level_sensor
   summary_entity: !input risk_summary_sensor
+  max_dbz_entity: !input max_dbz_sensor
+  lightning_distance_entity: !input lightning_distance_sensor
   minimum_level: !input minimum_level
   title_language: !input title_language
   cooldown_minutes: !input cooldown_minutes
@@ -76,6 +92,17 @@ variables:
     {% else %}
       {{ state_attr(risk_level_entity, 'summary') or current_level }}
     {% endif %}
+  detail_text: >-
+    {%- set parts = [] -%}
+    {%- if max_dbz_entity and states(max_dbz_entity) not in ['unknown', 'unavailable', 'none'] -%}
+      {%- set parts = parts + ['max ' ~ states(max_dbz_entity) ~ ' dBZ'] -%}
+    {%- endif -%}
+    {%- if lightning_distance_entity and states(lightning_distance_entity) not in ['unknown', 'unavailable', 'none'] -%}
+      {%- set parts = parts + ['lightning ' ~ states(lightning_distance_entity) ~ ' km'] -%}
+    {%- endif -%}
+    {{ parts | join(', ') }}
+  message_text: >-
+    {{ summary_text }}{% if detail_text %}\n{{ detail_text }}{% endif %}
   level_rank: >-
     {{ {'none': 0, 'unavailable': 0, 'watch': 1, 'warning': 2, 'urgent': 3}.get(current_level, 0) }}
   min_rank: >-
@@ -97,7 +124,7 @@ action:
   - service: !input notify_service
     data:
       title: "{{ title_text }}"
-      message: "{{ summary_text }}"
+      message: "{{ message_text }}"
       data:
         tag: radar_hail_risk
         group: weather

@@ -62,9 +62,15 @@ Entity IDs may differ depending on Home Assistant naming. The examples below ass
 
 Adjust entity IDs in examples to match your Home Assistant instance.
 
-## Lovelace dashboard snippets
+## Lovelace dashboard snippets and examples
 
-These snippets are **manual examples only**. The integration never writes dashboards automatically.
+These snippets are **manual examples only**: the integration provides entities only and never writes dashboards automatically. Copy one of the example files and adjust entity IDs if you renamed the integration:
+
+```text
+examples/lovelace/native-card.yaml      # native HA cards, no custom dependencies
+examples/lovelace/mushroom-card.yaml    # Mushroom card variant
+examples/lovelace/weather-tab.yaml      # detailed weather/storm view
+```
 
 ### Minimal glance card
 
@@ -142,6 +148,8 @@ Import/copy it into Home Assistant and choose:
 
 - risk level sensor
 - optional summary sensor
+- optional max dBZ sensor
+- optional lightning distance sensor
 - notify service, e.g. `notify.mobile_app_phone`
 - minimum notification level: `watch`, `warning`, or `urgent`
 - title language: `en` or `cs`
@@ -202,4 +210,5 @@ GitHub Actions also runs unit tests, Ruff, compileall, and HACS validation via `
 - `custom_components/radar_hail_risk/rainviewer.py` – RainViewer ingestion/detection helpers
 - `custom_components/radar_hail_risk/risk.py` – risk classification helpers
 - `blueprints/automation/radar_hail_risk/hail_risk_notification.yaml` – optional notification automation blueprint
+- `examples/lovelace/` – copy-paste dashboard examples
 - `tests/` – unit/scaffold tests

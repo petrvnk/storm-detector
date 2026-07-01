@@ -13,6 +13,9 @@ def test_release_readiness_files_exist() -> None:
         ROOT / "LICENSE",
         ROOT / "CHANGELOG.md",
         ROOT / "docs" / "release-checklist.md",
+        ROOT / "examples" / "lovelace" / "native-card.yaml",
+        ROOT / "examples" / "lovelace" / "mushroom-card.yaml",
+        ROOT / "examples" / "lovelace" / "weather-tab.yaml",
         ROOT / ".github" / "workflows" / "validate.yml",
         ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml",
         ROOT / ".github" / "ISSUE_TEMPLATE" / "feature_request.yml",
@@ -52,6 +55,31 @@ def test_readme_contains_release_limitations_credits_and_migration_notes() -> No
     assert "Use only one active alerting setup" in readme
     assert "radar-only mode" in readme
     assert "hacs/action@main" in readme
+    assert "examples/lovelace/native-card.yaml" in readme
+    assert "examples/lovelace/mushroom-card.yaml" in readme
+    assert "examples/lovelace/weather-tab.yaml" in readme
+
+
+def test_lovelace_examples_use_clean_entity_ids() -> None:
+    examples_dir = ROOT / "examples" / "lovelace"
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in examples_dir.glob("*.yaml"))
+
+    assert "radar_hail_risk_radar_hail" not in combined
+    assert "sensor.radar_hail_risk_level" in combined
+    assert "sensor.radar_hail_risk_summary" in combined
+    assert "binary_sensor.radar_hail_risk_data_stale" in combined
+    assert "device_tracker.radar_hail_risk_storm_core" in combined
+
+
+def test_notification_blueprint_includes_detail_sensors_and_cooldown() -> None:
+    blueprint = (
+        ROOT / "blueprints" / "automation" / "radar_hail_risk" / "hail_risk_notification.yaml"
+    ).read_text(encoding="utf-8")
+
+    assert "max_dbz_sensor" in blueprint
+    assert "lightning_distance_sensor" in blueprint
+    assert "cooldown_minutes" in blueprint
+    assert "message_text" in blueprint
 
 
 def test_release_checklist_covers_runtime_and_migration_verification() -> None:

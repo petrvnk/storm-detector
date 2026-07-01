@@ -1,0 +1,33 @@
+# Native Home Assistant Lovelace card for Radar Hail Risk.
+# Works without custom cards. Adjust entity IDs if you renamed the integration.
+type: vertical-stack
+cards:
+  - type: entities
+    title: Radar Hail Risk
+    show_header_toggle: false
+    entities:
+      - entity: sensor.radar_hail_risk_level
+        name: Risk level
+      - entity: sensor.radar_hail_risk_summary
+        name: Summary
+      - entity: binary_sensor.radar_hail_risk_active
+        name: Active risk
+      - entity: binary_sensor.radar_hail_risk_data_stale
+        name: Data stale
+  - type: conditional
+    conditions:
+      - entity: binary_sensor.radar_hail_risk_active
+        state: "on"
+    card:
+      type: entities
+      title: Storm details
+      show_header_toggle: false
+      entities:
+        - entity: sensor.radar_hail_risk_max_dbz
+          name: Max dBZ
+        - entity: sensor.radar_hail_risk_lightning_distance
+          name: Lightning distance
+        - entity: sensor.radar_hail_risk_core_distance
+          name: Core distance
+        - entity: sensor.radar_hail_risk_frame_age
+          name: Radar frame age

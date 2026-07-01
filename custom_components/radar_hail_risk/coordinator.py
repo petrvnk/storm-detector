@@ -64,6 +64,7 @@ from .risk import (
     classify_from_thresholds,
     normalize_optional_float,
     normalize_optional_int,
+    user_visible_diagnostics,
 )
 
 try:  # pragma: no cover
@@ -349,10 +350,8 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                             lightning_counter_delta = None
 
 
-                summary_lightning_diagnostics = () if lightning_stale else tuple(
-                    diagnostic
-                    for diagnostic in lightning_diagnostics
-                    if diagnostic != "lightning_not_configured"
+                summary_lightning_diagnostics = () if lightning_stale else user_visible_diagnostics(
+                    tuple(lightning_diagnostics)
                 )
 
                 diagnostics = [

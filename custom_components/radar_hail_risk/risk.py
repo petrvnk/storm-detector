@@ -14,6 +14,29 @@ from .const import (
 
 RiskLevel = Literal["none", "watch", "warning", "urgent", "unavailable"]
 
+# Internal event markers are useful as attributes for debugging but should never leak
+# into the human-facing summary or last_error sensor. They are not source failures.
+INTERNAL_EVENT_DIAGNOSTICS = frozenset(
+    {
+        "lightning_strike_delta",
+        "lightning_counter_delta",
+        "lightning_not_configured",
+    }
+)
+
+
+def user_visible_diagnostics(diagnostics: tuple[str, ...]) -> tuple[str, ...]:
+    """Return diagnostics that are safe to show in user-facing text.
+
+    The coordinator keeps detailed radar/lightning diagnostics as attributes. This
+    helper prevents internal event/debug markers from becoming scary alert text like
+    ``Warning (lightning_strike_delta)``.
+    """
+
+    return tuple(
+        diagnostic for diagnostic in diagnostics if diagnostic not in INTERNAL_EVENT_DIAGNOSTICS
+    )
+
 
 @dataclass(frozen=True)
 class HailRiskResult:
@@ -108,8 +131,9 @@ def build_summary(
 ) -> str:
     """Build a short user-facing summary for the main risk sensor."""
 
-    if diagnostics:
-        suffix = f" ({', '.join(diagnostics)})"
+    public_diagnostics = user_visible_diagnostics(diagnostics)
+    if public_diagnostics:
+        suffix = f" ({', '.join(public_diagnostics)})"
     else:
         suffix = ""
 

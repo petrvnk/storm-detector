@@ -18,6 +18,9 @@ dev = [
   "Pillow>=10"
 ]
 
+[tool.setuptools]
+packages = []
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]

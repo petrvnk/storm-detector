@@ -195,6 +195,20 @@ async def test_lightning_counter_delta_is_not_exposed_as_user_facing_diagnostic(
     assert payload[ATTR_LAST_ERROR] is None
 
 
+def test_build_summary_filters_internal_event_diagnostics() -> None:
+    from custom_components.radar_hail_risk.risk import build_summary
+
+    assert build_summary(
+        level="warning",
+        max_dbz=56,
+        core_distance_km=None,
+        lightning_distance_km=12.0,
+        frame_age_seconds=120,
+        selected_core_threshold_dbz=None,
+        diagnostics=("lightning_strike_delta", "lightning_not_configured"),
+    ) == "Warning: max 56 dBZ"
+
+
 async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:
     hass = FakeHass()
     now = datetime.now(timezone.utc)
