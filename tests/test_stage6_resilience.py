@@ -7,7 +7,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-from custom_components.radar_hail_risk.config_flow import RadarHailRiskOptionsFlowHandler
+from custom_components.radar_hail_risk.config_flow import (
+    RadarHailRiskOptionsFlowHandler,
+    _validate_parameter_ranges,
+)
 from custom_components.radar_hail_risk.const import (
     ATTR_DEGRADATION_REASONS,
     ATTR_LIGHTNING_DIAGNOSTICS,
@@ -131,6 +134,51 @@ async def test_options_flow_exposes_location_source_default() -> None:
 
     schema = result["data_schema"]
     assert schema[CONF_LOCATION_ENTITY_ID] == "zone.home"
+
+
+def test_parameter_validation_rejects_unsafe_ranges_and_bad_order() -> None:
+    assert _validate_parameter_ranges({CONF_ANALYSIS_RADIUS_KM: 5}) == {
+        CONF_ANALYSIS_RADIUS_KM: "invalid_range"
+    }
+    assert _validate_parameter_ranges(
+        {
+            "core_watch_dbz": 55,
+            "core_warning_dbz": 50,
+            "core_urgent_dbz": 60,
+        }
+    ) == {"base": "invalid_threshold_order"}
+    assert _validate_parameter_ranges(
+        {
+            "warning_lightning_distance_km": 8,
+            "urgent_lightning_distance_km": 20,
+        }
+    ) == {"base": "invalid_distance_order"}
+    assert _validate_parameter_ranges(
+        {
+            "lightning_trigger_radius_km": 10,
+            "warning_lightning_distance_km": 20,
+        }
+    ) == {"base": "invalid_trigger_radius"}
+
+
+@pytest.mark.asyncio
+async def test_options_flow_rejects_invalid_parameter_ranges() -> None:
+    flow = RadarHailRiskOptionsFlowHandler(FakeEntry())
+
+    result = await flow.async_step_init({CONF_ANALYSIS_RADIUS_KM: 5})
+
+    assert result["step_id"] == "init"
+    assert result["errors"] == {CONF_ANALYSIS_RADIUS_KM: "invalid_range"}
+
+
+@pytest.mark.asyncio
+async def test_options_flow_coerces_numeric_strings_before_saving() -> None:
+    flow = RadarHailRiskOptionsFlowHandler(FakeEntry())
+
+    result = await flow.async_step_init({CONF_ANALYSIS_RADIUS_KM: "60"})
+
+    assert result["title"] == "Radar Hail Risk"
+    assert result["data"][CONF_ANALYSIS_RADIUS_KM] == 60
 
 
 @pytest.mark.asyncio

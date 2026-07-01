@@ -3,7 +3,45 @@
     "step": {
       "user": {
         "title": "Setup Radar Hail Risk",
-        "description": "Optionally select a location entity and lightning sensors, then set baseline thresholds. Leave location blank to use the Home Assistant core location. Leave both lightning fields empty for radar-only mode."
+        "description": "Configure the location source, optional lightning sensors, and baseline thresholds. Leave location blank to use the Home Assistant core location. Leave both lightning fields empty for radar-only mode.",
+        "data": {
+          "location_entity_id": "Location source",
+          "lightning_distance_entity_id": "Lightning distance sensor",
+          "lightning_counter_entity_id": "Lightning counter sensor",
+          "lightning_azimuth_entity_id": "Lightning azimuth sensor",
+          "analysis_radius_km": "Radar analysis radius",
+          "lightning_trigger_radius_km": "Lightning trigger radius",
+          "warning_lightning_distance_km": "Warning lightning distance",
+          "urgent_lightning_distance_km": "Urgent lightning distance",
+          "core_watch_dbz": "Watch core threshold",
+          "core_warning_dbz": "Warning core threshold",
+          "core_urgent_dbz": "Urgent core threshold",
+          "min_analysis_interval_seconds": "Minimum analysis interval",
+          "stale_clear_seconds": "Stale-data timeout",
+          "rainviewer_zoom": "RainViewer zoom",
+          "rainviewer_frames": "RainViewer frames to analyze",
+          "warning_core_distance_km": "Warning core distance",
+          "urgent_core_distance_km": "Urgent core distance"
+        },
+        "data_description": {
+          "location_entity_id": "Optional zone, person, or device tracker. If set, this is the single source of truth for radar center and distances.",
+          "lightning_distance_entity_id": "Optional distance sensor from Blitzortung or a compatible lightning integration.",
+          "lightning_counter_entity_id": "Optional counter sensor paired with the lightning distance sensor.",
+          "lightning_azimuth_entity_id": "Optional azimuth/bearing sensor used to estimate strike position and correlate it with radar cores.",
+          "analysis_radius_km": "Radius around the configured location for radar tile analysis.",
+          "lightning_trigger_radius_km": "New lightning inside this radius can trigger or strengthen evaluation.",
+          "warning_lightning_distance_km": "Lightning at or below this distance can contribute to warning level.",
+          "urgent_lightning_distance_km": "Lightning at or below this distance can contribute to urgent level.",
+          "core_watch_dbz": "Radar reflectivity threshold for watch-level storm cores.",
+          "core_warning_dbz": "Radar reflectivity threshold for warning-level storm cores.",
+          "core_urgent_dbz": "Radar reflectivity threshold for urgent-level storm cores.",
+          "min_analysis_interval_seconds": "Minimum time between expensive radar analyses unless a triggering event occurs.",
+          "stale_clear_seconds": "Radar or lightning data older than this is treated as stale and gated out of active classification.",
+          "rainviewer_zoom": "RainViewer tile zoom. Higher zoom is more detailed but heavier.",
+          "rainviewer_frames": "How many recent radar frames to inspect for current state and trend.",
+          "warning_core_distance_km": "A warning-level core inside this distance can contribute to warning level.",
+          "urgent_core_distance_km": "An urgent-level core inside this distance can contribute to urgent level."
+        }
       },
       "options": {
         "title": "Radar Hail Risk options",
@@ -13,17 +51,59 @@
     "error": {
       "entity_not_found": "Selected entity was not found in Home Assistant.",
       "invalid_value": "One or more values are not valid numbers.",
+      "invalid_range": "The value is outside the supported range.",
+      "invalid_threshold_order": "Reflectivity thresholds must increase: watch < warning < urgent.",
+      "invalid_distance_order": "Warning distances must be greater than or equal to urgent distances.",
+      "invalid_trigger_radius": "Lightning trigger radius must be greater than or equal to the warning lightning distance.",
       "lightning_pair_required": "Select both lightning distance and lightning counter, or leave both empty for radar-only mode."
     },
     "abort": {
-      "already_configured": "This integration is already configured for this distance entity."
+      "already_configured": "This integration is already configured."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Radar Hail Risk options",
-        "description": "Tune location source, analysis thresholds and stale-clear behavior."
+        "description": "Tune location source, lightning sensors, risk thresholds, radar analysis, and stale-data behavior.",
+        "data": {
+          "location_entity_id": "Location source",
+          "lightning_distance_entity_id": "Lightning distance sensor",
+          "lightning_counter_entity_id": "Lightning counter sensor",
+          "lightning_azimuth_entity_id": "Lightning azimuth sensor",
+          "analysis_radius_km": "Radar analysis radius",
+          "lightning_trigger_radius_km": "Lightning trigger radius",
+          "warning_lightning_distance_km": "Warning lightning distance",
+          "urgent_lightning_distance_km": "Urgent lightning distance",
+          "core_watch_dbz": "Watch core threshold",
+          "core_warning_dbz": "Warning core threshold",
+          "core_urgent_dbz": "Urgent core threshold",
+          "min_analysis_interval_seconds": "Minimum analysis interval",
+          "stale_clear_seconds": "Stale-data timeout",
+          "rainviewer_zoom": "RainViewer zoom",
+          "rainviewer_frames": "RainViewer frames to analyze",
+          "warning_core_distance_km": "Warning core distance",
+          "urgent_core_distance_km": "Urgent core distance"
+        },
+        "data_description": {
+          "location_entity_id": "Optional zone, person, or device tracker. If set, this is the single source of truth for radar center and distances.",
+          "lightning_distance_entity_id": "Optional distance sensor from Blitzortung or a compatible lightning integration.",
+          "lightning_counter_entity_id": "Optional counter sensor paired with the lightning distance sensor.",
+          "lightning_azimuth_entity_id": "Optional azimuth/bearing sensor used to estimate strike position and correlate it with radar cores.",
+          "analysis_radius_km": "Radius around the configured location for radar tile analysis.",
+          "lightning_trigger_radius_km": "New lightning inside this radius can trigger or strengthen evaluation.",
+          "warning_lightning_distance_km": "Lightning at or below this distance can contribute to warning level.",
+          "urgent_lightning_distance_km": "Lightning at or below this distance can contribute to urgent level.",
+          "core_watch_dbz": "Radar reflectivity threshold for watch-level storm cores.",
+          "core_warning_dbz": "Radar reflectivity threshold for warning-level storm cores.",
+          "core_urgent_dbz": "Radar reflectivity threshold for urgent-level storm cores.",
+          "min_analysis_interval_seconds": "Minimum time between expensive radar analyses unless a triggering event occurs.",
+          "stale_clear_seconds": "Radar or lightning data older than this is treated as stale and gated out of active classification.",
+          "rainviewer_zoom": "RainViewer tile zoom. Higher zoom is more detailed but heavier.",
+          "rainviewer_frames": "How many recent radar frames to inspect for current state and trend.",
+          "warning_core_distance_km": "A warning-level core inside this distance can contribute to warning level.",
+          "urgent_core_distance_km": "An urgent-level core inside this distance can contribute to urgent level."
+        }
       }
     }
   },
@@ -35,7 +115,7 @@
   "services": {
     "force_update": {
       "name": "Force risk update",
-      "description": "Manually trigger the coordinator to re-evaluate hail risk." 
+      "description": "Manually trigger the coordinator to re-evaluate hail risk."
     }
   },
   "entity": {

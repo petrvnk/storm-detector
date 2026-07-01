@@ -31,11 +31,31 @@ Current implemented slices:
 6. Settings → Devices & services → Add integration → **Radar Hail Risk**.
 7. Optional but recommended: install/configure a Blitzortung-compatible integration and select its distance/counter sensors. If you skip this, Radar Hail Risk runs in radar-only mode.
 
-## Location source
+## Location and configurable parameters
 
 By default, Radar Hail Risk uses the Home Assistant core location (`hass.config`) as the single source of truth for radar center and distance calculations. In the options flow you can instead select a `zone`, `person`, or `device_tracker` with latitude/longitude attributes, for example `zone.home`. This is recommended when another integration already owns the canonical home/test location.
 
 If the configured location entity is missing or has no coordinates, the integration degrades to `unavailable` with a diagnostic such as `missing_location_entity` instead of silently falling back to another position.
+
+The config/options flow exposes bounded number selectors for the main tuning parameters:
+
+| Parameter | Default | Allowed range | Meaning |
+|---|---:|---:|---|
+| `analysis_radius_km` | 50 km | 10–150 km | Radar search radius around the configured location. |
+| `lightning_trigger_radius_km` | 30 km | 5–150 km | Nearby lightning radius that can trigger or strengthen evaluation. |
+| `warning_lightning_distance_km` | 20 km | 1–100 km | Lightning distance contributing to `warning`. |
+| `urgent_lightning_distance_km` | 8 km | 1–100 km | Lightning distance contributing to `urgent`. |
+| `core_watch_dbz` | 50 dBZ | 35–75 dBZ | Radar core threshold for `watch`. |
+| `core_warning_dbz` | 55 dBZ | 35–75 dBZ | Radar core threshold for `warning`. |
+| `core_urgent_dbz` | 60 dBZ | 35–75 dBZ | Radar core threshold for `urgent`. |
+| `warning_core_distance_km` | 25 km | 1–100 km | Distance for warning-level radar cores. |
+| `urgent_core_distance_km` | 15 km | 1–100 km | Distance for urgent-level radar cores. |
+| `rainviewer_frames` | 4 | 1–8 | Recent radar frames used for current state/trend. |
+| `rainviewer_zoom` | 7 | 6–9 | RainViewer tile zoom; higher is more detailed but heavier. |
+| `min_analysis_interval_seconds` | 60 s | 30–3600 s | Minimum interval between expensive radar analyses. |
+| `stale_clear_seconds` | 900 s | 300–7200 s | Source age after which data is treated as stale and gated out. |
+
+Validation also enforces sensible relationships: `watch < warning < urgent` dBZ thresholds, warning distances greater than or equal to urgent distances, and lightning trigger radius greater than or equal to warning lightning distance.
 
 ## Diagnostics and source status
 

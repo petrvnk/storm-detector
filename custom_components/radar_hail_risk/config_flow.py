@@ -27,6 +27,14 @@ except Exception:  # pragma: no cover - local static/test environment only.
             def __init__(self, *_args: Any, **_kwargs: Any) -> None:
                 return None
 
+        class NumberSelector:
+            def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+                return None
+
+        class NumberSelectorConfig:
+            def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+                return None
+
 from .const import (
     CONF_ANALYSIS_RADIUS_KM,
     CONF_CORE_URGENT_DBZ,
@@ -60,6 +68,7 @@ from .const import (
     DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
     DOMAIN,
     OPTIONAL_CONF_DEFAULTS,
+    PARAMETER_SPECS,
 )
 from .lightning import autodetect_blitzortung_entities
 
@@ -74,6 +83,13 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             user_input = _clean_optional_entity_ids(user_input)
+            validation_errors = _validate_parameter_ranges(user_input)
+            if validation_errors:
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=vol.Schema(self._base_schema()) if vol else dict,
+                    errors=validation_errors,
+                )
             if _has_partial_lightning_config(user_input):
                 return self.async_show_form(
                     step_id="user",
@@ -132,37 +148,52 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", multiple=False)
             ),
-            vol.Optional(
-                CONF_ANALYSIS_RADIUS_KM,
-                default=DEFAULT_ANALYSIS_RADIUS_KM,
-            ): int,
-            vol.Optional(
+            _number_key(CONF_ANALYSIS_RADIUS_KM, DEFAULT_ANALYSIS_RADIUS_KM): _number_selector(
+                CONF_ANALYSIS_RADIUS_KM
+            ),
+            _number_key(
                 CONF_LIGHTNING_TRIGGER_RADIUS_KM,
-                default=DEFAULT_LIGHTNING_TRIGGER_RADIUS_KM,
-            ): int,
-            vol.Optional(
+                DEFAULT_LIGHTNING_TRIGGER_RADIUS_KM,
+            ): _number_selector(CONF_LIGHTNING_TRIGGER_RADIUS_KM),
+            _number_key(
                 CONF_WARNING_LIGHTNING_DISTANCE_KM,
-                default=DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
-            ): int,
-            vol.Optional(
+                DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
+            ): _number_selector(CONF_WARNING_LIGHTNING_DISTANCE_KM),
+            _number_key(
                 CONF_URGENT_LIGHTNING_DISTANCE_KM,
-                default=DEFAULT_URGENT_LIGHTNING_DISTANCE_KM,
-            ): int,
-            vol.Optional(CONF_CORE_WATCH_DBZ, default=DEFAULT_CORE_WATCH_DBZ): int,
-            vol.Optional(CONF_CORE_WARNING_DBZ, default=DEFAULT_CORE_WARNING_DBZ): int,
-            vol.Optional(CONF_CORE_URGENT_DBZ, default=DEFAULT_CORE_URGENT_DBZ): int,
-            vol.Optional(
+                DEFAULT_URGENT_LIGHTNING_DISTANCE_KM,
+            ): _number_selector(CONF_URGENT_LIGHTNING_DISTANCE_KM),
+            _number_key(CONF_CORE_WATCH_DBZ, DEFAULT_CORE_WATCH_DBZ): _number_selector(
+                CONF_CORE_WATCH_DBZ
+            ),
+            _number_key(
+                CONF_CORE_WARNING_DBZ,
+                DEFAULT_CORE_WARNING_DBZ,
+            ): _number_selector(CONF_CORE_WARNING_DBZ),
+            _number_key(CONF_CORE_URGENT_DBZ, DEFAULT_CORE_URGENT_DBZ): _number_selector(
+                CONF_CORE_URGENT_DBZ
+            ),
+            _number_key(
                 CONF_MIN_ANALYSIS_INTERVAL_SECONDS,
-                default=DEFAULT_MIN_ANALYSIS_INTERVAL_SECONDS,
-            ): int,
-            vol.Optional(CONF_STALE_CLEAR_SECONDS, default=DEFAULT_STALE_CLEAR_SECONDS): int,
-            vol.Optional(CONF_RAINVIEWER_ZOOM, default=DEFAULT_RAINVIEWER_ZOOM): int,
-            vol.Optional(CONF_RAINVIEWER_FRAMES, default=DEFAULT_RAINVIEWER_FRAMES): int,
-            vol.Optional(
+                DEFAULT_MIN_ANALYSIS_INTERVAL_SECONDS,
+            ): _number_selector(CONF_MIN_ANALYSIS_INTERVAL_SECONDS),
+            _number_key(CONF_STALE_CLEAR_SECONDS, DEFAULT_STALE_CLEAR_SECONDS): _number_selector(
+                CONF_STALE_CLEAR_SECONDS
+            ),
+            _number_key(CONF_RAINVIEWER_ZOOM, DEFAULT_RAINVIEWER_ZOOM): _number_selector(
+                CONF_RAINVIEWER_ZOOM
+            ),
+            _number_key(CONF_RAINVIEWER_FRAMES, DEFAULT_RAINVIEWER_FRAMES): _number_selector(
+                CONF_RAINVIEWER_FRAMES
+            ),
+            _number_key(
                 CONF_WARNING_CORE_DISTANCE_KM,
-                default=DEFAULT_WARNING_CORE_DISTANCE_KM,
-            ): int,
-            vol.Optional(CONF_URGENT_CORE_DISTANCE_KM, default=DEFAULT_URGENT_CORE_DISTANCE_KM): int,
+                DEFAULT_WARNING_CORE_DISTANCE_KM,
+            ): _number_selector(CONF_WARNING_CORE_DISTANCE_KM),
+            _number_key(
+                CONF_URGENT_CORE_DISTANCE_KM,
+                DEFAULT_URGENT_CORE_DISTANCE_KM,
+            ): _number_selector(CONF_URGENT_CORE_DISTANCE_KM),
         }
 
 
@@ -177,6 +208,14 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
 
         if user_input is not None:
             user_input = _clean_optional_entity_ids(user_input)
+            validation_errors = _validate_parameter_ranges(user_input)
+            if validation_errors:
+                current_options = self._current_options()
+                return self.async_show_form(
+                    step_id="init",
+                    data_schema=vol.Schema(self._options_schema(current_options)) if vol else dict,
+                    errors=validation_errors,
+                )
             if _has_partial_lightning_config(user_input):
                 current_options = self._current_options()
                 return self.async_show_form(
@@ -253,7 +292,7 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
                 selector.EntitySelectorConfig(domain="sensor", multiple=False)
             ),
             **{
-                vol.Optional(key, default=current_options.get(key, value)): int
+                _number_key(key, current_options.get(key, value)): _number_selector(key)
                 for key, value in OPTIONAL_CONF_DEFAULTS.items()
             },
         }
@@ -287,6 +326,71 @@ def _optional_entity_key(name: str, default: str | None) -> Any:
     if default:
         return vol.Optional(name, default=default)
     return vol.Optional(name)
+
+
+def _number_key(name: str, default: int | float | None) -> Any:
+    if not vol:
+        return name
+    return vol.Optional(name, default=default)
+
+
+def _number_selector(name: str) -> Any:
+    """Return a Home Assistant number selector with documented safe bounds."""
+
+    spec = PARAMETER_SPECS[name]
+    kwargs: dict[str, Any] = {
+        "min": spec["min"],
+        "max": spec["max"],
+        "step": spec["step"],
+    }
+    unit = spec.get("unit")
+    if unit:
+        kwargs["unit_of_measurement"] = unit
+    return selector.NumberSelector(selector.NumberSelectorConfig(**kwargs))
+
+
+def _validate_parameter_ranges(user_input: dict[str, Any]) -> dict[str, str]:
+    """Validate numeric options before saving config/options entries."""
+
+    errors: dict[str, str] = {}
+    values: dict[str, int] = {}
+    for key, spec in PARAMETER_SPECS.items():
+        raw = user_input.get(key)
+        if raw in (None, ""):
+            continue
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            errors[key] = "invalid_value"
+            continue
+        if value < int(spec["min"]) or value > int(spec["max"]):
+            errors[key] = "invalid_range"
+            continue
+        user_input[key] = value
+        values[key] = value
+
+    if errors:
+        return errors
+
+    merged = {**OPTIONAL_CONF_DEFAULTS, **values}
+    watch = int(merged[CONF_CORE_WATCH_DBZ])
+    warning = int(merged[CONF_CORE_WARNING_DBZ])
+    urgent = int(merged[CONF_CORE_URGENT_DBZ])
+    if not watch < warning < urgent:
+        return {"base": "invalid_threshold_order"}
+
+    warning_core = int(merged[CONF_WARNING_CORE_DISTANCE_KM])
+    urgent_core = int(merged[CONF_URGENT_CORE_DISTANCE_KM])
+    warning_lightning = int(merged[CONF_WARNING_LIGHTNING_DISTANCE_KM])
+    urgent_lightning = int(merged[CONF_URGENT_LIGHTNING_DISTANCE_KM])
+    if not warning_core >= urgent_core or not warning_lightning >= urgent_lightning:
+        return {"base": "invalid_distance_order"}
+
+    trigger = int(merged[CONF_LIGHTNING_TRIGGER_RADIUS_KM])
+    if trigger < warning_lightning:
+        return {"base": "invalid_trigger_radius"}
+
+    return {}
 
 
 def _iter_hass_states(hass: Any) -> list[Any]:

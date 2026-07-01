@@ -57,6 +57,22 @@ OPTIONAL_CONF_DEFAULTS: Final = {
     CONF_URGENT_LIGHTNING_DISTANCE_KM: DEFAULT_URGENT_LIGHTNING_DISTANCE_KM,
 }
 
+PARAMETER_SPECS: Final = {
+    CONF_ANALYSIS_RADIUS_KM: {"min": 10, "max": 150, "step": 1, "unit": "km"},
+    CONF_LIGHTNING_TRIGGER_RADIUS_KM: {"min": 5, "max": 150, "step": 1, "unit": "km"},
+    CONF_MIN_ANALYSIS_INTERVAL_SECONDS: {"min": 30, "max": 3600, "step": 10, "unit": "s"},
+    CONF_STALE_CLEAR_SECONDS: {"min": 300, "max": 7200, "step": 60, "unit": "s"},
+    CONF_RAINVIEWER_ZOOM: {"min": 6, "max": 9, "step": 1},
+    CONF_RAINVIEWER_FRAMES: {"min": 1, "max": 8, "step": 1},
+    CONF_CORE_WATCH_DBZ: {"min": 35, "max": 75, "step": 1, "unit": "dBZ"},
+    CONF_CORE_WARNING_DBZ: {"min": 35, "max": 75, "step": 1, "unit": "dBZ"},
+    CONF_CORE_URGENT_DBZ: {"min": 35, "max": 75, "step": 1, "unit": "dBZ"},
+    CONF_WARNING_CORE_DISTANCE_KM: {"min": 1, "max": 100, "step": 1, "unit": "km"},
+    CONF_URGENT_CORE_DISTANCE_KM: {"min": 1, "max": 100, "step": 1, "unit": "km"},
+    CONF_WARNING_LIGHTNING_DISTANCE_KM: {"min": 1, "max": 100, "step": 1, "unit": "km"},
+    CONF_URGENT_LIGHTNING_DISTANCE_KM: {"min": 1, "max": 100, "step": 1, "unit": "km"},
+}
+
 ATTR_LEVEL: Final = "level"
 ATTR_SUMMARY: Final = "summary"
 ATTR_MAX_DBZ: Final = "max_dbz"
