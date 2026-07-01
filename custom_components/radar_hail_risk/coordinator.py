@@ -339,17 +339,18 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                 if lightning_snapshot is None:
                     lightning_diagnostics = ("lightning_not_configured",)
                 else:
-                    lightning_distance_km = lightning_snapshot.distance_km
-                    lightning_counter_delta = lightning_snapshot.counter_delta
-                    lightning_triggered = bool(lightning_snapshot.trigger_active)
                     lightning_stale = bool(lightning_snapshot.is_stale)
-                    if lightning_triggered:
-                        lightning_counter_delta = None
                     lightning_diagnostics = tuple(lightning_snapshot.diagnostics)
-                    if lightning_snapshot.has_new_strike:
-                        general_diagnostics.append("lightning_strike_delta")
+                    if not lightning_stale:
+                        lightning_distance_km = lightning_snapshot.distance_km
+                        lightning_counter_delta = lightning_snapshot.counter_delta
+                        lightning_triggered = bool(lightning_snapshot.trigger_active)
+                        if lightning_triggered:
+                            lightning_counter_delta = None
+                        if lightning_snapshot.has_new_strike:
+                            general_diagnostics.append("lightning_strike_delta")
 
-                summary_lightning_diagnostics = tuple(
+                summary_lightning_diagnostics = () if lightning_stale else tuple(
                     diagnostic
                     for diagnostic in lightning_diagnostics
                     if diagnostic != "lightning_not_configured"
