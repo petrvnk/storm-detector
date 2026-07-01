@@ -11,6 +11,8 @@ from custom_components.radar_hail_risk.binary_sensor import (
     RadarHailRiskActiveBinarySensor,
 )
 from custom_components.radar_hail_risk.const import (
+    ATTR_CONFIDENCE_LEVEL,
+    ATTR_CONFIDENCE_SCORE,
     ATTR_CORE50_DISTANCE_KM,
     ATTR_CORE55_DISTANCE_KM,
     ATTR_CORE60_DISTANCE_KM,
@@ -433,6 +435,8 @@ async def test_coordinator_projects_lightning_azimuth_and_correlates_with_core()
     assert payload[ATTR_LIGHTNING_LATITUDE] is not None
     assert payload[ATTR_LIGHTNING_LONGITUDE] is not None
     assert payload[ATTR_LIGHTNING_CORE_DISTANCE_KM] is not None
+    assert payload[ATTR_CONFIDENCE_SCORE] >= 75
+    assert payload[ATTR_CONFIDENCE_LEVEL] == "high"
 
 
 async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:

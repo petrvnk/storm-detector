@@ -8,6 +8,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Iterable
 
 from .const import (
+    ATTR_CONFIDENCE_LEVEL,
+    ATTR_CONFIDENCE_SCORE,
     ATTR_CORE50_DISTANCE_KM,
     ATTR_CORE55_DISTANCE_KM,
     ATTR_CORE60_DISTANCE_KM,
@@ -227,6 +229,8 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             ATTR_STORM_ETA_MINUTES: result.storm_eta_minutes,
             ATTR_DBZ_TREND: result.dbz_trend,
             ATTR_DISTANCE_TREND: result.distance_trend,
+            ATTR_CONFIDENCE_SCORE: result.confidence_score,
+            ATTR_CONFIDENCE_LEVEL: result.confidence_level,
             ATTR_LIGHTNING_TRIGGERED: result.has_lightning_trigger,
             ATTR_LIGHTNING_COUNTER_DELTA: result.lightning_counter_delta,
             ATTR_LIGHTNING_DIAGNOSTICS: extras.get(ATTR_LIGHTNING_DIAGNOSTICS)
@@ -586,6 +590,18 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     core60_distance_km=core60_distance,
                 )
 
+                confidence_score, confidence_level = _confidence_from_signals(
+                    max_dbz=max_dbz,
+                    selected_core_distance_km=selected_distance,
+                    selected_core_pixel_count=selected_pixels,
+                    lightning_distance_km=lightning_distance_km,
+                    lightning_core_distance_km=lightning_core_distance_km,
+                    storm_approaching=approaching,
+                    radar_stale=radar_stale,
+                    lightning_stale=lightning_stale,
+                    source_status=source_status,
+                )
+
                 summary = build_summary(
                     level=level,
                     max_dbz=max_dbz,
@@ -625,6 +641,8 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         storm_eta_minutes=eta,
                         dbz_trend=dbz_trend,
                         distance_trend=distance_trend,
+                        confidence_score=confidence_score,
+                        confidence_level=confidence_level,
                         frames_analyzed=frames_analyzed,
                         frame_time=frame_time,
                         last_error=", ".join(diagnostics) if diagnostics else None,
@@ -723,6 +741,48 @@ def _degradation_reasons(
             item for item in (*radar_diagnostics, *lightning_diagnostics) if item not in non_degrading
         )
     )
+
+
+def _confidence_from_signals(
+    *,
+    max_dbz: int | None,
+    selected_core_distance_km: float | None,
+    selected_core_pixel_count: int | None,
+    lightning_distance_km: float | None,
+    lightning_core_distance_km: float | None,
+    storm_approaching: bool | None,
+    radar_stale: bool,
+    lightning_stale: bool,
+    source_status: dict[str, str],
+) -> tuple[int, str]:
+    """Return a simple confidence score/level for the current risk estimate."""
+
+    score = 20
+    if source_status.get("radar") == "ok" and not radar_stale:
+        score += 25
+    if max_dbz is not None and max_dbz >= 50:
+        score += 15
+    if selected_core_distance_km is not None:
+        score += 10
+    if selected_core_pixel_count is not None and selected_core_pixel_count > 1:
+        score += min(10, selected_core_pixel_count)
+    if lightning_distance_km is not None and not lightning_stale:
+        score += 10
+    if lightning_core_distance_km is not None and lightning_core_distance_km <= 15:
+        score += 10
+    if storm_approaching is True:
+        score += 5
+    if source_status.get("radar") in {"degraded", "stale", "error"}:
+        score -= 25
+    if lightning_stale:
+        score -= 10
+
+    score = max(0, min(100, score))
+    if score >= 75:
+        return score, "high"
+    if score >= 45:
+        return score, "medium"
+    return score, "low"
 
 
 def _iter_hass_states(hass: Any) -> Iterable[Any]:

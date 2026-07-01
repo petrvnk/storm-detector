@@ -40,6 +40,8 @@ _RUNTIME_KEYS = (
     "storm_eta_minutes",
     "dbz_trend",
     "distance_trend",
+    "confidence_score",
+    "confidence_level",
     "last_error",
     "update_count",
 )

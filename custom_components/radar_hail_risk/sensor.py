@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from .const import (
+    ATTR_CONFIDENCE_LEVEL,
+    ATTR_CONFIDENCE_SCORE,
     ATTR_CORE50_DISTANCE_KM,
     ATTR_CORE55_DISTANCE_KM,
     ATTR_CORE60_DISTANCE_KM,
@@ -144,6 +146,8 @@ class RadarHailRiskSensorBase(CoordinatorEntity[Any], SensorEntity):
             ATTR_STORM_ETA_MINUTES: data.get(ATTR_STORM_ETA_MINUTES),
             ATTR_DBZ_TREND: data.get(ATTR_DBZ_TREND),
             ATTR_DISTANCE_TREND: data.get(ATTR_DISTANCE_TREND),
+            ATTR_CONFIDENCE_SCORE: data.get(ATTR_CONFIDENCE_SCORE),
+            ATTR_CONFIDENCE_LEVEL: data.get(ATTR_CONFIDENCE_LEVEL),
             ATTR_LIGHTNING_TRIGGERED: bool(data.get(ATTR_LIGHTNING_TRIGGERED, False)),
             ATTR_LIGHTNING_COUNTER_DELTA: data.get(ATTR_LIGHTNING_COUNTER_DELTA),
             ATTR_LIGHTNING_DISTANCE_KM: data.get(ATTR_LIGHTNING_DISTANCE_KM),

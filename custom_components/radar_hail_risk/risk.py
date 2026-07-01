@@ -69,6 +69,8 @@ class HailRiskResult:
     storm_eta_minutes: int | None = None
     dbz_trend: str | None = None
     distance_trend: str | None = None
+    confidence_score: int | None = None
+    confidence_level: str | None = None
     frames_analyzed: int | None = None
     frame_time: int | None = None
     last_error: str | None = None
