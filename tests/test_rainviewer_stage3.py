@@ -198,6 +198,49 @@ async def test_analyze_single_frame_detects_core_near_center() -> None:
 
 
 @pytest.mark.asyncio
+async def test_analyze_recent_frames_selects_watch_core_location() -> None:
+    """50+ dBZ watch cores should expose coordinates for the map card."""
+
+    center_lat, center_lon = global_px_to_latlon(11000.4, 11000.4, 7)
+    px, py = latlon_to_global_px(center_lat, center_lon, 7)
+    tx0 = int(px // 512)
+    ty0 = int(py // 512)
+    local_x = int(px) % 512
+    local_y = int(py) % 512
+
+    host = "https://tilecache.rainviewer.com"
+    path = "/watch"
+    lookup = {(255, 128, 0, 255): 53}
+    tile = _mk_radar_tile(512, lookup, (local_x, local_y), 53)
+    session = FakeSession(
+        {
+            f"{host}{path}/512/7/{tx0}/{ty0}/2/1_1.png": FakeResponse(
+                200, bytes_payload=tile
+            )
+        }
+    )
+
+    result = await analyze_recent_frames(
+        session,
+        {"host": host, "radar": {"past": [{"time": 1200, "path": path}]}},
+        center_latitude=center_lat,
+        center_longitude=center_lon,
+        analysis_radius_km=20,
+        required_frames=1,
+        zoom=7,
+        color_lookup=lookup,
+        now=1300,
+    )
+
+    assert result is not None
+    assert result.max_dbz == 53
+    assert result.selected_core_threshold_dbz == 50
+    assert result.selected_core_distance_km is not None
+    assert result.selected_core_latitude is not None
+    assert result.selected_core_longitude is not None
+
+
+@pytest.mark.asyncio
 async def test_analyze_single_frame_aggregates_across_tiles_not_largest_tile_only() -> None:
     """A broad weak-rain tile must not hide a small stronger core in a neighbor tile."""
 

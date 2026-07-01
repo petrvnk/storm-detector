@@ -43,8 +43,11 @@ class AnalyzedFrame:
 
     frame_time: int
     max_dbz: int | None
+    core50_distance_km: float | None
     core55_distance_km: float | None
     core60_distance_km: float | None
+    core50_latitude: float | None
+    core50_longitude: float | None
     core55_latitude: float | None
     core55_longitude: float | None
     core60_latitude: float | None
@@ -59,6 +62,7 @@ class RadarAnalysis:
     frame_time: int | None
     frame_age_seconds: int | None
     max_dbz: int | None
+    core50_distance_km: float | None
     core55_distance_km: float | None
     core60_distance_km: float | None
     selected_core_threshold_dbz: int | None
@@ -539,6 +543,7 @@ def _analyse_dbz_grid(
 ) -> AnalyzedFrame:
     world_x0, world_y0 = tile_origin_px
     max_dbz: int | None = None
+    best50: tuple[float, float, float] | None = None
     best55: tuple[float, float, float] | None = None
     best60: tuple[float, float, float] | None = None
     analyzed_pixels = 0
@@ -559,6 +564,10 @@ def _analyse_dbz_grid(
             if max_dbz is None or dbz_value > max_dbz:
                 max_dbz = dbz_value
 
+            if dbz_value >= 50:
+                if best50 is None or distance < best50[0]:
+                    best50 = (distance, float(pixel_lat), float(pixel_lon))
+
             if dbz_value >= 55:
                 if best55 is None or distance < best55[0]:
                     best55 = (distance, float(pixel_lat), float(pixel_lon))
@@ -566,6 +575,11 @@ def _analyse_dbz_grid(
             if dbz_value >= 60:
                 if best60 is None or distance < best60[0]:
                     best60 = (distance, float(pixel_lat), float(pixel_lon))
+
+    if best50 is not None:
+        core50_distance, core50_lat, core50_lon = best50
+    else:
+        core50_distance, core50_lat, core50_lon = (None, None, None)
 
     if best55 is not None:
         core55_distance, core55_lat, core55_lon = best55
@@ -580,8 +594,11 @@ def _analyse_dbz_grid(
     return AnalyzedFrame(
         frame_time=frame_time,
         max_dbz=max_dbz,
+        core50_distance_km=core50_distance,
         core55_distance_km=core55_distance,
         core60_distance_km=core60_distance,
+        core50_latitude=core50_lat,
+        core50_longitude=core50_lon,
         core55_latitude=core55_lat,
         core55_longitude=core55_lon,
         core60_latitude=core60_lat,
@@ -637,6 +654,7 @@ async def analyze_single_radar_frame(
 
     frame_pixels_analysed = 0
     max_dbz: int | None = None
+    best50: tuple[float, float, float] | None = None
     best55: tuple[float, float, float] | None = None
     best60: tuple[float, float, float] | None = None
 
@@ -676,6 +694,14 @@ async def analyze_single_radar_frame(
             frame_pixels_analysed += frame_result.analyzed_pixels
             if frame_result.max_dbz is not None:
                 max_dbz = frame_result.max_dbz if max_dbz is None else max(max_dbz, frame_result.max_dbz)
+            if frame_result.core50_distance_km is not None:
+                candidate50 = (
+                    frame_result.core50_distance_km,
+                    float(frame_result.core50_latitude),
+                    float(frame_result.core50_longitude),
+                )
+                if best50 is None or candidate50[0] < best50[0]:
+                    best50 = candidate50
             if frame_result.core55_distance_km is not None:
                 candidate55 = (
                     frame_result.core55_distance_km,
@@ -696,14 +722,18 @@ async def analyze_single_radar_frame(
     if frame_pixels_analysed == 0:
         return None
 
+    core50_distance, core50_lat, core50_lon = best50 if best50 is not None else (None, None, None)
     core55_distance, core55_lat, core55_lon = best55 if best55 is not None else (None, None, None)
     core60_distance, core60_lat, core60_lon = best60 if best60 is not None else (None, None, None)
 
     return AnalyzedFrame(
         frame_time=frame_time,
         max_dbz=max_dbz,
+        core50_distance_km=core50_distance,
         core55_distance_km=core55_distance,
         core60_distance_km=core60_distance,
+        core50_latitude=core50_lat,
+        core50_longitude=core50_lon,
         core55_latitude=core55_lat,
         core55_longitude=core55_lon,
         core60_latitude=core60_lat,
@@ -786,6 +816,11 @@ async def analyze_recent_frames(
         selected_distance = latest.core55_distance_km
         selected_lat = latest.core55_latitude
         selected_lon = latest.core55_longitude
+    elif latest.core50_distance_km is not None:
+        selected_threshold = 50
+        selected_distance = latest.core50_distance_km
+        selected_lat = latest.core50_latitude
+        selected_lon = latest.core50_longitude
     else:
         selected_threshold = None
         selected_distance = None
@@ -800,6 +835,7 @@ async def analyze_recent_frames(
         frame_time=latest.frame_time,
         frame_age_seconds=frame_age_seconds,
         max_dbz=max_dbz,
+        core50_distance_km=latest.core50_distance_km,
         core55_distance_km=latest.core55_distance_km,
         core60_distance_km=latest.core60_distance_km,
         selected_core_threshold_dbz=selected_threshold,
