@@ -38,6 +38,21 @@ _COLOR_TABLE_CACHE: dict[str, tuple[float, dict[tuple[int, int, int, int], int]]
 
 
 @dataclass(frozen=True)
+class StormCore:
+    """Connected radar-core object above one dBZ threshold."""
+
+    threshold_dbz: int
+    max_dbz: int
+    area_km2: float
+    centroid_latitude: float
+    centroid_longitude: float
+    nearest_latitude: float
+    nearest_longitude: float
+    distance_km: float
+    pixel_count: int
+
+
+@dataclass(frozen=True)
 class AnalyzedFrame:
     """Result of one frame radar analysis."""
 
@@ -52,6 +67,10 @@ class AnalyzedFrame:
     core55_longitude: float | None
     core60_latitude: float | None
     core60_longitude: float | None
+    selected_core_area_km2: float | None
+    selected_core_pixel_count: int | None
+    selected_core_max_dbz: int | None
+    core_count: int
     analyzed_pixels: int
 
 
@@ -69,6 +88,10 @@ class RadarAnalysis:
     selected_core_distance_km: float | None
     selected_core_latitude: float | None
     selected_core_longitude: float | None
+    selected_core_area_km2: float | None
+    selected_core_pixel_count: int | None
+    selected_core_max_dbz: int | None
+    core_count: int
     frames_analyzed: int
 
 
@@ -531,6 +554,60 @@ def _decode_dbz_grid(
     return rows
 
 
+def _component_cores_from_points(
+    points: dict[tuple[int, int], tuple[int, float, float, float]],
+    *,
+    threshold_dbz: int,
+    pixel_area_km2: float,
+) -> list[StormCore]:
+    """Build connected storm-core components for one threshold.
+
+    Points are keyed by global pixel coordinate and hold (dbz, lat, lon, distance_km).
+    Eight-neighbour connectivity keeps diagonal radar blobs together.
+    """
+
+    eligible = {key for key, (dbz, *_rest) in points.items() if dbz >= threshold_dbz}
+    cores: list[StormCore] = []
+    while eligible:
+        start = eligible.pop()
+        stack = [start]
+        component = [start]
+        while stack:
+            x, y = stack.pop()
+            for nx in range(x - 1, x + 2):
+                for ny in range(y - 1, y + 2):
+                    if nx == x and ny == y:
+                        continue
+                    neighbour = (nx, ny)
+                    if neighbour not in eligible:
+                        continue
+                    eligible.remove(neighbour)
+                    stack.append(neighbour)
+                    component.append(neighbour)
+
+        samples = [points[key] for key in component]
+        max_dbz = max(sample[0] for sample in samples)
+        nearest = min(samples, key=lambda sample: sample[3])
+        centroid_lat = sum(sample[1] for sample in samples) / len(samples)
+        centroid_lon = sum(sample[2] for sample in samples) / len(samples)
+        cores.append(
+            StormCore(
+                threshold_dbz=threshold_dbz,
+                max_dbz=max_dbz,
+                area_km2=round(len(samples) * pixel_area_km2, 3),
+                centroid_latitude=float(centroid_lat),
+                centroid_longitude=float(centroid_lon),
+                nearest_latitude=float(nearest[1]),
+                nearest_longitude=float(nearest[2]),
+                distance_km=float(nearest[3]),
+                pixel_count=len(samples),
+            )
+        )
+
+    cores.sort(key=lambda core: (core.distance_km, -core.max_dbz, -core.pixel_count))
+    return cores
+
+
 def _analyse_dbz_grid(
     dbz_grid: list[list[int | None]],
     tile_origin_px: tuple[float, float],
@@ -546,6 +623,7 @@ def _analyse_dbz_grid(
     best50: tuple[float, float, float] | None = None
     best55: tuple[float, float, float] | None = None
     best60: tuple[float, float, float] | None = None
+    points: dict[tuple[int, int], tuple[int, float, float, float]] = {}
     analyzed_pixels = 0
 
     for local_y, row in enumerate(dbz_grid):
@@ -561,6 +639,12 @@ def _analyse_dbz_grid(
                 continue
 
             analyzed_pixels += 1
+            points[(int(global_x), int(global_y))] = (
+                int(dbz_value),
+                float(pixel_lat),
+                float(pixel_lon),
+                float(distance),
+            )
             if max_dbz is None or dbz_value > max_dbz:
                 max_dbz = dbz_value
 
@@ -576,20 +660,48 @@ def _analyse_dbz_grid(
                 if best60 is None or distance < best60[0]:
                     best60 = (distance, float(pixel_lat), float(pixel_lon))
 
-    if best50 is not None:
+    pixel_area_km2 = (_meters_per_pixel(center_latitude, zoom, tile_size) / 1000) ** 2
+    cores50 = _component_cores_from_points(points, threshold_dbz=50, pixel_area_km2=pixel_area_km2)
+    cores55 = _component_cores_from_points(points, threshold_dbz=55, pixel_area_km2=pixel_area_km2)
+    cores60 = _component_cores_from_points(points, threshold_dbz=60, pixel_area_km2=pixel_area_km2)
+
+    if cores50:
+        core50_distance = cores50[0].distance_km
+        core50_lat = cores50[0].nearest_latitude
+        core50_lon = cores50[0].nearest_longitude
+    elif best50 is not None:
         core50_distance, core50_lat, core50_lon = best50
     else:
         core50_distance, core50_lat, core50_lon = (None, None, None)
 
-    if best55 is not None:
+    if cores55:
+        core55_distance = cores55[0].distance_km
+        core55_lat = cores55[0].nearest_latitude
+        core55_lon = cores55[0].nearest_longitude
+    elif best55 is not None:
         core55_distance, core55_lat, core55_lon = best55
     else:
         core55_distance, core55_lat, core55_lon = (None, None, None)
 
-    if best60 is not None:
+    if cores60:
+        core60_distance = cores60[0].distance_km
+        core60_lat = cores60[0].nearest_latitude
+        core60_lon = cores60[0].nearest_longitude
+    elif best60 is not None:
         core60_distance, core60_lat, core60_lon = best60
     else:
         core60_distance, core60_lat, core60_lon = (None, None, None)
+
+    selected_core = (cores60 or cores55 or cores50 or [None])[0]
+    if selected_core is None:
+        selected_area = None
+        selected_pixels = None
+        selected_max_dbz = None
+    else:
+        selected_area = selected_core.area_km2
+        selected_pixels = selected_core.pixel_count
+        selected_max_dbz = selected_core.max_dbz
+    core_count = len(cores50)
 
     return AnalyzedFrame(
         frame_time=frame_time,
@@ -603,6 +715,10 @@ def _analyse_dbz_grid(
         core55_longitude=core55_lon,
         core60_latitude=core60_lat,
         core60_longitude=core60_lon,
+        selected_core_area_km2=selected_area,
+        selected_core_pixel_count=selected_pixels,
+        selected_core_max_dbz=selected_max_dbz,
+        core_count=core_count,
         analyzed_pixels=analyzed_pixels,
     )
 
@@ -653,6 +769,7 @@ async def analyze_single_radar_frame(
     tile_count = _tile_count(zoom)
 
     frame_pixels_analysed = 0
+    tile_results: list[AnalyzedFrame] = []
     max_dbz: int | None = None
     best50: tuple[float, float, float] | None = None
     best55: tuple[float, float, float] | None = None
@@ -692,6 +809,7 @@ async def analyze_single_radar_frame(
             )
 
             frame_pixels_analysed += frame_result.analyzed_pixels
+            tile_results.append(frame_result)
             if frame_result.max_dbz is not None:
                 max_dbz = frame_result.max_dbz if max_dbz is None else max(max_dbz, frame_result.max_dbz)
             if frame_result.core50_distance_km is not None:
@@ -725,6 +843,16 @@ async def analyze_single_radar_frame(
     core50_distance, core50_lat, core50_lon = best50 if best50 is not None else (None, None, None)
     core55_distance, core55_lat, core55_lon = best55 if best55 is not None else (None, None, None)
     core60_distance, core60_lat, core60_lon = best60 if best60 is not None else (None, None, None)
+    selected_result = _select_tile_result_for_core_metadata(tile_results)
+    if selected_result is None:
+        selected_area = None
+        selected_pixels = None
+        selected_max_dbz = None
+    else:
+        selected_area = selected_result.selected_core_area_km2
+        selected_pixels = selected_result.selected_core_pixel_count
+        selected_max_dbz = selected_result.selected_core_max_dbz
+    core_count = sum(result.core_count for result in tile_results)
 
     return AnalyzedFrame(
         frame_time=frame_time,
@@ -738,8 +866,36 @@ async def analyze_single_radar_frame(
         core55_longitude=core55_lon,
         core60_latitude=core60_lat,
         core60_longitude=core60_lon,
+        selected_core_area_km2=selected_area,
+        selected_core_pixel_count=selected_pixels,
+        selected_core_max_dbz=selected_max_dbz,
+        core_count=core_count,
         analyzed_pixels=frame_pixels_analysed,
     )
+
+
+def _select_tile_result_for_core_metadata(results: list[AnalyzedFrame]) -> AnalyzedFrame | None:
+    """Pick the tile result carrying metadata for the strongest nearest core."""
+
+    candidates = [result for result in results if result.selected_core_pixel_count]
+    if not candidates:
+        return None
+
+    def sort_key(result: AnalyzedFrame) -> tuple[int, float, int]:
+        threshold = 0
+        distance = float("inf")
+        if result.core60_distance_km is not None:
+            threshold = 60
+            distance = result.core60_distance_km
+        elif result.core55_distance_km is not None:
+            threshold = 55
+            distance = result.core55_distance_km
+        elif result.core50_distance_km is not None:
+            threshold = 50
+            distance = result.core50_distance_km
+        return (-threshold, distance, -(result.selected_core_pixel_count or 0))
+
+    return sorted(candidates, key=sort_key)[0]
 
 
 async def analyze_recent_frames(
@@ -842,5 +998,9 @@ async def analyze_recent_frames(
         selected_core_distance_km=selected_distance,
         selected_core_latitude=selected_lat,
         selected_core_longitude=selected_lon,
+        selected_core_area_km2=latest.selected_core_area_km2,
+        selected_core_pixel_count=latest.selected_core_pixel_count,
+        selected_core_max_dbz=latest.selected_core_max_dbz,
+        core_count=latest.core_count,
         frames_analyzed=len(frame_results),
     )

@@ -53,6 +53,10 @@ class HailRiskResult:
     frame_age_seconds: int | None = None
     selected_core_threshold_dbz: int | None = None
     selected_core_distance_km: float | None = None
+    selected_core_area_km2: float | None = None
+    selected_core_pixel_count: int | None = None
+    selected_core_max_dbz: int | None = None
+    core_count: int | None = None
     selected_core_latitude: float | None = None
     selected_core_longitude: float | None = None
     frames_analyzed: int | None = None

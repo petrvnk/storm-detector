@@ -11,6 +11,7 @@ from .const import (
     ATTR_CORE50_DISTANCE_KM,
     ATTR_CORE55_DISTANCE_KM,
     ATTR_CORE60_DISTANCE_KM,
+    ATTR_CORE_COUNT,
     ATTR_CORE_DISTANCE_KM,
     ATTR_DEGRADATION_REASONS,
     ATTR_FRAME_AGE_SECONDS,
@@ -24,9 +25,12 @@ from .const import (
     ATTR_LOCATION_SOURCE,
     ATTR_MAX_DBZ,
     ATTR_RAINVIEWER_DIAGNOSTICS,
+    ATTR_SELECTED_CORE_AREA_KM2,
     ATTR_SELECTED_CORE_DISTANCE_KM,
     ATTR_SELECTED_CORE_LATITUDE,
     ATTR_SELECTED_CORE_LONGITUDE,
+    ATTR_SELECTED_CORE_MAX_DBZ,
+    ATTR_SELECTED_CORE_PIXEL_COUNT,
     ATTR_SELECTED_CORE_THRESHOLD_DBZ,
     ATTR_SOURCE_STATUS,
     ATTR_STALE,
@@ -191,6 +195,10 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             ATTR_FRAMES_ANALYZED: result.frames_analyzed,
             ATTR_SELECTED_CORE_THRESHOLD_DBZ: result.selected_core_threshold_dbz,
             ATTR_SELECTED_CORE_DISTANCE_KM: result.selected_core_distance_km,
+            ATTR_SELECTED_CORE_AREA_KM2: result.selected_core_area_km2,
+            ATTR_SELECTED_CORE_PIXEL_COUNT: result.selected_core_pixel_count,
+            ATTR_SELECTED_CORE_MAX_DBZ: result.selected_core_max_dbz,
+            ATTR_CORE_COUNT: result.core_count,
             ATTR_SELECTED_CORE_LATITUDE: result.selected_core_latitude,
             ATTR_SELECTED_CORE_LONGITUDE: result.selected_core_longitude,
             ATTR_LIGHTNING_TRIGGERED: result.has_lightning_trigger,
@@ -359,6 +367,10 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                 raw_selected_distance = getattr(analysis, "selected_core_distance_km", None) if analysis else None
                 raw_selected_lat = getattr(analysis, "selected_core_latitude", None) if analysis else None
                 raw_selected_lon = getattr(analysis, "selected_core_longitude", None) if analysis else None
+                raw_selected_area = getattr(analysis, "selected_core_area_km2", None) if analysis else None
+                raw_selected_pixels = getattr(analysis, "selected_core_pixel_count", None) if analysis else None
+                raw_selected_max_dbz = getattr(analysis, "selected_core_max_dbz", None) if analysis else None
+                raw_core_count = getattr(analysis, "core_count", None) if analysis else None
                 frame_age = getattr(analysis, "frame_age_seconds", None) if analysis else None
                 frame_time = getattr(analysis, "frame_time", None) if analysis else None
                 frames_analyzed = getattr(analysis, "frames_analyzed", None) if analysis else None
@@ -391,6 +403,10 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     selected_distance = None
                     selected_lat = None
                     selected_lon = None
+                    selected_area = None
+                    selected_pixels = None
+                    selected_max_dbz = None
+                    core_count = raw_core_count
                 else:
                     max_dbz = raw_max_dbz
                     core50_distance = raw_core50_distance
@@ -400,6 +416,10 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     selected_distance = raw_selected_distance
                     selected_lat = raw_selected_lat
                     selected_lon = raw_selected_lon
+                    selected_area = raw_selected_area
+                    selected_pixels = raw_selected_pixels
+                    selected_max_dbz = raw_selected_max_dbz
+                    core_count = raw_core_count
 
                 lightning_snapshot = self._build_lightning_snapshot(now)
                 lightning_distance_km = None
@@ -523,6 +543,10 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         frame_age_seconds=frame_age,
                         selected_core_threshold_dbz=selected_threshold,
                         selected_core_distance_km=selected_distance,
+                        selected_core_area_km2=selected_area,
+                        selected_core_pixel_count=selected_pixels,
+                        selected_core_max_dbz=selected_max_dbz,
+                        core_count=core_count,
                         selected_core_latitude=selected_lat,
                         selected_core_longitude=selected_lon,
                         frames_analyzed=frames_analyzed,
