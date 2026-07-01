@@ -316,6 +316,73 @@ async def test_stale_radar_is_gated_out_of_classification_and_active_sensor() ->
     active_bin._coordinator = coordinator
     assert active_bin.is_on is False
 
+    stale_bin = RadarHailDataStaleBinarySensor(coordinator, FakeEntry())
+    stale_bin._coordinator = coordinator
+    assert stale_bin.is_on is True
+
+
+async def test_stale_radar_sets_data_stale_without_suppressing_valid_lightning_alert() -> None:
+    hass = FakeHass()
+    now = datetime.now(timezone.utc)
+    hass.set_state("sensor.lightning_distance", "4.5", last_updated=now)
+    hass.set_state("sensor.lightning_count", "20", last_updated=now)
+    stale_age = DEFAULT_STALE_CLEAR_SECONDS + 30
+
+    async def _fake_meta(*_args: object, **_kwargs: object):
+        return {"radar": {"past": []}, "host": "https://tilecache.rainviewer.com"}
+
+    async def _fake_color(*_args: object, **_kwargs: object):
+        return {"#ffffff": 0}
+
+    stale_radar = SimpleNamespace(
+        max_dbz=65,
+        core50_distance_km=4,
+        core55_distance_km=4,
+        core60_distance_km=4,
+        selected_core_threshold_dbz=60,
+        selected_core_distance_km=4,
+        selected_core_latitude=50.1,
+        selected_core_longitude=14.5,
+        frame_age_seconds=stale_age,
+        frame_time=1710000000,
+        frames_analyzed=4,
+    )
+
+    with patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        _fake_meta,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        _fake_color,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        lambda *_args, **_kwargs: stale_radar,
+    ):
+        coordinator = RadarHailRiskCoordinator(
+            hass,
+            None,
+            "Radar Hail Risk",
+            FakeEntry(),
+            session_factory=FakeSessionContext,
+        )
+        payload = await coordinator._async_update_data()
+
+    assert payload["source_status"]["radar"] == "stale"
+    assert payload["source_status"]["lightning"] == "ok"
+    assert payload[ATTR_STALE] is True
+    assert payload["level"] == RISK_LEVEL_WARNING
+    assert payload[ATTR_MAX_DBZ] is None
+    assert payload[ATTR_LIGHTNING_DISTANCE_KM] == 4.5
+
+    coordinator.data = payload
+    active_bin = RadarHailRiskActiveBinarySensor(coordinator, FakeEntry())
+    active_bin._coordinator = coordinator
+    assert active_bin.is_on is True
+
+    stale_bin = RadarHailDataStaleBinarySensor(coordinator, FakeEntry())
+    stale_bin._coordinator = coordinator
+    assert stale_bin.is_on is True
+
 
 async def test_coordinator_exposes_threshold_specific_core_distances() -> None:
     hass = FakeHass()

@@ -534,22 +534,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     radar_diagnostics=radar_diagnostics,
                     lightning_diagnostics=tuple(lightning_diagnostics),
                 )
-                has_radar_signal = any(
-                    value is not None
-                    for value in (
-                        raw_max_dbz,
-                        raw_selected_distance,
-                        raw_core50_distance,
-                        raw_core55_distance,
-                        raw_core60_distance,
-                    )
-                )
-                has_lightning_signal = lightning_distance_km is not None
-                all_available_sources_stale = bool(
-                    (has_radar_signal and radar_stale and not has_lightning_signal)
-                    or (has_lightning_signal and lightning_stale and not has_radar_signal)
-                    or (has_radar_signal and radar_stale and has_lightning_signal and lightning_stale)
-                )
+                source_data_stale = bool(radar_stale or lightning_stale)
 
                 level = classify_from_thresholds(
                     max_dbz=max_dbz,
@@ -646,7 +631,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         frames_analyzed=frames_analyzed,
                         frame_time=frame_time,
                         last_error=", ".join(diagnostics) if diagnostics else None,
-                        is_stale=all_available_sources_stale,
+                        is_stale=source_data_stale,
                         has_lightning_trigger=lightning_triggered,
                         lightning_counter_delta=lightning_counter_delta,
                         diagnostics=tuple(diagnostics),

@@ -101,8 +101,6 @@ class RadarHailRiskActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity
         level = data.get(ATTR_LEVEL)
         if level in (RISK_LEVEL_NONE, RISK_LEVEL_UNAVAILABLE):
             return False
-        if bool(data.get(ATTR_STALE, False)):
-            return False
         return level is not None
 
     @property
