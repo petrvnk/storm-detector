@@ -28,6 +28,7 @@ from custom_components.radar_hail_risk.const import (
     RISK_LEVEL_NONE,
     RISK_LEVEL_UNAVAILABLE,
     RISK_LEVEL_WARNING,
+    RISK_LEVEL_WATCH,
 )
 from custom_components.radar_hail_risk.coordinator import RadarHailRiskCoordinator
 from custom_components.radar_hail_risk.device_tracker import RadarHailStormCoreTracker
@@ -207,6 +208,26 @@ def test_build_summary_filters_internal_event_diagnostics() -> None:
         selected_core_threshold_dbz=None,
         diagnostics=("lightning_strike_delta", "lightning_not_configured"),
     ) == "Warning: max 56 dBZ"
+
+
+def test_near_watch_radar_core_is_not_green_ok() -> None:
+    from custom_components.radar_hail_risk.risk import classify_from_thresholds
+
+    assert (
+        classify_from_thresholds(
+            max_dbz=47,
+            core_distance_km=None,
+            lightning_distance_km=None,
+            watch_dbz=50,
+            warning_dbz=55,
+            urgent_dbz=60,
+            warning_core_distance_km=25,
+            urgent_core_distance_km=15,
+            warning_lightning_distance_km=20,
+            urgent_lightning_distance_km=8,
+        )
+        == RISK_LEVEL_WATCH
+    )
 
 
 async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:

@@ -116,6 +116,14 @@ def classify_from_thresholds(
     if max_dbz is not None and max_dbz >= watch_dbz:
         return RISK_LEVEL_WATCH
 
+    # For live UX, a strong thunderstorm just below the hail-core watch threshold
+    # should not be rendered as a green OK state. RainViewer/Windy dBZ estimates can
+    # differ by a few dBZ and the current frame can fluctuate quickly around the
+    # threshold. Keep warning/urgent strict, but surface near-threshold cores as watch.
+    near_watch_dbz = max(0, watch_dbz - 5)
+    if max_dbz is not None and max_dbz > near_watch_dbz:
+        return RISK_LEVEL_WATCH
+
     return RISK_LEVEL_NONE
 
 
