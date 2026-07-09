@@ -49,6 +49,9 @@ class HailRiskResult:
     core50_distance_km: float | None = None
     core55_distance_km: float | None = None
     core60_distance_km: float | None = None
+    core_watch_distance_km: float | None = None
+    core_warning_distance_km: float | None = None
+    core_urgent_distance_km: float | None = None
     lightning_distance_km: float | None = None
     lightning_azimuth_degrees: float | None = None
     lightning_latitude: float | None = None

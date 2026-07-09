@@ -70,18 +70,32 @@ class AnalyzedFrame:
 
     frame_time: int
     max_dbz: int | None
+    max_core_dbz: int | None
     core50_distance_km: float | None
     core55_distance_km: float | None
     core60_distance_km: float | None
+    core_watch_distance_km: float | None
+    core_warning_distance_km: float | None
+    core_urgent_distance_km: float | None
     core50_latitude: float | None
     core50_longitude: float | None
     core55_latitude: float | None
     core55_longitude: float | None
     core60_latitude: float | None
     core60_longitude: float | None
+    core_watch_latitude: float | None
+    core_watch_longitude: float | None
+    core_warning_latitude: float | None
+    core_warning_longitude: float | None
+    core_urgent_latitude: float | None
+    core_urgent_longitude: float | None
     selected_core_area_km2: float | None
     selected_core_pixel_count: int | None
     selected_core_max_dbz: int | None
+    selected_core_threshold_dbz: int | None
+    selected_core_distance_km: float | None
+    selected_core_latitude: float | None
+    selected_core_longitude: float | None
     storm_cores: tuple[dict[str, int | float], ...]
     core_count: int
     analyzed_pixels: int
@@ -94,9 +108,13 @@ class RadarAnalysis:
     frame_time: int | None
     frame_age_seconds: int | None
     max_dbz: int | None
+    max_core_dbz: int | None
     core50_distance_km: float | None
     core55_distance_km: float | None
     core60_distance_km: float | None
+    core_watch_distance_km: float | None
+    core_warning_distance_km: float | None
+    core_urgent_distance_km: float | None
     selected_core_threshold_dbz: int | None
     selected_core_distance_km: float | None
     selected_core_latitude: float | None
@@ -590,6 +608,7 @@ def _component_cores_from_points(
     *,
     threshold_dbz: int,
     pixel_area_km2: float,
+    min_core_pixels: int = 1,
 ) -> list[StormCore]:
     """Build connected storm-core components for one threshold.
 
@@ -617,6 +636,8 @@ def _component_cores_from_points(
                     component.append(neighbour)
 
         samples = [points[key] for key in component]
+        if len(samples) < min_core_pixels:
+            continue
         max_dbz = max(sample[0] for sample in samples)
         nearest = min(samples, key=lambda sample: sample[3])
         centroid_lat = sum(sample[1] for sample in samples) / len(samples)
@@ -678,101 +699,170 @@ def _storm_core_summaries(
 
 
 def _analyse_dbz_grid(
-    dbz_grid: list[list[int | None]],
-    tile_origin_px: tuple[float, float],
+    points: dict[tuple[int, int], tuple[int, float, float, float]],
     center_latitude: float,
     center_longitude: float,
     zoom: int,
     tile_size: int,
     frame_time: int,
-    analysis_radius_km: float,
+    *,
+    core_watch_dbz: int,
+    core_warning_dbz: int,
+    core_urgent_dbz: int,
+    min_core_pixels: int = 1,
 ) -> AnalyzedFrame:
-    world_x0, world_y0 = tile_origin_px
-    max_dbz: int | None = None
-    best50: tuple[float, float, float] | None = None
-    best55: tuple[float, float, float] | None = None
-    best60: tuple[float, float, float] | None = None
-    points: dict[tuple[int, int], tuple[int, float, float, float]] = {}
-    analyzed_pixels = 0
+    analyzed_pixels = len(points)
+    if not points:
+        return AnalyzedFrame(
+            frame_time=frame_time,
+            max_dbz=None,
+            max_core_dbz=None,
+            core50_distance_km=None,
+            core55_distance_km=None,
+            core60_distance_km=None,
+            core_watch_distance_km=None,
+            core_warning_distance_km=None,
+            core_urgent_distance_km=None,
+            core50_latitude=None,
+            core50_longitude=None,
+            core55_latitude=None,
+            core55_longitude=None,
+            core60_latitude=None,
+            core60_longitude=None,
+            core_watch_latitude=None,
+            core_watch_longitude=None,
+            core_warning_latitude=None,
+            core_warning_longitude=None,
+            core_urgent_latitude=None,
+            core_urgent_longitude=None,
+            selected_core_area_km2=None,
+            selected_core_pixel_count=None,
+            selected_core_max_dbz=None,
+            selected_core_threshold_dbz=None,
+            selected_core_distance_km=None,
+            selected_core_latitude=None,
+            selected_core_longitude=None,
+            storm_cores=(),
+            core_count=0,
+            analyzed_pixels=0,
+        )
 
-    for local_y, row in enumerate(dbz_grid):
-        for local_x, dbz_value in enumerate(row):
-            if dbz_value is None:
-                continue
+    max_dbz = max(int(sample[0]) for sample in points.values())
+    min_core_pixels = max(1, int(min_core_pixels))
 
-            global_x = world_x0 + local_x
-            global_y = world_y0 + local_y
-            pixel_lat, pixel_lon = global_px_to_latlon(global_x, global_y, zoom, tile_size)
-            distance = haversine_km(pixel_lat, pixel_lon, center_latitude, center_longitude)
-            if distance > analysis_radius_km:
-                continue
+    def sort_cores(cores: list[StormCore]) -> list[StormCore]:
+        return sorted(
+            cores,
+            key=lambda core: (
+                core.distance_km,
+                -core.max_dbz,
+                -core.pixel_count,
+            ),
+        )
 
-            analyzed_pixels += 1
-            points[(int(global_x), int(global_y))] = (
-                int(dbz_value),
-                float(pixel_lat),
-                float(pixel_lon),
-                float(distance),
-            )
-            if max_dbz is None or dbz_value > max_dbz:
-                max_dbz = dbz_value
-
-            if dbz_value >= 50:
-                if best50 is None or distance < best50[0]:
-                    best50 = (distance, float(pixel_lat), float(pixel_lon))
-
-            if dbz_value >= 55:
-                if best55 is None or distance < best55[0]:
-                    best55 = (distance, float(pixel_lat), float(pixel_lon))
-
-            if dbz_value >= 60:
-                if best60 is None or distance < best60[0]:
-                    best60 = (distance, float(pixel_lat), float(pixel_lon))
+    def best_core(cores: list[StormCore]) -> tuple[float, float, float] | None:
+        if not cores:
+            return None
+        core = sort_cores(cores)[0]
+        return (
+            float(core.distance_km),
+            float(core.nearest_latitude),
+            float(core.nearest_longitude),
+        )
 
     pixel_area_km2 = (_meters_per_pixel(center_latitude, zoom, tile_size) / 1000) ** 2
-    cores50 = _component_cores_from_points(points, threshold_dbz=50, pixel_area_km2=pixel_area_km2)
-    cores55 = _component_cores_from_points(points, threshold_dbz=55, pixel_area_km2=pixel_area_km2)
-    cores60 = _component_cores_from_points(points, threshold_dbz=60, pixel_area_km2=pixel_area_km2)
+    cores_watch = _component_cores_from_points(
+        points,
+        threshold_dbz=core_watch_dbz,
+        pixel_area_km2=pixel_area_km2,
+        min_core_pixels=min_core_pixels,
+    )
+    cores_warning = _component_cores_from_points(
+        points,
+        threshold_dbz=core_warning_dbz,
+        pixel_area_km2=pixel_area_km2,
+        min_core_pixels=min_core_pixels,
+    )
+    cores_urgent = _component_cores_from_points(
+        points,
+        threshold_dbz=core_urgent_dbz,
+        pixel_area_km2=pixel_area_km2,
+        min_core_pixels=min_core_pixels,
+    )
+    cores50 = _component_cores_from_points(
+        points,
+        threshold_dbz=50,
+        pixel_area_km2=pixel_area_km2,
+        min_core_pixels=min_core_pixels,
+    )
+    cores55 = _component_cores_from_points(
+        points,
+        threshold_dbz=55,
+        pixel_area_km2=pixel_area_km2,
+        min_core_pixels=min_core_pixels,
+    )
+    cores60 = _component_cores_from_points(
+        points,
+        threshold_dbz=60,
+        pixel_area_km2=pixel_area_km2,
+        min_core_pixels=min_core_pixels,
+    )
 
-    if cores50:
-        core50_distance = cores50[0].distance_km
-        core50_lat = cores50[0].nearest_latitude
-        core50_lon = cores50[0].nearest_longitude
-    elif best50 is not None:
+    best50 = best_core(cores50)
+    best55 = best_core(cores55)
+    best60 = best_core(cores60)
+    best_watch = best_core(cores_watch)
+    best_warning = best_core(cores_warning)
+    best_urgent = best_core(cores_urgent)
+
+    if best50 is not None:
         core50_distance, core50_lat, core50_lon = best50
     else:
         core50_distance, core50_lat, core50_lon = (None, None, None)
-
-    if cores55:
-        core55_distance = cores55[0].distance_km
-        core55_lat = cores55[0].nearest_latitude
-        core55_lon = cores55[0].nearest_longitude
-    elif best55 is not None:
+    if best55 is not None:
         core55_distance, core55_lat, core55_lon = best55
     else:
         core55_distance, core55_lat, core55_lon = (None, None, None)
-
-    if cores60:
-        core60_distance = cores60[0].distance_km
-        core60_lat = cores60[0].nearest_latitude
-        core60_lon = cores60[0].nearest_longitude
-    elif best60 is not None:
+    if best60 is not None:
         core60_distance, core60_lat, core60_lon = best60
     else:
         core60_distance, core60_lat, core60_lon = (None, None, None)
 
-    selected_core = (cores60 or cores55 or cores50 or [None])[0]
+    if best_watch is not None:
+        core_watch_distance, core_watch_lat, core_watch_lon = best_watch
+    else:
+        core_watch_distance, core_watch_lat, core_watch_lon = (None, None, None)
+    if best_warning is not None:
+        core_warning_distance, core_warning_lat, core_warning_lon = best_warning
+    else:
+        core_warning_distance, core_warning_lat, core_warning_lon = (None, None, None)
+    if best_urgent is not None:
+        core_urgent_distance, core_urgent_lat, core_urgent_lon = best_urgent
+    else:
+        core_urgent_distance, core_urgent_lat, core_urgent_lon = (None, None, None)
+
+    selected_core = (cores_urgent or cores_warning or cores_watch or [None])[0]
     if selected_core is None:
         selected_area = None
         selected_pixels = None
         selected_max_dbz = None
+        max_core_dbz = None
+        selected_threshold = None
+        selected_distance = None
+        selected_lat = None
+        selected_lon = None
     else:
         selected_area = selected_core.area_km2
         selected_pixels = selected_core.pixel_count
         selected_max_dbz = selected_core.max_dbz
-    core_count = len(cores50)
+        max_core_dbz = int(selected_core.max_dbz)
+        selected_threshold = selected_core.threshold_dbz
+        selected_distance = selected_core.distance_km
+        selected_lat = selected_core.nearest_latitude
+        selected_lon = selected_core.nearest_longitude
+
     storm_cores = _storm_core_summaries(
-        cores50,
+        cores_watch,
         center_latitude=center_latitude,
         center_longitude=center_longitude,
     )
@@ -780,20 +870,34 @@ def _analyse_dbz_grid(
     return AnalyzedFrame(
         frame_time=frame_time,
         max_dbz=max_dbz,
+        max_core_dbz=max_core_dbz,
         core50_distance_km=core50_distance,
         core55_distance_km=core55_distance,
         core60_distance_km=core60_distance,
+        core_watch_distance_km=core_watch_distance,
+        core_warning_distance_km=core_warning_distance,
+        core_urgent_distance_km=core_urgent_distance,
         core50_latitude=core50_lat,
         core50_longitude=core50_lon,
         core55_latitude=core55_lat,
         core55_longitude=core55_lon,
         core60_latitude=core60_lat,
         core60_longitude=core60_lon,
+        core_watch_latitude=core_watch_lat,
+        core_watch_longitude=core_watch_lon,
+        core_warning_latitude=core_warning_lat,
+        core_warning_longitude=core_warning_lon,
+        core_urgent_latitude=core_urgent_lat,
+        core_urgent_longitude=core_urgent_lon,
         selected_core_area_km2=selected_area,
         selected_core_pixel_count=selected_pixels,
         selected_core_max_dbz=selected_max_dbz,
+        selected_core_threshold_dbz=selected_threshold,
+        selected_core_distance_km=selected_distance,
+        selected_core_latitude=selected_lat,
+        selected_core_longitude=selected_lon,
         storm_cores=storm_cores,
-        core_count=core_count,
+        core_count=len(cores_watch),
         analyzed_pixels=analyzed_pixels,
     )
 
@@ -819,10 +923,15 @@ async def analyze_single_radar_frame(
     analysis_radius_km: float,
     zoom: int,
     color_lookup: dict[tuple[int, int, int, int], int],
+    *,
+    core_watch_dbz: int = 50,
+    core_warning_dbz: int = 55,
+    core_urgent_dbz: int = 60,
+    min_core_pixels: int = 1,
     tile_size: int = RAINVIEWER_TILE_SIZE,
     timeout: int = 20,
 ) -> AnalyzedFrame | None:
-    """Analyze one frame and return nearest 55+/60+ core data."""
+    """Analyze one frame and return nearest core data."""
 
     if not _frame_is_valid(frame):
         return None
@@ -843,12 +952,7 @@ async def analyze_single_radar_frame(
     span = _tile_span_for_radius(analysis_radius_km, center_latitude, zoom, tile_size)
     tile_count = _tile_count(zoom)
 
-    frame_pixels_analysed = 0
-    tile_results: list[AnalyzedFrame] = []
-    max_dbz: int | None = None
-    best50: tuple[float, float, float] | None = None
-    best55: tuple[float, float, float] | None = None
-    best60: tuple[float, float, float] | None = None
+    points: dict[tuple[int, int], tuple[int, float, float, float]] = {}
 
     for tile_y in range(center_ty - span, center_ty + span + 1):
         if tile_y < 0 or tile_y >= tile_count:
@@ -872,125 +976,62 @@ async def analyze_single_radar_frame(
                 # Keep deterministic offset for longitude-wrap edges.
                 tile_origin_x = (tile_x * tile_size)
 
-            frame_result = _analyse_dbz_grid(
-                tile_grid,
-                (tile_origin_x, tile_origin_y),
-                center_latitude,
-                center_longitude,
-                zoom,
-                tile_size,
-                frame_time,
-                analysis_radius_km,
-            )
+            for local_y, row in enumerate(tile_grid):
+                for local_x, dbz_value in enumerate(row):
+                    if dbz_value is None:
+                        continue
+                    global_x = tile_origin_x + local_x
+                    global_y = tile_origin_y + local_y
+                    pixel_lat, pixel_lon = global_px_to_latlon(
+                        global_x, global_y, zoom, tile_size
+                    )
+                    distance = haversine_km(
+                        pixel_lat,
+                        pixel_lon,
+                        center_latitude,
+                        center_longitude,
+                    )
+                    if distance > analysis_radius_km:
+                        continue
+                    points[(int(global_x), int(global_y))] = (
+                        int(dbz_value),
+                        float(pixel_lat),
+                        float(pixel_lon),
+                        float(distance),
+                    )
 
-            frame_pixels_analysed += frame_result.analyzed_pixels
-            tile_results.append(frame_result)
-            if frame_result.max_dbz is not None:
-                max_dbz = frame_result.max_dbz if max_dbz is None else max(max_dbz, frame_result.max_dbz)
-            if frame_result.core50_distance_km is not None:
-                candidate50 = (
-                    frame_result.core50_distance_km,
-                    float(frame_result.core50_latitude),
-                    float(frame_result.core50_longitude),
-                )
-                if best50 is None or candidate50[0] < best50[0]:
-                    best50 = candidate50
-            if frame_result.core55_distance_km is not None:
-                candidate55 = (
-                    frame_result.core55_distance_km,
-                    float(frame_result.core55_latitude),
-                    float(frame_result.core55_longitude),
-                )
-                if best55 is None or candidate55[0] < best55[0]:
-                    best55 = candidate55
-            if frame_result.core60_distance_km is not None:
-                candidate60 = (
-                    frame_result.core60_distance_km,
-                    float(frame_result.core60_latitude),
-                    float(frame_result.core60_longitude),
-                )
-                if best60 is None or candidate60[0] < best60[0]:
-                    best60 = candidate60
-
-    if frame_pixels_analysed == 0:
+    if not points:
         return None
 
-    core50_distance, core50_lat, core50_lon = best50 if best50 is not None else (None, None, None)
-    core55_distance, core55_lat, core55_lon = best55 if best55 is not None else (None, None, None)
-    core60_distance, core60_lat, core60_lon = best60 if best60 is not None else (None, None, None)
-    selected_result = _select_tile_result_for_core_metadata(tile_results)
-    if selected_result is None:
-        selected_area = None
-        selected_pixels = None
-        selected_max_dbz = None
-    else:
-        selected_area = selected_result.selected_core_area_km2
-        selected_pixels = selected_result.selected_core_pixel_count
-        selected_max_dbz = selected_result.selected_core_max_dbz
-    core_count = sum(result.core_count for result in tile_results)
-    storm_cores = tuple(
-        sorted(
-            (
-                core
-                for result in tile_results
-                for core in result.storm_cores
-            ),
-            key=lambda item: (
-                float(item.get("distance_km", float("inf"))),
-                -int(item.get("max_dbz", 0)),
-                -int(item.get("pixel_count", 0)),
-            ),
-        )[:8]
+    return _analyse_dbz_grid(
+        points,
+        center_latitude,
+        center_longitude,
+        zoom,
+        tile_size,
+        frame_time,
+        core_watch_dbz=core_watch_dbz,
+        core_warning_dbz=core_warning_dbz,
+        core_urgent_dbz=core_urgent_dbz,
+        min_core_pixels=min_core_pixels,
     )
-
-    return AnalyzedFrame(
-        frame_time=frame_time,
-        max_dbz=max_dbz,
-        core50_distance_km=core50_distance,
-        core55_distance_km=core55_distance,
-        core60_distance_km=core60_distance,
-        core50_latitude=core50_lat,
-        core50_longitude=core50_lon,
-        core55_latitude=core55_lat,
-        core55_longitude=core55_lon,
-        core60_latitude=core60_lat,
-        core60_longitude=core60_lon,
-        selected_core_area_km2=selected_area,
-        selected_core_pixel_count=selected_pixels,
-        selected_core_max_dbz=selected_max_dbz,
-        storm_cores=storm_cores,
-        core_count=core_count,
-        analyzed_pixels=frame_pixels_analysed,
-    )
-
-
-def _select_tile_result_for_core_metadata(results: list[AnalyzedFrame]) -> AnalyzedFrame | None:
-    """Pick the tile result carrying metadata for the strongest nearest core."""
-
-    candidates = [result for result in results if result.selected_core_pixel_count]
-    if not candidates:
-        return None
-
-    def sort_key(result: AnalyzedFrame) -> tuple[int, float, int]:
-        threshold = 0
-        distance = float("inf")
-        if result.core60_distance_km is not None:
-            threshold = 60
-            distance = result.core60_distance_km
-        elif result.core55_distance_km is not None:
-            threshold = 55
-            distance = result.core55_distance_km
-        elif result.core50_distance_km is not None:
-            threshold = 50
-            distance = result.core50_distance_km
-        return (-threshold, distance, -(result.selected_core_pixel_count or 0))
-
-    return sorted(candidates, key=sort_key)[0]
 
 
 def _selected_core_sample(frame: AnalyzedFrame) -> tuple[int, float, float, float] | None:
     """Return threshold, distance, lat, lon for the selected strongest core in a frame."""
 
+    if (
+        frame.selected_core_threshold_dbz is not None
+        and frame.selected_core_distance_km is not None
+        and frame.selected_core_latitude is not None
+        and frame.selected_core_longitude is not None
+    ):
+        return (
+            int(frame.selected_core_threshold_dbz),
+            float(frame.selected_core_distance_km),
+            float(frame.selected_core_latitude),
+            float(frame.selected_core_longitude),
+        )
     if (
         frame.core60_distance_km is not None
         and frame.core60_latitude is not None
@@ -1080,6 +1121,10 @@ async def analyze_recent_frames(
     zoom: int = 7,
     color_lookup: dict[tuple[int, int, int, int], int] | None = None,
     color_table_session: Any | None = None,
+    core_watch_dbz: int = 50,
+    core_warning_dbz: int = 55,
+    core_urgent_dbz: int = 60,
+    min_core_pixels: int = 1,
     now: int | None = None,
 ) -> RadarAnalysis | None:
     """Run core detection on the latest metadata frames.
@@ -1116,6 +1161,10 @@ async def analyze_recent_frames(
             analysis_radius_km,
             zoom,
             color_lookup,
+            core_watch_dbz=core_watch_dbz,
+            core_warning_dbz=core_warning_dbz,
+            core_urgent_dbz=core_urgent_dbz,
+            min_core_pixels=min_core_pixels,
         )
         if result is None or result.analyzed_pixels == 0:
             continue
@@ -1133,21 +1182,21 @@ async def analyze_recent_frames(
     if max_dbz is None:
         return None
 
-    if latest.core60_distance_km is not None:
-        selected_threshold = 60
-        selected_distance = latest.core60_distance_km
-        selected_lat = latest.core60_latitude
-        selected_lon = latest.core60_longitude
-    elif latest.core55_distance_km is not None:
-        selected_threshold = 55
-        selected_distance = latest.core55_distance_km
-        selected_lat = latest.core55_latitude
-        selected_lon = latest.core55_longitude
-    elif latest.core50_distance_km is not None:
-        selected_threshold = 50
-        selected_distance = latest.core50_distance_km
-        selected_lat = latest.core50_latitude
-        selected_lon = latest.core50_longitude
+    if latest.core_urgent_distance_km is not None:
+        selected_threshold = core_urgent_dbz
+        selected_distance = latest.core_urgent_distance_km
+        selected_lat = latest.core_urgent_latitude
+        selected_lon = latest.core_urgent_longitude
+    elif latest.core_warning_distance_km is not None:
+        selected_threshold = core_warning_dbz
+        selected_distance = latest.core_warning_distance_km
+        selected_lat = latest.core_warning_latitude
+        selected_lon = latest.core_warning_longitude
+    elif latest.core_watch_distance_km is not None:
+        selected_threshold = core_watch_dbz
+        selected_distance = latest.core_watch_distance_km
+        selected_lat = latest.core_watch_latitude
+        selected_lon = latest.core_watch_longitude
     else:
         selected_threshold = None
         selected_distance = None
@@ -1164,9 +1213,13 @@ async def analyze_recent_frames(
         frame_time=latest.frame_time,
         frame_age_seconds=frame_age_seconds,
         max_dbz=max_dbz,
+        max_core_dbz=latest.max_core_dbz,
         core50_distance_km=latest.core50_distance_km,
         core55_distance_km=latest.core55_distance_km,
         core60_distance_km=latest.core60_distance_km,
+        core_watch_distance_km=latest.core_watch_distance_km,
+        core_warning_distance_km=latest.core_warning_distance_km,
+        core_urgent_distance_km=latest.core_urgent_distance_km,
         selected_core_threshold_dbz=selected_threshold,
         selected_core_distance_km=selected_distance,
         selected_core_latitude=selected_lat,

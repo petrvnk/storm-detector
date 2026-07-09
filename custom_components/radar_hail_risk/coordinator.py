@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Iterable
 
@@ -15,6 +15,9 @@ from .const import (
     ATTR_CORE60_DISTANCE_KM,
     ATTR_CORE_COUNT,
     ATTR_CORE_DISTANCE_KM,
+    ATTR_CORE_URGENT_DISTANCE_KM,
+    ATTR_CORE_WARNING_DISTANCE_KM,
+    ATTR_CORE_WATCH_DISTANCE_KM,
     ATTR_DBZ_TREND,
     ATTR_DEGRADATION_REASONS,
     ATTR_DISTANCE_TREND,
@@ -58,6 +61,7 @@ from .const import (
     CONF_LIGHTNING_TRIGGER_RADIUS_KM,
     CONF_LOCATION_ENTITY_ID,
     CONF_MIN_ANALYSIS_INTERVAL_SECONDS,
+    CONF_MIN_CORE_PIXELS,
     CONF_RAINVIEWER_FRAMES,
     CONF_RAINVIEWER_ZOOM,
     CONF_STALE_CLEAR_SECONDS,
@@ -70,6 +74,7 @@ from .const import (
     DEFAULT_CORE_WATCH_DBZ,
     DEFAULT_LIGHTNING_TRIGGER_RADIUS_KM,
     DEFAULT_MIN_ANALYSIS_INTERVAL_SECONDS,
+    DEFAULT_MIN_CORE_PIXELS,
     DEFAULT_RAINVIEWER_FRAMES,
     DEFAULT_RAINVIEWER_ZOOM,
     DEFAULT_STALE_CLEAR_SECONDS,
@@ -115,6 +120,175 @@ async def _await_if_needed(value: Any) -> Any:
     if inspect.isawaitable(value):
         return await value
     return value
+
+
+_MISSING = object()
+
+
+@dataclass(frozen=True)
+class _CoreEvidence:
+    """Configured core evidence normalized across current and legacy analyses."""
+
+    max_core_dbz: int | None
+    watch_distance_km: float | None
+    warning_distance_km: float | None
+    urgent_distance_km: float | None
+    selected_threshold_dbz: int | None
+    selected_distance_km: float | None
+    selected_latitude: float | None
+    selected_longitude: float | None
+
+
+def _adapt_core_evidence(
+    analysis: Any,
+    *,
+    watch_dbz: int,
+    warning_dbz: int,
+    urgent_dbz: int,
+) -> _CoreEvidence:
+    """Normalize authoritative generic fields and compatible legacy evidence."""
+
+    def value(name: str) -> Any:
+        return getattr(analysis, name, _MISSING)
+
+    generic_max = value("max_core_dbz")
+    rejected = generic_max is None
+
+    selected_threshold = value("selected_core_threshold_dbz")
+    selected_distance = value("selected_core_distance_km")
+    selected_latitude = value("selected_core_latitude")
+    selected_longitude = value("selected_core_longitude")
+    selected_is_valid = (
+        not rejected
+        and selected_threshold is not _MISSING
+        and selected_threshold is not None
+        and selected_distance is not _MISSING
+        and selected_distance is not None
+    )
+
+    fixed_evidence = (
+        (50, value("core50_distance_km"), value("core50_latitude"), value("core50_longitude")),
+        (55, value("core55_distance_km"), value("core55_latitude"), value("core55_longitude")),
+        (60, value("core60_distance_km"), value("core60_latitude"), value("core60_longitude")),
+    )
+
+    def configured_evidence(
+        distance_name: str,
+        latitude_name: str,
+        longitude_name: str,
+        threshold_dbz: int,
+    ) -> tuple[float | None, float | None, float | None]:
+        generic_distance = value(distance_name)
+        if generic_distance is not _MISSING:
+            latitude = value(latitude_name)
+            longitude = value(longitude_name)
+            return (
+                generic_distance,
+                None if latitude is _MISSING else latitude,
+                None if longitude is _MISSING else longitude,
+            )
+        if rejected:
+            return None, None, None
+
+        candidates: list[tuple[float, float | None, float | None]] = []
+        if selected_is_valid and int(selected_threshold) >= threshold_dbz:
+            candidates.append(
+                (
+                    float(selected_distance),
+                    None if selected_latitude is _MISSING else selected_latitude,
+                    None if selected_longitude is _MISSING else selected_longitude,
+                )
+            )
+        for fixed_threshold, distance, latitude, longitude in fixed_evidence:
+            if distance is _MISSING or distance is None or fixed_threshold < threshold_dbz:
+                continue
+            candidates.append(
+                (
+                    float(distance),
+                    None if latitude is _MISSING else latitude,
+                    None if longitude is _MISSING else longitude,
+                )
+            )
+        if not candidates:
+            return None, None, None
+        return min(candidates, key=lambda candidate: candidate[0])
+
+    watch = configured_evidence(
+        "core_watch_distance_km",
+        "core_watch_latitude",
+        "core_watch_longitude",
+        watch_dbz,
+    )
+    warning = configured_evidence(
+        "core_warning_distance_km",
+        "core_warning_latitude",
+        "core_warning_longitude",
+        warning_dbz,
+    )
+    urgent = configured_evidence(
+        "core_urgent_distance_km",
+        "core_urgent_latitude",
+        "core_urgent_longitude",
+        urgent_dbz,
+    )
+    configured = (
+        (urgent_dbz, urgent[0], urgent[1], urgent[2]),
+        (warning_dbz, warning[0], warning[1], warning[2]),
+        (watch_dbz, watch[0], watch[1], watch[2]),
+    )
+    has_core = any(distance is not None for _, distance, _, _ in configured)
+
+    if generic_max is _MISSING:
+        raw_max = value("max_dbz")
+        selected_max = value("selected_core_max_dbz")
+        if selected_max is not _MISSING and selected_max is not None and has_core:
+            max_core_dbz = int(selected_max)
+        elif raw_max is not _MISSING and raw_max is not None and has_core:
+            max_core_dbz = int(raw_max)
+        else:
+            max_core_dbz = None
+    else:
+        max_core_dbz = generic_max
+
+    if selected_is_valid and has_core:
+        normalized_threshold = int(selected_threshold)
+        normalized_distance = float(selected_distance)
+        normalized_latitude = None if selected_latitude is _MISSING else selected_latitude
+        normalized_longitude = None if selected_longitude is _MISSING else selected_longitude
+    else:
+        selected = next(
+            (
+                candidate
+                for candidate in configured
+                if candidate[1] is not None
+                and candidate[2] is not None
+                and candidate[3] is not None
+            ),
+            next((candidate for candidate in configured if candidate[1] is not None), None),
+        )
+        if selected is None:
+            normalized_threshold = None
+            normalized_distance = None
+            normalized_latitude = None
+            normalized_longitude = None
+        else:
+            (
+                normalized_threshold,
+                normalized_distance,
+                normalized_latitude,
+                normalized_longitude,
+            ) = selected
+
+    return _CoreEvidence(
+        max_core_dbz=max_core_dbz,
+        watch_distance_km=watch[0],
+        warning_distance_km=warning[0],
+        urgent_distance_km=urgent[0],
+        selected_threshold_dbz=normalized_threshold,
+        selected_distance_km=normalized_distance,
+        selected_latitude=normalized_latitude,
+        selected_longitude=normalized_longitude,
+    )
 
 
 class RadarHailRiskCoordinator(DataUpdateCoordinator):
@@ -208,6 +382,9 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             ATTR_CORE50_DISTANCE_KM: result.core50_distance_km,
             ATTR_CORE55_DISTANCE_KM: result.core55_distance_km,
             ATTR_CORE60_DISTANCE_KM: result.core60_distance_km,
+            ATTR_CORE_WATCH_DISTANCE_KM: result.core_watch_distance_km,
+            ATTR_CORE_WARNING_DISTANCE_KM: result.core_warning_distance_km,
+            ATTR_CORE_URGENT_DISTANCE_KM: result.core_urgent_distance_km,
             ATTR_LIGHTNING_DISTANCE_KM: result.lightning_distance_km,
             ATTR_LIGHTNING_AZIMUTH_DEGREES: result.lightning_azimuth_degrees,
             ATTR_LIGHTNING_LATITUDE: result.lightning_latitude,
@@ -366,11 +543,11 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
 
                     try:
                         analysis = await _await_if_needed(
-                            analyze_recent_frames(
-                                session,
-                                meta,
-                                center_latitude,
-                                center_longitude,
+                                analyze_recent_frames(
+                                    session,
+                                    meta,
+                                    center_latitude,
+                                    center_longitude,
                                 analysis_radius_km=normalize_optional_float(
                                     cfg.get(CONF_ANALYSIS_RADIUS_KM),
                                     default=50.0,
@@ -384,6 +561,22 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                                     default=DEFAULT_RAINVIEWER_ZOOM,
                                 ),
                                 color_lookup=color_lookup,
+                                core_watch_dbz=normalize_optional_int(
+                                    cfg.get(CONF_CORE_WATCH_DBZ),
+                                    default=DEFAULT_CORE_WATCH_DBZ,
+                                ),
+                                core_warning_dbz=normalize_optional_int(
+                                    cfg.get(CONF_CORE_WARNING_DBZ),
+                                    default=DEFAULT_CORE_WARNING_DBZ,
+                                ),
+                                core_urgent_dbz=normalize_optional_int(
+                                    cfg.get(CONF_CORE_URGENT_DBZ),
+                                    default=DEFAULT_CORE_URGENT_DBZ,
+                                ),
+                                min_core_pixels=normalize_optional_int(
+                                    cfg.get(CONF_MIN_CORE_PIXELS),
+                                    default=DEFAULT_MIN_CORE_PIXELS,
+                                ),
                                 now=int(now.timestamp()),
                             )
                         )
@@ -398,10 +591,6 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                 raw_core50_distance = getattr(analysis, "core50_distance_km", None) if analysis else None
                 raw_core55_distance = getattr(analysis, "core55_distance_km", None) if analysis else None
                 raw_core60_distance = getattr(analysis, "core60_distance_km", None) if analysis else None
-                raw_selected_threshold = getattr(analysis, "selected_core_threshold_dbz", None) if analysis else None
-                raw_selected_distance = getattr(analysis, "selected_core_distance_km", None) if analysis else None
-                raw_selected_lat = getattr(analysis, "selected_core_latitude", None) if analysis else None
-                raw_selected_lon = getattr(analysis, "selected_core_longitude", None) if analysis else None
                 raw_selected_area = getattr(analysis, "selected_core_area_km2", None) if analysis else None
                 raw_selected_pixels = getattr(analysis, "selected_core_pixel_count", None) if analysis else None
                 raw_selected_max_dbz = getattr(analysis, "selected_core_max_dbz", None) if analysis else None
@@ -429,18 +618,46 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                 if radar_stale:
                     radar_diagnostics.append("stale_radar_frame")
 
-                if raw_core50_distance is None and raw_selected_threshold == 50:
-                    raw_core50_distance = raw_selected_distance
-                if raw_core55_distance is None and raw_selected_threshold == 55:
-                    raw_core55_distance = raw_selected_distance
-                if raw_core60_distance is None and raw_selected_threshold == 60:
-                    raw_core60_distance = raw_selected_distance
+                watch_dbz = normalize_optional_int(
+                    cfg.get(CONF_CORE_WATCH_DBZ),
+                    default=DEFAULT_CORE_WATCH_DBZ,
+                )
+                warning_dbz = normalize_optional_int(
+                    cfg.get(CONF_CORE_WARNING_DBZ),
+                    default=DEFAULT_CORE_WARNING_DBZ,
+                )
+                urgent_dbz = normalize_optional_int(
+                    cfg.get(CONF_CORE_URGENT_DBZ),
+                    default=DEFAULT_CORE_URGENT_DBZ,
+                )
+                warning_core_distance_km = normalize_optional_int(
+                    cfg.get(CONF_WARNING_CORE_DISTANCE_KM),
+                    default=DEFAULT_WARNING_CORE_DISTANCE_KM,
+                )
+                urgent_core_distance_km = normalize_optional_int(
+                    cfg.get(CONF_URGENT_CORE_DISTANCE_KM),
+                    default=DEFAULT_URGENT_CORE_DISTANCE_KM,
+                )
+                core_evidence = _adapt_core_evidence(
+                    analysis,
+                    watch_dbz=watch_dbz,
+                    warning_dbz=warning_dbz,
+                    urgent_dbz=urgent_dbz,
+                )
+                selected_threshold = core_evidence.selected_threshold_dbz
+                selected_distance = core_evidence.selected_distance_km
+                selected_lat = core_evidence.selected_latitude
+                selected_lon = core_evidence.selected_longitude
 
                 if radar_stale:
                     max_dbz = None
+                    max_core_dbz = None
                     core50_distance = None
                     core55_distance = None
                     core60_distance = None
+                    watch_distance_km = None
+                    warning_distance_km = None
+                    urgent_distance_km = None
                     selected_threshold = None
                     selected_distance = None
                     selected_lat = None
@@ -458,16 +675,25 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     distance_trend = None
                 else:
                     max_dbz = raw_max_dbz
+                    max_core_dbz = core_evidence.max_core_dbz
                     core50_distance = raw_core50_distance
                     core55_distance = raw_core55_distance
                     core60_distance = raw_core60_distance
-                    selected_threshold = raw_selected_threshold
-                    selected_distance = raw_selected_distance
-                    selected_lat = raw_selected_lat
-                    selected_lon = raw_selected_lon
-                    selected_area = raw_selected_area
-                    selected_pixels = raw_selected_pixels
-                    selected_max_dbz = raw_selected_max_dbz
+                    watch_distance_km = core_evidence.watch_distance_km
+                    warning_distance_km = core_evidence.warning_distance_km
+                    urgent_distance_km = core_evidence.urgent_distance_km
+                    if max_core_dbz is not None:
+                        selected_area = raw_selected_area
+                        selected_pixels = raw_selected_pixels
+                        selected_max_dbz = raw_selected_max_dbz
+                    else:
+                        selected_threshold = None
+                        selected_distance = None
+                        selected_lat = None
+                        selected_lon = None
+                        selected_area = None
+                        selected_pixels = None
+                        selected_max_dbz = None
                     storm_cores = raw_storm_cores
                     core_count = raw_core_count
                     motion_bearing = raw_motion_bearing
@@ -540,44 +766,35 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     lightning_diagnostics=tuple(lightning_diagnostics),
                 )
                 source_data_stale = bool(radar_stale)
+                warning_lightning_distance_km = normalize_optional_int(
+                    cfg.get(CONF_WARNING_LIGHTNING_DISTANCE_KM),
+                    default=DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
+                )
+                urgent_lightning_distance_km = normalize_optional_int(
+                    cfg.get(CONF_URGENT_LIGHTNING_DISTANCE_KM),
+                    default=DEFAULT_URGENT_LIGHTNING_DISTANCE_KM,
+                )
+
+                level_max_dbz = (
+                    None if radar_stale or analysis is None else (max_core_dbz or 0)
+                )
 
                 level = classify_from_thresholds(
-                    max_dbz=max_dbz,
-                    core_distance_km=selected_distance,
+                    max_dbz=level_max_dbz,
+                    core_distance_km=None,
                     lightning_distance_km=lightning_distance_km,
-                    watch_dbz=normalize_optional_int(
-                        cfg.get(CONF_CORE_WATCH_DBZ),
-                        default=DEFAULT_CORE_WATCH_DBZ,
-                    ),
-                    warning_dbz=normalize_optional_int(
-                        cfg.get(CONF_CORE_WARNING_DBZ),
-                        default=DEFAULT_CORE_WARNING_DBZ,
-                    ),
-                    urgent_dbz=normalize_optional_int(
-                        cfg.get(CONF_CORE_URGENT_DBZ),
-                        default=DEFAULT_CORE_URGENT_DBZ,
-                    ),
-                    warning_core_distance_km=normalize_optional_int(
-                        cfg.get(CONF_WARNING_CORE_DISTANCE_KM),
-                        default=DEFAULT_WARNING_CORE_DISTANCE_KM,
-                    ),
-                    urgent_core_distance_km=normalize_optional_int(
-                        cfg.get(CONF_URGENT_CORE_DISTANCE_KM),
-                        default=DEFAULT_URGENT_CORE_DISTANCE_KM,
-                    ),
-                    warning_lightning_distance_km=normalize_optional_int(
-                        cfg.get(CONF_WARNING_LIGHTNING_DISTANCE_KM),
-                        default=DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
-                    ),
-                    urgent_lightning_distance_km=normalize_optional_int(
-                        cfg.get(CONF_URGENT_LIGHTNING_DISTANCE_KM),
-                        default=DEFAULT_URGENT_LIGHTNING_DISTANCE_KM,
-                    ),
+                    watch_dbz=watch_dbz,
+                    warning_dbz=warning_dbz,
+                    urgent_dbz=urgent_dbz,
+                    warning_core_distance_km=warning_core_distance_km,
+                    urgent_core_distance_km=urgent_core_distance_km,
+                    warning_lightning_distance_km=warning_lightning_distance_km,
+                    urgent_lightning_distance_km=urgent_lightning_distance_km,
                     lightning_triggered=lightning_triggered,
                     lightning_counter_delta=lightning_counter_delta,
-                    core50_distance_km=core50_distance,
-                    core55_distance_km=core55_distance,
-                    core60_distance_km=core60_distance,
+                    core50_distance_km=watch_distance_km,
+                    core55_distance_km=warning_distance_km,
+                    core60_distance_km=urgent_distance_km,
                 )
 
                 confidence_score, confidence_level = _confidence_from_signals(
@@ -611,6 +828,9 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         core50_distance_km=core50_distance,
                         core55_distance_km=core55_distance,
                         core60_distance_km=core60_distance,
+                        core_watch_distance_km=watch_distance_km,
+                        core_warning_distance_km=warning_distance_km,
+                        core_urgent_distance_km=urgent_distance_km,
                         lightning_distance_km=lightning_distance_km,
                         lightning_azimuth_degrees=lightning_azimuth_degrees,
                         lightning_latitude=lightning_latitude,

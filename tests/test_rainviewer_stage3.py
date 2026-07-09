@@ -201,6 +201,52 @@ async def test_analyze_single_frame_detects_core_near_center() -> None:
 
 
 @pytest.mark.asyncio
+async def test_analyze_single_frame_uses_configured_core_thresholds() -> None:
+    center_lat, center_lon = global_px_to_latlon(10000.4, 10000.4, 7)
+    px, py = latlon_to_global_px(center_lat, center_lon, 7)
+    px_int = int(px)
+    py_int = int(py)
+    local_x = px_int % 512
+    local_y = py_int % 512
+
+    zoom = 7
+    host = "https://tilecache.rainviewer.com"
+    path = "/thresholds"
+    tx0 = px_int // 512
+    ty0 = py_int // 512
+
+    lookup = {(255, 0, 0, 255): 58}
+    tile_url = f"{host}{path}/512/{zoom}/{tx0}/{ty0}/2/1_1.png"
+    tile = _mk_radar_tile(512, lookup, (local_x, local_y), 58)
+    session = FakeSession({tile_url: FakeResponse(200, bytes_payload=tile)})
+
+    frame_result = await analyze_single_radar_frame(
+        session,
+        host,
+        {"time": 123, "path": path},
+        center_lat,
+        center_lon,
+        analysis_radius_km=20,
+        zoom=zoom,
+        color_lookup=lookup,
+        core_watch_dbz=60,
+        core_warning_dbz=65,
+        core_urgent_dbz=70,
+    )
+
+    assert isinstance(frame_result, AnalyzedFrame)
+    assert frame_result.max_dbz == 58
+    assert frame_result.selected_core_threshold_dbz is None
+    assert frame_result.selected_core_distance_km is None
+    assert frame_result.core_watch_distance_km is None
+    assert frame_result.core_warning_distance_km is None
+    assert frame_result.core_urgent_distance_km is None
+    assert frame_result.core50_distance_km is not None
+    assert frame_result.core55_distance_km is not None
+    assert frame_result.core60_distance_km is None
+
+
+@pytest.mark.asyncio
 async def test_analyze_single_frame_clusters_connected_core_pixels() -> None:
     center_lat, center_lon = global_px_to_latlon(10000.4, 10000.4, 7)
     px, py = latlon_to_global_px(center_lat, center_lon, 7)
@@ -240,6 +286,45 @@ async def test_analyze_single_frame_clusters_connected_core_pixels() -> None:
     assert frame_result.selected_core_area_km2 is not None
     assert frame_result.selected_core_area_km2 > 0
     assert frame_result.core_count == 1
+
+
+@pytest.mark.asyncio
+async def test_analyze_single_frame_rejects_single_pixel_noise_with_min_core_pixels() -> None:
+    center_lat, center_lon = global_px_to_latlon(10000.4, 10000.4, 7)
+    px, py = latlon_to_global_px(center_lat, center_lon, 7)
+    px_int = int(px)
+    py_int = int(py)
+    local_x = px_int % 512
+    local_y = py_int % 512
+
+    zoom = 7
+    host = "https://tilecache.rainviewer.com"
+    path = "/noise"
+    tx0 = px_int // 512
+    ty0 = py_int // 512
+
+    lookup = {(255, 0, 0, 255): 62}
+    tile = _mk_radar_tile(512, lookup, (local_x, local_y), 62)
+    tile_url = f"{host}{path}/512/{zoom}/{tx0}/{ty0}/2/1_1.png"
+    session = FakeSession({tile_url: FakeResponse(200, bytes_payload=tile)})
+
+    frame_result = await analyze_single_radar_frame(
+        session,
+        host,
+        {"time": 123, "path": path},
+        center_lat,
+        center_lon,
+        analysis_radius_km=20,
+        zoom=zoom,
+        color_lookup=lookup,
+        min_core_pixels=2,
+    )
+
+    assert isinstance(frame_result, AnalyzedFrame)
+    assert frame_result.max_dbz == 62
+    assert frame_result.selected_core_threshold_dbz is None
+    assert frame_result.selected_core_pixel_count is None
+    assert frame_result.core_count == 0
 
 
 @pytest.mark.asyncio
@@ -283,6 +368,104 @@ async def test_analyze_single_frame_counts_separate_core_components() -> None:
     assert len(frame_result.storm_cores) == 2
     assert frame_result.storm_cores[0]["distance_km"] <= frame_result.storm_cores[1]["distance_km"]
     assert frame_result.storm_cores[0]["bearing_degrees"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_analyze_single_frame_merges_adjacent_cores_across_wrapped_tile_boundary() -> None:
+    zoom = 7
+    tile_size = 512
+    center_px_x = 1.0
+    center_px_y = 256.0
+    center_lat, center_lon = global_px_to_latlon(center_px_x, center_px_y, zoom)
+    center_tx = int(center_px_x // tile_size)
+    center_ty = int(center_px_y // tile_size)
+    assert center_tx == 0
+
+    lookup = {(255, 0, 0, 255): 60}
+    left_tile = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
+    left_tile.putpixel((511, 256), (255, 0, 0, 255))
+    left_buf = io.BytesIO()
+    left_tile.save(left_buf, format="PNG")
+
+    center_tile = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
+    center_tile.putpixel((0, 256), (255, 0, 0, 255))
+    center_buf = io.BytesIO()
+    center_tile.save(center_buf, format="PNG")
+
+    host = "https://tilecache.rainviewer.com"
+    path = "/wrap"
+    session = FakeSession(
+        {
+            f"{host}{path}/512/{zoom}/{center_tx}/{center_ty}/2/1_1.png": FakeResponse(
+                200, bytes_payload=center_buf.getvalue()
+            ),
+            f"{host}{path}/512/{zoom}/127/{center_ty}/2/1_1.png": FakeResponse(
+                200, bytes_payload=left_buf.getvalue()
+            ),
+        }
+    )
+
+    frame_result = await analyze_single_radar_frame(
+        session,
+        host,
+        {"time": 123, "path": path},
+        center_lat,
+        center_lon,
+        analysis_radius_km=1,
+        zoom=zoom,
+        color_lookup=lookup,
+    )
+
+    assert isinstance(frame_result, AnalyzedFrame)
+    assert frame_result.core_count == 1
+    assert frame_result.selected_core_pixel_count == 2
+
+
+@pytest.mark.asyncio
+async def test_analyze_single_frame_keeps_analysis_with_partial_tile_failures() -> None:
+    zoom = 7
+    tile_size = 512
+    center_px_x = 1.0
+    center_px_y = 260.0
+    center_lat, center_lon = global_px_to_latlon(center_px_x, center_px_y, zoom)
+    px, _py = latlon_to_global_px(center_lat, center_lon, zoom)
+    tx0 = int(px // tile_size)
+    ty0 = int(_py // tile_size)
+    assert tx0 == 0
+
+    lookup = {(255, 0, 0, 255): 60}
+    tile = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
+    local_x = int(px % tile_size)
+    local_y = int(_py % tile_size)
+    tile.putpixel((local_x, local_y), (255, 0, 0, 255))
+    tile_buf = io.BytesIO()
+    tile.save(tile_buf, format="PNG")
+
+    host = "https://tilecache.rainviewer.com"
+    path = "/partial"
+    session = FakeSession(
+        {
+            f"{host}{path}/512/{zoom}/127/{ty0}/2/1_1.png": FakeResponse(500),
+            f"{host}{path}/512/{zoom}/{tx0}/{ty0}/2/1_1.png": FakeResponse(
+                200, bytes_payload=tile_buf.getvalue()
+            ),
+        }
+    )
+
+    frame_result = await analyze_single_radar_frame(
+        session,
+        host,
+        {"time": 123, "path": path},
+        center_lat,
+        center_lon,
+        analysis_radius_km=20,
+        zoom=zoom,
+        color_lookup=lookup,
+    )
+
+    assert isinstance(frame_result, AnalyzedFrame)
+    assert frame_result.selected_core_threshold_dbz == 60
+    assert frame_result.selected_core_pixel_count == 1
 
 
 @pytest.mark.asyncio

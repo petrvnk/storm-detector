@@ -48,6 +48,7 @@ The config/options flow exposes bounded number selectors for the main tuning par
 | `core_watch_dbz` | 50 dBZ | 35–75 dBZ | Radar core threshold for `watch`. |
 | `core_warning_dbz` | 55 dBZ | 35–75 dBZ | Radar core threshold for `warning`. |
 | `core_urgent_dbz` | 60 dBZ | 35–75 dBZ | Radar core threshold for `urgent`. |
+| `min_core_pixels` | 2 px | 1–512 px | Minimum connected pixels required to count a core. |
 | `warning_core_distance_km` | 25 km | 1–100 km | Distance for warning-level radar cores. |
 | `urgent_core_distance_km` | 15 km | 1–100 km | Distance for urgent-level radar cores. |
 | `rainviewer_frames` | 4 | 1–8 | Recent radar frames used for current state/trend. |
@@ -62,7 +63,8 @@ Validation also enforces sensible relationships: `watch < warning < urgent` dBZ 
 Every risk entity includes support-oriented attributes that help explain degraded behavior and threshold-aware radar cores:
 
 - `location_source` — `hass.config` or the selected `zone` / `person` / `device_tracker`.
-- `core50_distance_km`, `core55_distance_km`, `core60_distance_km` — distances to threshold-specific radar cores used by the risk model.
+- `core_watch_distance_km`, `core_warning_distance_km`, `core_urgent_distance_km` — authoritative core distances at the configured watch/warning/urgent thresholds used by the risk model.
+- `core50_distance_km`, `core55_distance_km`, `core60_distance_km` — compatibility diagnostics at fixed 50/55/60 dBZ thresholds; they do not override the configured classification thresholds.
 - `selected_core_area_km2`, `selected_core_pixel_count`, `selected_core_max_dbz`, `core_count` — connected-component storm-core metadata used to distinguish compact cores from isolated pixels.
 - `storm_motion_bearing`, `storm_motion_speed_kmh`, `storm_approaching`, `storm_eta_minutes`, `dbz_trend`, `distance_trend` — motion/trend estimate from recent radar frames when enough frame history is available.
 - `lightning_azimuth_degrees`, `lightning_latitude`, `lightning_longitude`, `lightning_core_distance_km` — optional strike-position estimate and radar-core correlation when a lightning azimuth/bearing entity is configured.

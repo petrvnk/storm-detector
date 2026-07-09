@@ -21,7 +21,9 @@ from custom_components.radar_hail_risk.const import (
     ATTR_STALE,
     CONF_ANALYSIS_RADIUS_KM,
     CONF_LOCATION_ENTITY_ID,
+    CONF_MIN_CORE_PIXELS,
     CONF_RAINVIEWER_FRAMES,
+    DEFAULT_MIN_CORE_PIXELS,
     DEFAULT_RAINVIEWER_FRAMES,
     RISK_LEVEL_WARNING,
 )
@@ -171,6 +173,20 @@ def test_parameter_validation_rejects_unsafe_ranges_and_bad_order() -> None:
             "warning_lightning_distance_km": 20,
         }
     ) == {"base": "invalid_trigger_radius"}
+    assert _validate_parameter_ranges({CONF_MIN_CORE_PIXELS: 0}) == {
+        CONF_MIN_CORE_PIXELS: "invalid_range"
+    }
+
+
+@pytest.mark.asyncio
+async def test_options_flow_sets_min_core_pixels_with_defaults_and_range() -> None:
+    flow = RadarHailRiskOptionsFlowHandler(FakeEntry())
+
+    assert flow._current_options()[CONF_MIN_CORE_PIXELS] == DEFAULT_MIN_CORE_PIXELS
+
+    result = await flow.async_step_init({CONF_MIN_CORE_PIXELS: DEFAULT_MIN_CORE_PIXELS + 1})
+    assert result["title"] == "Radar Hail Risk"
+    assert result["data"][CONF_MIN_CORE_PIXELS] == DEFAULT_MIN_CORE_PIXELS + 1
 
 
 @pytest.mark.asyncio

@@ -46,6 +46,7 @@ from .const import (
     CONF_LIGHTNING_TRIGGER_RADIUS_KM,
     CONF_LOCATION_ENTITY_ID,
     CONF_MIN_ANALYSIS_INTERVAL_SECONDS,
+    CONF_MIN_CORE_PIXELS,
     CONF_RAINVIEWER_FRAMES,
     CONF_RAINVIEWER_ZOOM,
     CONF_STALE_CLEAR_SECONDS,
@@ -59,6 +60,7 @@ from .const import (
     DEFAULT_CORE_WATCH_DBZ,
     DEFAULT_LIGHTNING_TRIGGER_RADIUS_KM,
     DEFAULT_MIN_ANALYSIS_INTERVAL_SECONDS,
+    DEFAULT_MIN_CORE_PIXELS,
     DEFAULT_RAINVIEWER_FRAMES,
     DEFAULT_RAINVIEWER_ZOOM,
     DEFAULT_STALE_CLEAR_SECONDS,
@@ -172,6 +174,9 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
             ): _number_selector(CONF_CORE_WARNING_DBZ),
             _number_key(CONF_CORE_URGENT_DBZ, DEFAULT_CORE_URGENT_DBZ): _number_selector(
                 CONF_CORE_URGENT_DBZ
+            ),
+            _number_key(CONF_MIN_CORE_PIXELS, DEFAULT_MIN_CORE_PIXELS): _number_selector(
+                CONF_MIN_CORE_PIXELS
             ),
             _number_key(
                 CONF_MIN_ANALYSIS_INTERVAL_SECONDS,

@@ -24,6 +24,7 @@ CONF_CORE_WARNING_DBZ: Final = "core_warning_dbz"
 CONF_CORE_URGENT_DBZ: Final = "core_urgent_dbz"
 CONF_WARNING_CORE_DISTANCE_KM: Final = "warning_core_distance_km"
 CONF_URGENT_CORE_DISTANCE_KM: Final = "urgent_core_distance_km"
+CONF_MIN_CORE_PIXELS: Final = "min_core_pixels"
 CONF_WARNING_LIGHTNING_DISTANCE_KM: Final = "warning_lightning_distance_km"
 CONF_URGENT_LIGHTNING_DISTANCE_KM: Final = "urgent_lightning_distance_km"
 
@@ -38,6 +39,7 @@ DEFAULT_CORE_WARNING_DBZ: Final = 55
 DEFAULT_CORE_URGENT_DBZ: Final = 60
 DEFAULT_WARNING_CORE_DISTANCE_KM: Final = 25
 DEFAULT_URGENT_CORE_DISTANCE_KM: Final = 15
+DEFAULT_MIN_CORE_PIXELS: Final = 2
 DEFAULT_WARNING_LIGHTNING_DISTANCE_KM: Final = 20
 DEFAULT_URGENT_LIGHTNING_DISTANCE_KM: Final = 8
 
@@ -53,6 +55,7 @@ OPTIONAL_CONF_DEFAULTS: Final = {
     CONF_CORE_URGENT_DBZ: DEFAULT_CORE_URGENT_DBZ,
     CONF_WARNING_CORE_DISTANCE_KM: DEFAULT_WARNING_CORE_DISTANCE_KM,
     CONF_URGENT_CORE_DISTANCE_KM: DEFAULT_URGENT_CORE_DISTANCE_KM,
+    CONF_MIN_CORE_PIXELS: DEFAULT_MIN_CORE_PIXELS,
     CONF_WARNING_LIGHTNING_DISTANCE_KM: DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
     CONF_URGENT_LIGHTNING_DISTANCE_KM: DEFAULT_URGENT_LIGHTNING_DISTANCE_KM,
 }
@@ -69,6 +72,7 @@ PARAMETER_SPECS: Final = {
     CONF_CORE_URGENT_DBZ: {"min": 35, "max": 75, "step": 1, "unit": "dBZ"},
     CONF_WARNING_CORE_DISTANCE_KM: {"min": 1, "max": 100, "step": 1, "unit": "km"},
     CONF_URGENT_CORE_DISTANCE_KM: {"min": 1, "max": 100, "step": 1, "unit": "km"},
+    CONF_MIN_CORE_PIXELS: {"min": 1, "max": 512, "step": 1, "unit": "px"},
     CONF_WARNING_LIGHTNING_DISTANCE_KM: {"min": 1, "max": 100, "step": 1, "unit": "km"},
     CONF_URGENT_LIGHTNING_DISTANCE_KM: {"min": 1, "max": 100, "step": 1, "unit": "km"},
 }
@@ -80,6 +84,9 @@ ATTR_CORE_DISTANCE_KM: Final = "core_distance_km"
 ATTR_CORE50_DISTANCE_KM: Final = "core50_distance_km"
 ATTR_CORE55_DISTANCE_KM: Final = "core55_distance_km"
 ATTR_CORE60_DISTANCE_KM: Final = "core60_distance_km"
+ATTR_CORE_WATCH_DISTANCE_KM: Final = "core_watch_distance_km"
+ATTR_CORE_WARNING_DISTANCE_KM: Final = "core_warning_distance_km"
+ATTR_CORE_URGENT_DISTANCE_KM: Final = "core_urgent_distance_km"
 ATTR_LIGHTNING_DISTANCE_KM: Final = "lightning_distance_km"
 ATTR_LIGHTNING_AZIMUTH_DEGREES: Final = "lightning_azimuth_degrees"
 ATTR_LIGHTNING_LATITUDE: Final = "lightning_latitude"
