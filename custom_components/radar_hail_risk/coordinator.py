@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
+from .async_utils import drain_future
 from .const import (
     ATTR_CONFIDENCE_LEVEL,
     ATTR_CONFIDENCE_SCORE,
@@ -24,6 +26,7 @@ from .const import (
     ATTR_FRAME_AGE_SECONDS,
     ATTR_FRAME_TIME,
     ATTR_FRAMES_ANALYZED,
+    ATTR_HAS_CURRENT_SIGNAL,
     ATTR_LAST_ERROR,
     ATTR_LIGHTNING_AZIMUTH_DEGREES,
     ATTR_LIGHTNING_CORE_DISTANCE_KM,
@@ -32,6 +35,7 @@ from .const import (
     ATTR_LIGHTNING_DISTANCE_KM,
     ATTR_LIGHTNING_LATITUDE,
     ATTR_LIGHTNING_LONGITUDE,
+    ATTR_LIGHTNING_NEW_STRIKE,
     ATTR_LIGHTNING_TRIGGERED,
     ATTR_LOCATION_SOURCE,
     ATTR_MAX_DBZ,
@@ -95,6 +99,7 @@ from .lightning import (
 from .rainviewer import analyze_recent_frames, fetch_radar_metadata, fetch_rainviewer_color_lookup
 from .risk import (
     HailRiskResult,
+    RiskLevelHysteresis,
     build_summary,
     classify_from_thresholds,
     normalize_optional_float,
@@ -109,9 +114,17 @@ except Exception:  # pragma: no cover
     UpdateFailed = FallbackUpdateFailed  # type: ignore[assignment]
 
 try:  # pragma: no cover
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+except Exception:  # pragma: no cover
+    async_get_clientsession = None  # type: ignore[assignment]
+
+try:  # pragma: no cover
     import aiohttp
 except Exception:  # pragma: no cover
     aiohttp = None  # type: ignore[assignment]
+
+
+RADAR_ANALYSIS_DEADLINE_SECONDS = 45.0
 
 
 async def _await_if_needed(value: Any) -> Any:
@@ -120,6 +133,32 @@ async def _await_if_needed(value: Any) -> Any:
     if inspect.isawaitable(value):
         return await value
     return value
+
+
+async def _await_task_with_deadline(
+    task: asyncio.Task[Any],
+    *,
+    timeout: float,
+) -> Any:
+    """Apply an update deadline and drain the child before returning."""
+
+    try:
+        return await asyncio.wait_for(task, timeout=timeout)
+    except asyncio.TimeoutError:
+        if not task.done():
+            task.cancel()
+        cleanup = asyncio.create_task(drain_future(task))
+        try:
+            await asyncio.shield(cleanup)
+        except asyncio.CancelledError:
+            await drain_future(cleanup)
+            raise
+        raise
+    except asyncio.CancelledError:
+        if not task.done():
+            task.cancel()
+        await drain_future(task)
+        raise
 
 
 _MISSING = object()
@@ -309,6 +348,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
         self._session_factory = session_factory
         self._lightning_source: HomeAssistantLightningSource | None = None
         self._lightning_source_key: tuple[str, ...] | None = None
+        self._risk_hysteresis = RiskLevelHysteresis(confirmations=2)
         self._update_count = 0
 
         config = self._effective_config()
@@ -316,12 +356,13 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             config.get(CONF_MIN_ANALYSIS_INTERVAL_SECONDS),
             default=DEFAULT_MIN_ANALYSIS_INTERVAL_SECONDS,
         )
-        super().__init__(
-            hass,
-            logger,
-            name=name,
-            update_interval=timedelta(seconds=max(interval, 30)),
-        )
+        coordinator_kwargs: dict[str, Any] = {
+            "name": name,
+            "update_interval": timedelta(seconds=max(interval, 30)),
+        }
+        if "config_entry" in inspect.signature(DataUpdateCoordinator.__init__).parameters:
+            coordinator_kwargs["config_entry"] = entry if hasattr(entry, "state") else None
+        super().__init__(hass, logger, **coordinator_kwargs)
 
     def _effective_config(self) -> dict[str, Any]:
         config: dict[str, Any] = {}
@@ -411,7 +452,9 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             ATTR_CONFIDENCE_SCORE: result.confidence_score,
             ATTR_CONFIDENCE_LEVEL: result.confidence_level,
             ATTR_LIGHTNING_TRIGGERED: result.has_lightning_trigger,
+            ATTR_LIGHTNING_NEW_STRIKE: result.has_lightning_new_strike,
             ATTR_LIGHTNING_COUNTER_DELTA: result.lightning_counter_delta,
+            ATTR_HAS_CURRENT_SIGNAL: result.has_current_signal,
             ATTR_LIGHTNING_DIAGNOSTICS: extras.get(ATTR_LIGHTNING_DIAGNOSTICS)
             if extras
             else (),
@@ -466,7 +509,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
         """Fetch sources, degrade per-source, and publish one resilient payload."""
 
         self._update_count += 1
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         location_lat, location_lon, location_source, location_error = self._location()
         if location_error is not None:
             return self._payload(
@@ -489,7 +532,10 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             )
 
         if self._session_factory is None:
-            if aiohttp is None:
+            if async_get_clientsession is not None:
+                session_ctx = async_get_clientsession(self.hass)
+                close_session = False
+            elif aiohttp is None:
                 return self._payload(
                     HailRiskResult(
                         level=RISK_LEVEL_UNAVAILABLE,
@@ -499,15 +545,16 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         diagnostics=("missing_aiohttp_dependency",),
                     )
                 )
-            session_ctx = aiohttp.ClientSession()
-            close_session = True
+            else:
+                session_ctx = aiohttp.ClientSession()
+                close_session = True
         else:
             session_ctx = self._session_factory()
             close_session = False
 
-        use_cm = callable(getattr(session_ctx, "__aenter__", None)) and callable(
-            getattr(session_ctx, "__aexit__", None)
-        )
+        use_cm = (self._session_factory is not None or close_session) and callable(
+            getattr(session_ctx, "__aenter__", None)
+        ) and callable(getattr(session_ctx, "__aexit__", None))
 
         try:
             async def _run_with_session(session: Any) -> dict[str, Any]:
@@ -541,13 +588,13 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     if not color_lookup:
                         radar_diagnostics.append("missing_color_lookup")
 
-                    try:
-                        analysis = await _await_if_needed(
-                                analyze_recent_frames(
-                                    session,
-                                    meta,
-                                    center_latitude,
-                                    center_longitude,
+                    analysis_task = asyncio.create_task(
+                        _await_if_needed(
+                            analyze_recent_frames(
+                                session,
+                                meta,
+                                center_latitude,
+                                center_longitude,
                                 analysis_radius_km=normalize_optional_float(
                                     cfg.get(CONF_ANALYSIS_RADIUS_KM),
                                     default=50.0,
@@ -580,6 +627,15 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                                 now=int(now.timestamp()),
                             )
                         )
+                    )
+                    try:
+                        analysis = await _await_task_with_deadline(
+                            analysis_task,
+                            timeout=RADAR_ANALYSIS_DEADLINE_SECONDS,
+                        )
+                    except asyncio.TimeoutError:
+                        analysis = None
+                        radar_diagnostics.append("radar_analysis_timeout")
                     except Exception:
                         analysis = None
                         radar_diagnostics.append("radar_analysis_error")
@@ -711,13 +767,16 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                 lightning_core_distance_km = None
                 lightning_counter_delta = None
                 lightning_triggered = False
+                lightning_new_strike = False
                 lightning_stale = False
                 if lightning_snapshot is None:
                     lightning_diagnostics = ("lightning_not_configured",)
                 else:
                     lightning_stale = bool(lightning_snapshot.is_stale)
                     lightning_diagnostics = tuple(lightning_snapshot.diagnostics)
-                    if not lightning_stale:
+                    distance_current = "stale_distance_entity" not in lightning_diagnostics
+                    counter_current = "stale_counter_entity" not in lightning_diagnostics
+                    if distance_current:
                         lightning_distance_km = lightning_snapshot.distance_km
                         lightning_azimuth_degrees = lightning_snapshot.azimuth_degrees
                         if lightning_distance_km is not None and lightning_azimuth_degrees is not None:
@@ -734,11 +793,10 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                                     selected_lat,
                                     selected_lon,
                                 )
+                        lightning_triggered = bool(lightning_snapshot.proximity_active)
+                    if counter_current:
                         lightning_counter_delta = lightning_snapshot.counter_delta
-                        lightning_triggered = bool(lightning_snapshot.trigger_active)
-                        if lightning_triggered:
-                            lightning_counter_delta = None
-
+                    lightning_new_strike = bool(lightning_snapshot.new_strike_nearby)
 
                 summary_lightning_diagnostics = () if lightning_stale else user_visible_diagnostics(
                     tuple(lightning_diagnostics)
@@ -779,7 +837,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     None if radar_stale or analysis is None else (max_core_dbz or 0)
                 )
 
-                level = classify_from_thresholds(
+                candidate_level = classify_from_thresholds(
                     max_dbz=level_max_dbz,
                     core_distance_km=None,
                     lightning_distance_km=lightning_distance_km,
@@ -792,9 +850,48 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     urgent_lightning_distance_km=urgent_lightning_distance_km,
                     lightning_triggered=lightning_triggered,
                     lightning_counter_delta=lightning_counter_delta,
+                    lightning_new_strike=lightning_new_strike,
                     core50_distance_km=watch_distance_km,
                     core55_distance_km=warning_distance_km,
                     core60_distance_km=urgent_distance_km,
+                )
+
+                radar_level = classify_from_thresholds(
+                    max_dbz=level_max_dbz,
+                    core_distance_km=None,
+                    lightning_distance_km=None,
+                    watch_dbz=watch_dbz,
+                    warning_dbz=warning_dbz,
+                    urgent_dbz=urgent_dbz,
+                    warning_core_distance_km=warning_core_distance_km,
+                    urgent_core_distance_km=urgent_core_distance_km,
+                    warning_lightning_distance_km=warning_lightning_distance_km,
+                    urgent_lightning_distance_km=urgent_lightning_distance_km,
+                    core50_distance_km=watch_distance_km,
+                    core55_distance_km=warning_distance_km,
+                    core60_distance_km=urgent_distance_km,
+                )
+                lightning_level = classify_from_thresholds(
+                    max_dbz=None,
+                    core_distance_km=None,
+                    lightning_distance_km=lightning_distance_km,
+                    watch_dbz=watch_dbz,
+                    warning_dbz=warning_dbz,
+                    urgent_dbz=urgent_dbz,
+                    warning_core_distance_km=warning_core_distance_km,
+                    urgent_core_distance_km=urgent_core_distance_km,
+                    warning_lightning_distance_km=warning_lightning_distance_km,
+                    urgent_lightning_distance_km=urgent_lightning_distance_km,
+                    lightning_triggered=lightning_triggered,
+                    lightning_counter_delta=lightning_counter_delta,
+                    lightning_new_strike=lightning_new_strike,
+                )
+                has_current_signal = radar_level not in ("none", "unavailable") or (
+                    lightning_level not in ("none", "unavailable")
+                )
+                level = self._risk_hysteresis.update(
+                    candidate_level,
+                    force=candidate_level == "unavailable" or lightning_new_strike,
                 )
 
                 confidence_score, confidence_level = _confidence_from_signals(
@@ -859,7 +956,9 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         last_error=", ".join(diagnostics) if diagnostics else None,
                         is_stale=source_data_stale,
                         has_lightning_trigger=lightning_triggered,
+                        has_lightning_new_strike=lightning_new_strike,
                         lightning_counter_delta=lightning_counter_delta,
+                        has_current_signal=has_current_signal,
                         diagnostics=tuple(diagnostics),
                     ),
                     extras={
@@ -931,7 +1030,13 @@ def _lightning_source_status(
         return "not_configured"
     if is_stale:
         return "stale"
-    actionable = [item for item in diagnostics_tuple if item != "lightning_not_configured"]
+    non_actionable = {
+        "lightning_not_configured",
+        "lightning_strike_delta",
+        "lightning_counter_delta",
+        "lightning_counter_reset",
+    }
+    actionable = [item for item in diagnostics_tuple if item not in non_actionable]
     if actionable:
         return "degraded"
     return "ok"
@@ -946,6 +1051,7 @@ def _degradation_reasons(
         "lightning_not_configured",
         "lightning_strike_delta",
         "lightning_counter_delta",
+        "lightning_counter_reset",
     }
     return tuple(
         dict.fromkeys(

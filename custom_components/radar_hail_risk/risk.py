@@ -20,6 +20,7 @@ INTERNAL_EVENT_DIAGNOSTICS = frozenset(
     {
         "lightning_strike_delta",
         "lightning_counter_delta",
+        "lightning_counter_reset",
         "lightning_not_configured",
     }
 )
@@ -36,6 +37,49 @@ def user_visible_diagnostics(diagnostics: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(
         diagnostic for diagnostic in diagnostics if diagnostic not in INTERNAL_EVENT_DIAGNOSTICS
     )
+
+
+class RiskLevelHysteresis:
+    """Confirm level changes while emitting one stable deduplicated state."""
+
+    def __init__(self, *, confirmations: int = 2) -> None:
+        self.confirmations = max(1, int(confirmations))
+        self._stable: RiskLevel | None = None
+        self._initialized_valid = False
+        self._pending: RiskLevel | None = None
+        self._pending_count = 0
+
+    def update(self, candidate: RiskLevel, *, force: bool = False) -> RiskLevel:
+        """Return the stable level after applying confirmation semantics."""
+
+        if candidate == "unavailable" or force:
+            self._stable = candidate
+            if candidate != "unavailable":
+                self._initialized_valid = True
+            self._pending = None
+            self._pending_count = 0
+            return candidate
+        if not self._initialized_valid:
+            self._stable = candidate
+            self._initialized_valid = True
+            self._pending = None
+            self._pending_count = 0
+            return candidate
+        assert self._stable is not None
+        if candidate == self._stable:
+            self._pending = None
+            self._pending_count = 0
+            return self._stable
+        if candidate == self._pending:
+            self._pending_count += 1
+        else:
+            self._pending = candidate
+            self._pending_count = 1
+        if self._pending_count >= self.confirmations:
+            self._stable = candidate
+            self._pending = None
+            self._pending_count = 0
+        return self._stable
 
 
 @dataclass(frozen=True)
@@ -80,7 +124,9 @@ class HailRiskResult:
     last_error: str | None = None
     is_stale: bool = False
     has_lightning_trigger: bool = False
+    has_lightning_new_strike: bool = False
     lightning_counter_delta: int | None = None
+    has_current_signal: bool = False
     diagnostics: tuple[str, ...] = ()
 
 
@@ -98,6 +144,7 @@ def classify_from_thresholds(
     urgent_lightning_distance_km: int,
     lightning_triggered: bool | None = None,
     lightning_counter_delta: int | None = None,
+    lightning_new_strike: bool = False,
     core50_distance_km: float | None = None,
     core55_distance_km: float | None = None,
     core60_distance_km: float | None = None,
@@ -115,11 +162,12 @@ def classify_from_thresholds(
         return "unavailable"
 
     if (
-        lightning_triggered
+        lightning_new_strike
+        and lightning_triggered
         and lightning_distance_km is not None
         and lightning_distance_km <= warning_lightning_distance_km
     ):
-        # Explicit trigger is user-visible and should always surface as at least warning.
+        # A new nearby strike is event evidence; proximity by itself remains warning.
         if (
             lightning_distance_km is not None
             and lightning_distance_km <= urgent_lightning_distance_km
@@ -129,8 +177,6 @@ def classify_from_thresholds(
         return RISK_LEVEL_WARNING
 
     if core60_distance_km is not None and core60_distance_km <= urgent_core_distance_km:
-        return RISK_LEVEL_URGENT
-    if lightning_distance_km is not None and lightning_distance_km <= urgent_lightning_distance_km:
         return RISK_LEVEL_URGENT
 
     if core60_distance_km is not None and core60_distance_km <= warning_core_distance_km:

@@ -368,6 +368,8 @@ async def test_analyze_single_frame_counts_separate_core_components() -> None:
     assert len(frame_result.storm_cores) == 2
     assert frame_result.storm_cores[0]["distance_km"] <= frame_result.storm_cores[1]["distance_km"]
     assert frame_result.storm_cores[0]["bearing_degrees"] >= 0
+    assert "centroid_latitude" in frame_result.storm_cores[0]
+    assert "centroid_longitude" in frame_result.storm_cores[0]
 
 
 @pytest.mark.asyncio

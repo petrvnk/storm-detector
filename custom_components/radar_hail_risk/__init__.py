@@ -79,10 +79,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry and release shared state."""
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    entry_data = hass.data.get(DOMAIN, {})
-    entry_data.pop(entry.entry_id, None)
-    if not entry_data:
-        hass.data.pop(DOMAIN, None)
+    if unload_ok:
+        entry_data = hass.data.get(DOMAIN, {})
+        entry_data.pop(entry.entry_id, None)
     return unload_ok
 
 

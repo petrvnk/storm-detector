@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from .const import (
+    ATTR_HAS_CURRENT_SIGNAL,
     ATTR_LEVEL,
+    ATTR_LIGHTNING_NEW_STRIKE,
     ATTR_LIGHTNING_TRIGGERED,
     ATTR_STALE,
     DATA_KEY_RESULT,
@@ -101,7 +103,8 @@ class RadarHailRiskActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity
         level = data.get(ATTR_LEVEL)
         if level in (RISK_LEVEL_NONE, RISK_LEVEL_UNAVAILABLE):
             return False
-        return level is not None
+        has_current_signal = data.get(ATTR_HAS_CURRENT_SIGNAL)
+        return level is not None and has_current_signal is not False
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -126,6 +129,8 @@ class RadarHailRiskActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity
             return {}
         return {
             ATTR_LIGHTNING_TRIGGERED: bool(data.get(ATTR_LIGHTNING_TRIGGERED, False)),
+            ATTR_LIGHTNING_NEW_STRIKE: bool(data.get(ATTR_LIGHTNING_NEW_STRIKE, False)),
+            ATTR_HAS_CURRENT_SIGNAL: bool(data.get(ATTR_HAS_CURRENT_SIGNAL, False)),
             ATTR_LEVEL: data.get(ATTR_LEVEL),
             ATTR_STALE: bool(data.get(ATTR_STALE, False)),
         }

@@ -119,6 +119,20 @@ class ReadOnlyConfigEntryOptionsFlow(RadarHailRiskOptionsFlowHandler):
         return object()
 
 
+def _schema_default(schema: object, field_name: str) -> object:
+    """Read a field default from either a fallback dict or voluptuous schema."""
+
+    schema_mapping = getattr(schema, "schema", schema)
+    if not isinstance(schema_mapping, dict):
+        raise AssertionError("Expected a mapping-backed options schema")
+    for marker, value in schema_mapping.items():
+        if getattr(marker, "schema", marker) != field_name:
+            continue
+        default = getattr(marker, "default", None)
+        return default() if callable(default) else (value if default is None else default)
+    raise AssertionError(f"Missing schema field: {field_name}")
+
+
 def test_options_flow_does_not_assign_home_assistant_config_entry_property() -> None:
     flow = ReadOnlyConfigEntryOptionsFlow(FakeEntry())
 
@@ -132,9 +146,9 @@ async def test_options_flow_uses_existing_options_as_defaults() -> None:
     result = await flow.async_step_init()
 
     schema = result["data_schema"]
-    assert schema[CONF_ANALYSIS_RADIUS_KM] == 40
-    assert schema[CONF_RAINVIEWER_FRAMES] == 2
-    assert schema[CONF_RAINVIEWER_FRAMES] != DEFAULT_RAINVIEWER_FRAMES
+    assert _schema_default(schema, CONF_ANALYSIS_RADIUS_KM) == 40
+    assert _schema_default(schema, CONF_RAINVIEWER_FRAMES) == 2
+    assert _schema_default(schema, CONF_RAINVIEWER_FRAMES) != DEFAULT_RAINVIEWER_FRAMES
 
 
 @pytest.mark.asyncio
@@ -147,7 +161,7 @@ async def test_options_flow_exposes_location_source_default() -> None:
     result = await flow.async_step_init()
 
     schema = result["data_schema"]
-    assert schema[CONF_LOCATION_ENTITY_ID] == "zone.home"
+    assert _schema_default(schema, CONF_LOCATION_ENTITY_ID) == "zone.home"
 
 
 def test_parameter_validation_rejects_unsafe_ranges_and_bad_order() -> None:

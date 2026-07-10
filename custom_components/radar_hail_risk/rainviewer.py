@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import functools
 import io
 import json
 import math
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, TypeVar
+
+from .async_utils import drain_future
 
 try:  # pragma: no cover - optional image dependency for runtime decode.
     from PIL import Image
@@ -32,9 +35,32 @@ RAINVIEWER_COLOR_SCHEME = "Universal Blue"
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 20
 DEFAULT_RETRY_ATTEMPTS = 1
 DEFAULT_RETRY_BACKOFF_SECONDS = 0.25
+MAX_PARALLEL_TILE_FETCHES = 4
+MAX_TRACK_SPEED_KMH = 180.0
+MAX_TRACK_INTENSITY_DELTA_DBZ = 15
+MIN_TRACK_DISTANCE_KM = 2.0
+
+_T = TypeVar("_T")
 
 _METADATA_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _COLOR_TABLE_CACHE: dict[str, tuple[float, dict[tuple[int, int, int, int], int]]] = {}
+
+
+async def _run_in_executor_and_drain(
+    function: Callable[..., _T],
+    /,
+    *args: Any,
+    **kwargs: Any,
+) -> _T:
+    """Run CPU work off-loop and wait for the worker before propagating cancellation."""
+
+    loop = asyncio.get_running_loop()
+    worker = loop.run_in_executor(None, functools.partial(function, *args, **kwargs))
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        await drain_future(worker)
+        raise
 
 
 @dataclass(frozen=True)
@@ -62,6 +88,19 @@ class StormMotion:
     eta_minutes: int | None
     dbz_trend: str | None
     distance_trend: str | None
+
+
+@dataclass(frozen=True)
+class _CoreTrackSample:
+    """One normalized component sample used for temporal matching."""
+
+    frame_time: int
+    threshold_dbz: int
+    max_dbz: int
+    distance_km: float
+    latitude: float
+    longitude: float
+    is_selected: bool
 
 
 @dataclass(frozen=True)
@@ -96,6 +135,8 @@ class AnalyzedFrame:
     selected_core_distance_km: float | None
     selected_core_latitude: float | None
     selected_core_longitude: float | None
+    selected_core_centroid_latitude: float | None
+    selected_core_centroid_longitude: float | None
     storm_cores: tuple[dict[str, int | float], ...]
     core_count: int
     analyzed_pixels: int
@@ -603,6 +644,52 @@ def _decode_dbz_grid(
     return rows
 
 
+def _tile_points_from_bytes(
+    tile_bytes: bytes,
+    color_lookup: dict[tuple[int, int, int, int], int],
+    *,
+    tile_x: int,
+    wrapped_x: int,
+    tile_y: int,
+    center_latitude: float,
+    center_longitude: float,
+    analysis_radius_km: float,
+    zoom: int,
+    tile_size: int,
+) -> dict[tuple[int, int], tuple[int, float, float, float]]:
+    """Decode one tile and collect in-radius radar points in a worker thread."""
+
+    tile_grid = _decode_dbz_grid(tile_bytes, color_lookup)
+    tile_origin_x = wrapped_x * tile_size
+    tile_origin_y = tile_y * tile_size
+    if wrapped_x != tile_x:
+        tile_origin_x = tile_x * tile_size
+
+    points: dict[tuple[int, int], tuple[int, float, float, float]] = {}
+    for local_y, row in enumerate(tile_grid):
+        for local_x, dbz_value in enumerate(row):
+            if dbz_value is None:
+                continue
+            global_x = tile_origin_x + local_x
+            global_y = tile_origin_y + local_y
+            pixel_lat, pixel_lon = global_px_to_latlon(global_x, global_y, zoom, tile_size)
+            distance = haversine_km(
+                pixel_lat,
+                pixel_lon,
+                center_latitude,
+                center_longitude,
+            )
+            if distance > analysis_radius_km:
+                continue
+            points[(int(global_x), int(global_y))] = (
+                int(dbz_value),
+                float(pixel_lat),
+                float(pixel_lon),
+                float(distance),
+            )
+    return points
+
+
 def _component_cores_from_points(
     points: dict[tuple[int, int], tuple[int, float, float, float]],
     *,
@@ -691,6 +778,8 @@ def _storm_core_summaries(
                 ),
                 "latitude": round(float(core.nearest_latitude), 6),
                 "longitude": round(float(core.nearest_longitude), 6),
+                "centroid_latitude": round(float(core.centroid_latitude), 6),
+                "centroid_longitude": round(float(core.centroid_longitude), 6),
                 "area_km2": round(float(core.area_km2), 3),
                 "pixel_count": int(core.pixel_count),
             }
@@ -742,6 +831,8 @@ def _analyse_dbz_grid(
             selected_core_distance_km=None,
             selected_core_latitude=None,
             selected_core_longitude=None,
+            selected_core_centroid_latitude=None,
+            selected_core_centroid_longitude=None,
             storm_cores=(),
             core_count=0,
             analyzed_pixels=0,
@@ -851,6 +942,8 @@ def _analyse_dbz_grid(
         selected_distance = None
         selected_lat = None
         selected_lon = None
+        selected_centroid_lat = None
+        selected_centroid_lon = None
     else:
         selected_area = selected_core.area_km2
         selected_pixels = selected_core.pixel_count
@@ -860,6 +953,8 @@ def _analyse_dbz_grid(
         selected_distance = selected_core.distance_km
         selected_lat = selected_core.nearest_latitude
         selected_lon = selected_core.nearest_longitude
+        selected_centroid_lat = selected_core.centroid_latitude
+        selected_centroid_lon = selected_core.centroid_longitude
 
     storm_cores = _storm_core_summaries(
         cores_watch,
@@ -896,6 +991,8 @@ def _analyse_dbz_grid(
         selected_core_distance_km=selected_distance,
         selected_core_latitude=selected_lat,
         selected_core_longitude=selected_lon,
+        selected_core_centroid_latitude=selected_centroid_lat,
+        selected_core_centroid_longitude=selected_centroid_lon,
         storm_cores=storm_cores,
         core_count=len(cores_watch),
         analyzed_pixels=analyzed_pixels,
@@ -952,58 +1049,70 @@ async def analyze_single_radar_frame(
     span = _tile_span_for_radius(analysis_radius_km, center_latitude, zoom, tile_size)
     tile_count = _tile_count(zoom)
 
-    points: dict[tuple[int, int], tuple[int, float, float, float]] = {}
-
+    tile_specs: list[tuple[int, int, int, str]] = []
     for tile_y in range(center_ty - span, center_ty + span + 1):
         if tile_y < 0 or tile_y >= tile_count:
             continue
-
         for tile_x in range(center_tx - span, center_tx + span + 1):
             wrapped_x = tile_x % tile_count
             tile_url = _select_frame_url(host, path, zoom, wrapped_x, tile_y, tile_size)
+            tile_specs.append((tile_x, wrapped_x, tile_y, tile_url))
+
+    fetch_limit = asyncio.Semaphore(MAX_PARALLEL_TILE_FETCHES)
+
+    async def fetch_tile_points(
+        spec: tuple[int, int, int, str],
+    ) -> dict[tuple[int, int], tuple[int, float, float, float]]:
+        tile_x, wrapped_x, tile_y, tile_url = spec
+        async with fetch_limit:
             tile_bytes = await _fetch_tile_bytes(session, tile_url, timeout=timeout)
             if not tile_bytes:
-                continue
-
+                return {}
             try:
-                tile_grid = _decode_dbz_grid(tile_bytes, color_lookup)
+                return await _run_in_executor_and_drain(
+                    _tile_points_from_bytes,
+                    tile_bytes,
+                    color_lookup,
+                    tile_x=tile_x,
+                    wrapped_x=wrapped_x,
+                    tile_y=tile_y,
+                    center_latitude=center_latitude,
+                    center_longitude=center_longitude,
+                    analysis_radius_km=analysis_radius_km,
+                    zoom=zoom,
+                    tile_size=tile_size,
+                )
             except Exception:
-                continue
+                return {}
 
-            tile_origin_x = wrapped_x * tile_size
-            tile_origin_y = tile_y * tile_size
-            if wrapped_x != tile_x:
-                # Keep deterministic offset for longitude-wrap edges.
-                tile_origin_x = (tile_x * tile_size)
+    tile_tasks = [asyncio.create_task(fetch_tile_points(spec)) for spec in tile_specs]
+    try:
+        tile_point_maps = await asyncio.gather(*tile_tasks)
+    except asyncio.CancelledError:
+        await drain_future(asyncio.gather(*tile_tasks, return_exceptions=True))
+        raise
+    except BaseException:
+        unfinished = [task for task in tile_tasks if not task.done()]
+        for task in unfinished:
+            task.cancel()
+        if unfinished:
+            cleanup = asyncio.gather(*tile_tasks, return_exceptions=True)
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                await drain_future(cleanup)
+                raise
+        raise
 
-            for local_y, row in enumerate(tile_grid):
-                for local_x, dbz_value in enumerate(row):
-                    if dbz_value is None:
-                        continue
-                    global_x = tile_origin_x + local_x
-                    global_y = tile_origin_y + local_y
-                    pixel_lat, pixel_lon = global_px_to_latlon(
-                        global_x, global_y, zoom, tile_size
-                    )
-                    distance = haversine_km(
-                        pixel_lat,
-                        pixel_lon,
-                        center_latitude,
-                        center_longitude,
-                    )
-                    if distance > analysis_radius_km:
-                        continue
-                    points[(int(global_x), int(global_y))] = (
-                        int(dbz_value),
-                        float(pixel_lat),
-                        float(pixel_lon),
-                        float(distance),
-                    )
+    points: dict[tuple[int, int], tuple[int, float, float, float]] = {}
+    for tile_points in tile_point_maps:
+        points.update(tile_points)
 
     if not points:
         return None
 
-    return _analyse_dbz_grid(
+    return await _run_in_executor_and_drain(
+        _analyse_dbz_grid,
         points,
         center_latitude,
         center_longitude,
@@ -1061,45 +1170,151 @@ def _trend_from_delta(delta: float, *, deadband: float, positive: str, negative:
     return "stable"
 
 
-def _motion_from_frame_results(frame_results: list[AnalyzedFrame]) -> StormMotion:
-    """Estimate motion/trend from newest-to-oldest analyzed frames."""
+def _component_samples(frame: AnalyzedFrame) -> list[_CoreTrackSample]:
+    """Normalize the frame's component summaries for matching."""
 
-    if len(frame_results) < 2:
-        return StormMotion(None, None, None, None, None, None)
-
-    latest = frame_results[0]
-    latest_sample = _selected_core_sample(latest)
-    if latest_sample is None:
-        return StormMotion(None, None, None, None, None, None)
-
-    threshold, latest_distance, latest_lat, latest_lon = latest_sample
-    previous: tuple[AnalyzedFrame, tuple[int, float, float, float]] | None = None
-    for frame in frame_results[1:]:
-        sample = _selected_core_sample(frame)
-        if sample is None:
+    samples: list[_CoreTrackSample] = []
+    for core in frame.storm_cores:
+        try:
+            samples.append(
+                _CoreTrackSample(
+                    frame_time=frame.frame_time,
+                    threshold_dbz=int(core["threshold_dbz"]),
+                    max_dbz=int(core["max_dbz"]),
+                    distance_km=float(core["distance_km"]),
+                    latitude=float(
+                        core["centroid_latitude"]
+                        if "centroid_latitude" in core
+                        else core["latitude"]
+                    ),
+                    longitude=float(
+                        core["centroid_longitude"]
+                        if "centroid_longitude" in core
+                        else core["longitude"]
+                    ),
+                    is_selected=False,
+                )
+            )
+        except (KeyError, TypeError, ValueError):
             continue
-        previous = (frame, sample)
-        break
-    if previous is None:
+    return samples
+
+
+def _selected_track_sample(frame: AnalyzedFrame) -> _CoreTrackSample | None:
+    """Return the selected component's own tracking sample."""
+
+    selected = _selected_core_sample(frame)
+    if selected is None:
+        return None
+    selected_threshold, selected_distance, selected_lat, selected_lon = selected
+    selected_intensity = int(frame.selected_core_max_dbz or frame.max_core_dbz or frame.max_dbz or 0)
+    return _CoreTrackSample(
+        frame_time=frame.frame_time,
+        threshold_dbz=selected_threshold,
+        max_dbz=selected_intensity,
+        distance_km=selected_distance,
+        latitude=float(
+            frame.selected_core_centroid_latitude
+            if frame.selected_core_centroid_latitude is not None
+            else selected_lat
+        ),
+        longitude=float(
+            frame.selected_core_centroid_longitude
+            if frame.selected_core_centroid_longitude is not None
+            else selected_lon
+        ),
+        is_selected=True,
+    )
+
+
+def _tracked_core_samples(frame_results: list[AnalyzedFrame]) -> list[_CoreTrackSample]:
+    """Match the selected latest component backwards through available frames."""
+
+    if not frame_results:
+        return []
+    latest = _selected_track_sample(frame_results[0])
+    if latest is None:
+        return []
+
+    track = [latest]
+    reference = latest
+    for frame in frame_results[1:]:
+        delta_seconds = reference.frame_time - frame.frame_time
+        if delta_seconds <= 0:
+            continue
+        max_distance_km = max(
+            MIN_TRACK_DISTANCE_KM,
+            MAX_TRACK_SPEED_KMH * delta_seconds / 3600,
+        )
+        candidates: list[tuple[float, _CoreTrackSample]] = []
+        frame_candidates = _component_samples(frame)
+        selected_candidate = _selected_track_sample(frame)
+        if selected_candidate is not None:
+            frame_candidates.append(selected_candidate)
+        for candidate in frame_candidates:
+            if candidate.threshold_dbz != reference.threshold_dbz and not (
+                candidate.is_selected and reference.is_selected
+            ):
+                continue
+            intensity_delta = abs(candidate.max_dbz - reference.max_dbz)
+            if intensity_delta > MAX_TRACK_INTENSITY_DELTA_DBZ:
+                continue
+            centroid_distance = haversine_km(
+                candidate.latitude,
+                candidate.longitude,
+                reference.latitude,
+                reference.longitude,
+            )
+            if centroid_distance > max_distance_km:
+                continue
+            score = (
+                centroid_distance / max_distance_km
+                + intensity_delta / MAX_TRACK_INTENSITY_DELTA_DBZ
+            )
+            candidates.append((score, candidate))
+        if not candidates:
+            continue
+        reference = min(candidates, key=lambda item: item[0])[1]
+        track.append(reference)
+    return track
+
+
+def _motion_from_frame_results(frame_results: list[AnalyzedFrame]) -> StormMotion:
+    """Estimate motion/trend from a plausibly matched component track."""
+
+    track = _tracked_core_samples(frame_results)
+    if len(track) < 2:
         return StormMotion(None, None, None, None, None, None)
 
-    older, older_sample = previous
-    _, older_distance, older_lat, older_lon = older_sample
+    latest = track[0]
+    older = track[-1]
     delta_seconds = latest.frame_time - older.frame_time
     if delta_seconds <= 0:
         return StormMotion(None, None, None, None, None, None)
 
-    moved_km = haversine_km(older_lat, older_lon, latest_lat, latest_lon)
-    speed_kmh = moved_km / (delta_seconds / 3600)
-    distance_delta = latest_distance - older_distance
-    approaching = distance_delta < -0.5
+    elapsed_hours = delta_seconds / 3600
+    moved_km = haversine_km(
+        older.latitude,
+        older.longitude,
+        latest.latitude,
+        latest.longitude,
+    )
+    speed_kmh = moved_km / elapsed_hours
+    distance_delta = latest.distance_km - older.distance_km
+    radial_closing_speed_kmh = -distance_delta / elapsed_hours
+    approaching = distance_delta < -0.5 and radial_closing_speed_kmh > 1
     eta_minutes = None
-    if approaching and speed_kmh > 1:
-        eta_minutes = max(0, round((latest_distance / speed_kmh) * 60))
+    if approaching:
+        eta_minutes = max(0, round((latest.distance_km / radial_closing_speed_kmh) * 60))
 
-    dbz_delta = (latest.max_dbz or 0) - (older.max_dbz or 0)
+    dbz_delta = latest.max_dbz - older.max_dbz
     return StormMotion(
-        bearing=bearing_degrees(older_lat, older_lon, latest_lat, latest_lon),
+        bearing=bearing_degrees(
+            older.latitude,
+            older.longitude,
+            latest.latitude,
+            latest.longitude,
+        ),
         speed_kmh=round(speed_kmh, 1),
         approaching=approaching,
         eta_minutes=eta_minutes,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -17,6 +17,8 @@ from custom_components.radar_hail_risk.lightning import (
     normalize_counter_state,
     normalize_numeric_state,
 )
+
+UTC = timezone.utc
 
 
 @dataclass
@@ -212,3 +214,60 @@ def test_home_assistant_lightning_source_reads_and_tracks_previous_counter() -> 
     assert second.previous_counter == 4
     assert second.counter == 6
     assert second.counter_delta == 2
+
+
+def test_lightning_snapshot_keeps_fresh_proximity_when_counter_is_stale() -> None:
+    now = datetime(2026, 6, 30, 12, 0, tzinfo=UTC)
+    snapshot = build_lightning_snapshot(
+        distance_state=FakeState("sensor.distance", "5", {}, now),
+        counter_state=FakeState(
+            "sensor.counter", "10", {}, now - timedelta(seconds=1_000)
+        ),
+        previous_counter=9,
+        trigger_radius_km=30,
+        stale_after_seconds=900,
+        now=now,
+    )
+
+    assert snapshot.is_stale is True
+    assert snapshot.proximity_active is True
+    assert snapshot.has_new_strike is False
+    assert snapshot.new_strike_nearby is False
+
+
+def test_lightning_source_separates_proximity_new_strikes_and_counter_resets() -> None:
+    now = datetime(2026, 6, 30, 12, 0, tzinfo=UTC)
+    source = HomeAssistantLightningSource(
+        distance_entity_id="sensor.home_lightning_distance",
+        counter_entity_id="sensor.home_lightning_counter",
+        trigger_radius_km=30,
+        stale_after_seconds=900,
+    )
+    hass = FakeHass(
+        {
+            "sensor.home_lightning_distance": FakeState(
+                "sensor.home_lightning_distance", "4", {}, now
+            ),
+            "sensor.home_lightning_counter": FakeState(
+                "sensor.home_lightning_counter", "10", {}, now
+            ),
+        }
+    )
+
+    first = source.read(hass, now=now)
+    assert first.proximity_active is True
+    assert first.new_strike_nearby is False
+    assert first.counter_reset is False
+
+    hass.states._states["sensor.home_lightning_counter"].state = "2"
+    reset = source.read(hass, now=now + timedelta(seconds=10))
+    assert reset.counter_delta == 0
+    assert reset.counter_reset is True
+    assert reset.new_strike_nearby is False
+    assert "lightning_counter_reset" in reset.diagnostics
+
+    hass.states._states["sensor.home_lightning_counter"].state = "3"
+    after_reset = source.read(hass, now=now + timedelta(seconds=20))
+    assert after_reset.counter_delta == 1
+    assert after_reset.counter_reset is False
+    assert after_reset.new_strike_nearby is True
