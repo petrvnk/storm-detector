@@ -159,6 +159,7 @@ def test_entity_unique_ids_and_new_registry_defaults_preserve_minimal_contract()
         == "diagnostic"
         for entity in diagnostic_entities
     )
+    assert "battery_level" not in RadarHailStormCoreTracker.__dict__
 
 
 def _analysis_payload():

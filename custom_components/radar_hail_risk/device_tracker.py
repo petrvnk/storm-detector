@@ -76,10 +76,6 @@ class RadarHailStormCoreTracker(CoordinatorEntity[Any], TrackerEntity):
         return float(lon) if isinstance(lon, (int, float)) else None
 
     @property
-    def battery_level(self) -> int:
-        return 100
-
-    @property
     def icon(self) -> str:
         return "mdi:map-marker-star"
 
