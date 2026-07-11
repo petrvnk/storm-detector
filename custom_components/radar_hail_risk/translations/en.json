@@ -3,44 +3,16 @@
     "step": {
       "user": {
         "title": "Setup Radar Hail Risk",
-        "description": "Configure the location source, optional lightning sensors, and baseline thresholds. Leave location blank to use the Home Assistant core location. Leave both lightning fields empty for radar-only mode.",
+        "description": "Choose the location and optional lightning sensors. Leave location blank to use the Home Assistant core location. Leave both lightning fields empty for radar-only mode. Technical tuning is available later in options.",
         "data": {
           "location_entity_id": "Location source",
           "lightning_distance_entity_id": "Lightning distance sensor",
-          "lightning_counter_entity_id": "Lightning counter sensor",
-          "lightning_azimuth_entity_id": "Lightning azimuth sensor",
-          "analysis_radius_km": "Radar analysis radius",
-          "lightning_trigger_radius_km": "Lightning trigger radius",
-          "warning_lightning_distance_km": "Warning lightning distance",
-          "urgent_lightning_distance_km": "Urgent lightning distance",
-          "core_watch_dbz": "Watch core threshold",
-          "core_warning_dbz": "Warning core threshold",
-          "core_urgent_dbz": "Urgent core threshold",
-          "min_analysis_interval_seconds": "Minimum analysis interval",
-          "stale_clear_seconds": "Stale-data timeout",
-          "rainviewer_zoom": "RainViewer zoom",
-          "rainviewer_frames": "RainViewer frames to analyze",
-          "warning_core_distance_km": "Warning core distance",
-          "urgent_core_distance_km": "Urgent core distance"
+          "lightning_counter_entity_id": "Lightning counter sensor"
         },
         "data_description": {
           "location_entity_id": "Optional zone, person, or device tracker. If set, this is the single source of truth for radar center and distances.",
           "lightning_distance_entity_id": "Optional distance sensor from Blitzortung or a compatible lightning integration.",
-          "lightning_counter_entity_id": "Optional counter sensor paired with the lightning distance sensor.",
-          "lightning_azimuth_entity_id": "Optional azimuth/bearing sensor used to estimate strike position and correlate it with radar cores.",
-          "analysis_radius_km": "Radius around the configured location for radar tile analysis.",
-          "lightning_trigger_radius_km": "New lightning inside this radius can trigger or strengthen evaluation.",
-          "warning_lightning_distance_km": "Lightning at or below this distance can contribute to warning level.",
-          "urgent_lightning_distance_km": "Lightning at or below this distance can contribute to urgent level.",
-          "core_watch_dbz": "Radar reflectivity threshold for watch-level storm cores.",
-          "core_warning_dbz": "Radar reflectivity threshold for warning-level storm cores.",
-          "core_urgent_dbz": "Radar reflectivity threshold for urgent-level storm cores.",
-          "min_analysis_interval_seconds": "Minimum time between expensive radar analyses unless a triggering event occurs.",
-          "stale_clear_seconds": "Radar or lightning data older than this is treated as stale and gated out of active classification.",
-          "rainviewer_zoom": "RainViewer tile zoom. Higher zoom is more detailed but heavier.",
-          "rainviewer_frames": "How many recent radar frames to inspect for current state and trend.",
-          "warning_core_distance_km": "A warning-level core inside this distance can contribute to warning level.",
-          "urgent_core_distance_km": "An urgent-level core inside this distance can contribute to urgent level."
+          "lightning_counter_entity_id": "Optional counter sensor paired with the lightning distance sensor."
         }
       },
       "options": {
@@ -65,11 +37,8 @@
     "step": {
       "init": {
         "title": "Radar Hail Risk options",
-        "description": "Tune location source, lightning sensors, risk thresholds, radar analysis, and stale-data behavior.",
+        "description": "Advanced technical tuning for lightning correlation, risk thresholds, radar analysis, and stale-data behavior.",
         "data": {
-          "location_entity_id": "Location source",
-          "lightning_distance_entity_id": "Lightning distance sensor",
-          "lightning_counter_entity_id": "Lightning counter sensor",
           "lightning_azimuth_entity_id": "Lightning azimuth sensor",
           "analysis_radius_km": "Radar analysis radius",
           "lightning_trigger_radius_km": "Lightning trigger radius",
@@ -78,6 +47,7 @@
           "core_watch_dbz": "Watch core threshold",
           "core_warning_dbz": "Warning core threshold",
           "core_urgent_dbz": "Urgent core threshold",
+          "min_core_pixels": "Minimum core size (pixels)",
           "min_analysis_interval_seconds": "Minimum analysis interval",
           "stale_clear_seconds": "Stale-data timeout",
           "rainviewer_zoom": "RainViewer zoom",
@@ -86,17 +56,15 @@
           "urgent_core_distance_km": "Urgent core distance"
         },
         "data_description": {
-          "location_entity_id": "Optional zone, person, or device tracker. If set, this is the single source of truth for radar center and distances.",
-          "lightning_distance_entity_id": "Optional distance sensor from Blitzortung or a compatible lightning integration.",
-          "lightning_counter_entity_id": "Optional counter sensor paired with the lightning distance sensor.",
           "lightning_azimuth_entity_id": "Optional azimuth/bearing sensor used to estimate strike position and correlate it with radar cores.",
           "analysis_radius_km": "Radius around the configured location for radar tile analysis.",
           "lightning_trigger_radius_km": "New lightning inside this radius can trigger or strengthen evaluation.",
           "warning_lightning_distance_km": "Lightning at or below this distance can contribute to warning level.",
-          "urgent_lightning_distance_km": "Lightning at or below this distance can contribute to urgent level.",
+          "urgent_lightning_distance_km": "Legacy proximity boundary retained for compatibility. Lightning alone is capped at warning; urgent requires current urgent radar evidence.",
           "core_watch_dbz": "Radar reflectivity threshold for watch-level storm cores.",
           "core_warning_dbz": "Radar reflectivity threshold for warning-level storm cores.",
           "core_urgent_dbz": "Radar reflectivity threshold for urgent-level storm cores.",
+          "min_core_pixels": "Reject isolated radar pixels below this connected-core size.",
           "min_analysis_interval_seconds": "Minimum time between expensive radar analyses unless a triggering event occurs.",
           "stale_clear_seconds": "Radar or lightning data older than this is treated as stale and gated out of active classification.",
           "rainviewer_zoom": "RainViewer tile zoom. Higher zoom is more detailed but heavier.",

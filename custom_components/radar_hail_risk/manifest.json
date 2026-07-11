@@ -9,6 +9,6 @@
   "dependencies": [],
   "after_dependencies": ["blitzortung"],
   "config_flow": true,
-  "iot_class": "local_polling",
+  "iot_class": "cloud_polling",
   "loggers": ["custom_components.radar_hail_risk"]
 }

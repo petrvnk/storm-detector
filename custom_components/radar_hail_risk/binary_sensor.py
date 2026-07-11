@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from .const import (
+    ATTR_HAS_CURRENT_SIGNAL,
     ATTR_LEVEL,
+    ATTR_LIGHTNING_NEW_STRIKE,
     ATTR_LIGHTNING_TRIGGERED,
     ATTR_STALE,
     DATA_KEY_RESULT,
@@ -43,6 +45,7 @@ class RadarHailDataStaleBinarySensor(CoordinatorEntity[Any], BinarySensorEntity)
     _attr_has_entity_name = True
     _attr_name = "Data Stale"
     _attr_icon = "mdi:clock-alert-outline"
+    _attr_entity_registry_enabled_default = True
 
     def __init__(self, coordinator: Any | None = None, config_entry: Any | None = None) -> None:
         super().__init__(coordinator)
@@ -83,6 +86,7 @@ class RadarHailRiskActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity
     _attr_has_entity_name = True
     _attr_name = "Active"
     _attr_icon = "mdi:weather-hail"
+    _attr_entity_registry_enabled_default = True
 
     def __init__(self, coordinator: Any | None = None, config_entry: Any | None = None) -> None:
         super().__init__(coordinator)
@@ -101,7 +105,8 @@ class RadarHailRiskActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity
         level = data.get(ATTR_LEVEL)
         if level in (RISK_LEVEL_NONE, RISK_LEVEL_UNAVAILABLE):
             return False
-        return level is not None
+        has_current_signal = data.get(ATTR_HAS_CURRENT_SIGNAL)
+        return level is not None and has_current_signal is not False
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -126,6 +131,8 @@ class RadarHailRiskActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity
             return {}
         return {
             ATTR_LIGHTNING_TRIGGERED: bool(data.get(ATTR_LIGHTNING_TRIGGERED, False)),
+            ATTR_LIGHTNING_NEW_STRIKE: bool(data.get(ATTR_LIGHTNING_NEW_STRIKE, False)),
+            ATTR_HAS_CURRENT_SIGNAL: bool(data.get(ATTR_HAS_CURRENT_SIGNAL, False)),
             ATTR_LEVEL: data.get(ATTR_LEVEL),
             ATTR_STALE: bool(data.get(ATTR_STALE, False)),
         }

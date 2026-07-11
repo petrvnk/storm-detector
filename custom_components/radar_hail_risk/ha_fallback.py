@@ -70,10 +70,19 @@ class FallbackDataUpdateCoordinator:
     def __class_getitem__(cls, _item: Any) -> type["FallbackDataUpdateCoordinator"]:
         return cls
 
-    def __init__(self, hass: Any, logger: Any, *, name: str, update_interval: timedelta | int | float | None = None) -> None:
+    def __init__(
+        self,
+        hass: Any,
+        logger: Any,
+        *,
+        name: str,
+        update_interval: timedelta | int | float | None = None,
+        config_entry: Any | None = None,
+    ) -> None:
         self.hass = hass
         self.logger = logger
         self.name = name
+        self.config_entry = config_entry
         self.update_interval = timedelta(seconds=update_interval) if isinstance(update_interval, (int, float)) else update_interval
         self.last_update_success = True
         self.last_update_success_time: datetime | None = None
@@ -82,7 +91,7 @@ class FallbackDataUpdateCoordinator:
     async def async_request_refresh(self) -> None:
         self.data = await self._async_update_data()
         self.last_update_success = True
-        self.last_update_success_time = datetime.utcnow()
+        self.last_update_success_time = datetime.now()
 
     async def async_config_entry_first_refresh(self) -> None:
         await self.async_request_refresh()

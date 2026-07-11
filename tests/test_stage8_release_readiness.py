@@ -38,6 +38,7 @@ def test_manifest_and_hacs_metadata_are_release_ready() -> None:
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].endswith("/issues")
     assert manifest["config_flow"] is True
+    assert manifest["iot_class"] == "cloud_polling"
     assert hacs["name"] == "Radar Hail Risk"
     assert hacs["homeassistant"] >= "2024.10.0"
     assert hacs["render_readme"] is True
@@ -46,7 +47,7 @@ def test_manifest_and_hacs_metadata_are_release_ready() -> None:
 def test_readme_contains_release_limitations_credits_and_migration_notes() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert "Install via HACS custom repository" in readme
+    assert "Current Simple RC install/test route — manual archive only" in readme
     assert "Limitations and safety notes" in readme
     assert "not an official warning source" in readme
     assert "Credits" in readme
@@ -71,13 +72,13 @@ def test_lovelace_examples_use_clean_entity_ids() -> None:
     assert "device_tracker.radar_hail_risk_storm_core" in combined
 
 
-def test_notification_blueprint_includes_detail_sensors_and_cooldown() -> None:
+def test_notification_blueprint_includes_minimal_entities_and_cooldown() -> None:
     blueprint = (
         ROOT / "blueprints" / "automation" / "radar_hail_risk" / "hail_risk_notification.yaml"
     ).read_text(encoding="utf-8")
 
-    assert "max_dbz_sensor" in blueprint
-    assert "lightning_distance_sensor" in blueprint
+    assert "risk_level_sensor" in blueprint
+    assert "risk_summary_sensor" in blueprint
     assert "cooldown_minutes" in blueprint
     assert "message_text" in blueprint
 

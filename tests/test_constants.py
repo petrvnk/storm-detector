@@ -9,6 +9,7 @@ from custom_components.radar_hail_risk.const import (
     DEFAULT_CORE_WARNING_DBZ,
     DEFAULT_URGENT_CORE_DISTANCE_KM,
     DOMAIN,
+    EVIDENCE_KINDS,
     OPTIONAL_CONF_DEFAULTS,
     PARAMETER_SPECS,
     PLATFORMS,
@@ -25,3 +26,11 @@ def test_constants_default_contract() -> None:
     assert PARAMETER_SPECS[CONF_ANALYSIS_RADIUS_KM]["unit"] == "km"
     assert DATA_KEY_RESULT == "hail_risk_result"
     assert "sensor" in PLATFORMS
+    assert EVIDENCE_KINDS == (
+        "none",
+        "radar_storm",
+        "radar_hail",
+        "lightning_only",
+        "radar_hail_with_lightning",
+        "unavailable",
+    )

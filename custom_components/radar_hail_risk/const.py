@@ -24,6 +24,7 @@ CONF_CORE_WARNING_DBZ: Final = "core_warning_dbz"
 CONF_CORE_URGENT_DBZ: Final = "core_urgent_dbz"
 CONF_WARNING_CORE_DISTANCE_KM: Final = "warning_core_distance_km"
 CONF_URGENT_CORE_DISTANCE_KM: Final = "urgent_core_distance_km"
+CONF_MIN_CORE_PIXELS: Final = "min_core_pixels"
 CONF_WARNING_LIGHTNING_DISTANCE_KM: Final = "warning_lightning_distance_km"
 CONF_URGENT_LIGHTNING_DISTANCE_KM: Final = "urgent_lightning_distance_km"
 
@@ -38,6 +39,7 @@ DEFAULT_CORE_WARNING_DBZ: Final = 55
 DEFAULT_CORE_URGENT_DBZ: Final = 60
 DEFAULT_WARNING_CORE_DISTANCE_KM: Final = 25
 DEFAULT_URGENT_CORE_DISTANCE_KM: Final = 15
+DEFAULT_MIN_CORE_PIXELS: Final = 2
 DEFAULT_WARNING_LIGHTNING_DISTANCE_KM: Final = 20
 DEFAULT_URGENT_LIGHTNING_DISTANCE_KM: Final = 8
 
@@ -53,6 +55,7 @@ OPTIONAL_CONF_DEFAULTS: Final = {
     CONF_CORE_URGENT_DBZ: DEFAULT_CORE_URGENT_DBZ,
     CONF_WARNING_CORE_DISTANCE_KM: DEFAULT_WARNING_CORE_DISTANCE_KM,
     CONF_URGENT_CORE_DISTANCE_KM: DEFAULT_URGENT_CORE_DISTANCE_KM,
+    CONF_MIN_CORE_PIXELS: DEFAULT_MIN_CORE_PIXELS,
     CONF_WARNING_LIGHTNING_DISTANCE_KM: DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
     CONF_URGENT_LIGHTNING_DISTANCE_KM: DEFAULT_URGENT_LIGHTNING_DISTANCE_KM,
 }
@@ -69,17 +72,22 @@ PARAMETER_SPECS: Final = {
     CONF_CORE_URGENT_DBZ: {"min": 35, "max": 75, "step": 1, "unit": "dBZ"},
     CONF_WARNING_CORE_DISTANCE_KM: {"min": 1, "max": 100, "step": 1, "unit": "km"},
     CONF_URGENT_CORE_DISTANCE_KM: {"min": 1, "max": 100, "step": 1, "unit": "km"},
+    CONF_MIN_CORE_PIXELS: {"min": 1, "max": 512, "step": 1, "unit": "px"},
     CONF_WARNING_LIGHTNING_DISTANCE_KM: {"min": 1, "max": 100, "step": 1, "unit": "km"},
     CONF_URGENT_LIGHTNING_DISTANCE_KM: {"min": 1, "max": 100, "step": 1, "unit": "km"},
 }
 
 ATTR_LEVEL: Final = "level"
 ATTR_SUMMARY: Final = "summary"
+ATTR_EVIDENCE_KIND: Final = "evidence_kind"
 ATTR_MAX_DBZ: Final = "max_dbz"
 ATTR_CORE_DISTANCE_KM: Final = "core_distance_km"
 ATTR_CORE50_DISTANCE_KM: Final = "core50_distance_km"
 ATTR_CORE55_DISTANCE_KM: Final = "core55_distance_km"
 ATTR_CORE60_DISTANCE_KM: Final = "core60_distance_km"
+ATTR_CORE_WATCH_DISTANCE_KM: Final = "core_watch_distance_km"
+ATTR_CORE_WARNING_DISTANCE_KM: Final = "core_warning_distance_km"
+ATTR_CORE_URGENT_DISTANCE_KM: Final = "core_urgent_distance_km"
 ATTR_LIGHTNING_DISTANCE_KM: Final = "lightning_distance_km"
 ATTR_LIGHTNING_AZIMUTH_DEGREES: Final = "lightning_azimuth_degrees"
 ATTR_LIGHTNING_LATITUDE: Final = "lightning_latitude"
@@ -107,6 +115,8 @@ ATTR_CONFIDENCE_SCORE: Final = "confidence_score"
 ATTR_CONFIDENCE_LEVEL: Final = "confidence_level"
 ATTR_LIGHTNING_TRIGGERED: Final = "lightning_triggered"
 ATTR_LIGHTNING_COUNTER_DELTA: Final = "lightning_counter_delta"
+ATTR_LIGHTNING_NEW_STRIKE: Final = "lightning_new_strike"
+ATTR_HAS_CURRENT_SIGNAL: Final = "has_current_signal"
 ATTR_STALE: Final = "is_stale"
 ATTR_LAST_ERROR: Final = "last_error"
 ATTR_LIGHTNING_DIAGNOSTICS: Final = "lightning_diagnostics"
@@ -120,6 +130,22 @@ RISK_LEVEL_WATCH: Final = "watch"
 RISK_LEVEL_WARNING: Final = "warning"
 RISK_LEVEL_URGENT: Final = "urgent"
 RISK_LEVEL_UNAVAILABLE: Final = "unavailable"
+
+EVIDENCE_KIND_NONE: Final = "none"
+EVIDENCE_KIND_RADAR_STORM: Final = "radar_storm"
+EVIDENCE_KIND_RADAR_HAIL: Final = "radar_hail"
+EVIDENCE_KIND_LIGHTNING_ONLY: Final = "lightning_only"
+EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING: Final = "radar_hail_with_lightning"
+EVIDENCE_KIND_UNAVAILABLE: Final = "unavailable"
+
+EVIDENCE_KINDS: Final = (
+    EVIDENCE_KIND_NONE,
+    EVIDENCE_KIND_RADAR_STORM,
+    EVIDENCE_KIND_RADAR_HAIL,
+    EVIDENCE_KIND_LIGHTNING_ONLY,
+    EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING,
+    EVIDENCE_KIND_UNAVAILABLE,
+)
 
 RISK_LEVELS = [
     RISK_LEVEL_NONE,

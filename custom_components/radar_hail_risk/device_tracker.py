@@ -16,7 +16,7 @@ try:  # pragma: no cover
     from homeassistant.components.device_tracker import TrackerEntity
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.const import ATTR_LATITUDE, ATTR_LONGITUDE
-    from homeassistant.helpers.entity import DeviceInfo
+    from homeassistant.helpers.entity import DeviceInfo, EntityCategory
     from homeassistant.helpers.update_coordinator import CoordinatorEntity
     SOURCE_TYPE_GPS = "gps"
 except Exception:  # pragma: no cover
@@ -27,6 +27,8 @@ except Exception:  # pragma: no cover
     ATTR_LATITUDE = "latitude"
     ATTR_LONGITUDE = "longitude"
     CoordinatorEntity = FallbackCoordinatorEntity
+    class EntityCategory:  # type: ignore[no-redef]
+        DIAGNOSTIC = "diagnostic"
 
 
 async def async_setup_entry(hass: Any, config_entry: ConfigEntry, async_add_entities: Any) -> None:
@@ -41,6 +43,8 @@ class RadarHailStormCoreTracker(CoordinatorEntity[Any], TrackerEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Storm Core"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator: Any | None = None, config_entry: ConfigEntry | None = None) -> None:
         super().__init__(coordinator)

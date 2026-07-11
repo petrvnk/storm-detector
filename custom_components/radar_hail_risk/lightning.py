@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 
@@ -137,22 +137,48 @@ class LightningSnapshot:
         return max(self.counter - self.previous_counter, 0)
 
     @property
-    def has_new_strike(self) -> bool:
-        """Return true when the counter advanced since the previous snapshot."""
+    def counter_reset(self) -> bool:
+        """Return true when the source counter moved backwards."""
 
-        delta = self.counter_delta
-        return delta is not None and delta > 0
+        return (
+            self.counter is not None
+            and self.previous_counter is not None
+            and self.counter < self.previous_counter
+        )
 
     @property
-    def trigger_active(self) -> bool:
-        """Return true when recent lightning is inside the configured radius."""
+    def has_new_strike(self) -> bool:
+        """Return true when a current counter advanced since the previous snapshot."""
+
+        delta = self.counter_delta
+        return (
+            "stale_counter_entity" not in self.diagnostics
+            and delta is not None
+            and delta > 0
+        )
+
+    @property
+    def proximity_active(self) -> bool:
+        """Return true when the current distance is inside the configured radius."""
 
         return (
             self.source_available
-            and not self.is_stale
+            and "stale_distance_entity" not in self.diagnostics
             and self.distance_km is not None
             and self.distance_km <= self.trigger_radius_km
         )
+
+    @property
+    def new_strike_nearby(self) -> bool:
+        """Return true only for a new counter event with current nearby distance."""
+
+        return self.proximity_active and self.has_new_strike
+
+    @property
+    def trigger_active(self) -> bool:
+        """Backward-compatible alias for the proximity state."""
+
+        return self.proximity_active
 
 
 def build_lightning_snapshot(
@@ -172,7 +198,7 @@ def build_lightning_snapshot(
     for tests.
     """
 
-    now = _coerce_aware_datetime(now or datetime.now(UTC))
+    now = _coerce_aware_datetime(now or datetime.now(timezone.utc))
     diagnostics: list[str] = []
 
     if distance_state is None:
@@ -203,6 +229,8 @@ def build_lightning_snapshot(
         diagnostics.append("stale_distance_entity")
     if counter_stale:
         diagnostics.append("stale_counter_entity")
+    if counter is not None and previous_counter is not None and counter < previous_counter:
+        diagnostics.append("lightning_counter_reset")
 
     source_available = (distance is not None or counter is not None) and not (
         distance_state is None and counter_state is None
@@ -401,5 +429,5 @@ def _extract_timestamp(state: Any) -> datetime | None:
 
 def _coerce_aware_datetime(value: datetime) -> datetime:
     if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
