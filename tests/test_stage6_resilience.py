@@ -8,11 +8,15 @@ from unittest.mock import patch
 
 import pytest
 from custom_components.radar_hail_risk.config_flow import (
+    RadarHailRiskConfigFlow,
     RadarHailRiskOptionsFlowHandler,
+    _clean_optional_entity_ids,
+    _has_partial_lightning_config,
     _validate_parameter_ranges,
 )
 from custom_components.radar_hail_risk.const import (
     ATTR_DEGRADATION_REASONS,
+    ATTR_EVIDENCE_KIND,
     ATTR_LIGHTNING_DIAGNOSTICS,
     ATTR_LIGHTNING_DISTANCE_KM,
     ATTR_LOCATION_SOURCE,
@@ -20,11 +24,16 @@ from custom_components.radar_hail_risk.const import (
     ATTR_SOURCE_STATUS,
     ATTR_STALE,
     CONF_ANALYSIS_RADIUS_KM,
+    CONF_LIGHTNING_AZIMUTH_ENTITY_ID,
+    CONF_LIGHTNING_COUNTER_ENTITY_ID,
+    CONF_LIGHTNING_DISTANCE_ENTITY_ID,
     CONF_LOCATION_ENTITY_ID,
     CONF_MIN_CORE_PIXELS,
     CONF_RAINVIEWER_FRAMES,
     DEFAULT_MIN_CORE_PIXELS,
     DEFAULT_RAINVIEWER_FRAMES,
+    EVIDENCE_KIND_LIGHTNING_ONLY,
+    OPTIONAL_CONF_DEFAULTS,
     RISK_LEVEL_WARNING,
 )
 from custom_components.radar_hail_risk.coordinator import RadarHailRiskCoordinator
@@ -38,7 +47,10 @@ class FakeHass:
 
     @property
     def states(self) -> SimpleNamespace:
-        return SimpleNamespace(get=self._states.get)
+        return SimpleNamespace(
+            get=self._states.get,
+            async_all=lambda: list(self._states.values()),
+        )
 
     def set_state(self, entity_id: str, value: str, *, last_updated: datetime) -> None:
         self._states[entity_id] = SimpleNamespace(
@@ -119,6 +131,19 @@ class ReadOnlyConfigEntryOptionsFlow(RadarHailRiskOptionsFlowHandler):
         return object()
 
 
+class IsolatedConfigFlow(RadarHailRiskConfigFlow):
+    """Exercise flow behavior without requiring a Home Assistant flow manager."""
+
+    async def async_set_unique_id(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+    def _abort_if_unique_id_configured(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+    def async_create_entry(self, **kwargs: object) -> dict[str, object]:
+        return kwargs
+
+
 def _schema_default(schema: object, field_name: str) -> object:
     """Read a field default from either a fallback dict or voluptuous schema."""
 
@@ -133,10 +158,114 @@ def _schema_default(schema: object, field_name: str) -> object:
     raise AssertionError(f"Missing schema field: {field_name}")
 
 
+def _schema_fields(schema: object) -> set[str]:
+    """Return field names from either a fallback dict or voluptuous schema."""
+
+    schema_mapping = getattr(schema, "schema", schema)
+    if not isinstance(schema_mapping, dict):
+        raise AssertionError("Expected a mapping-backed schema")
+    return {str(getattr(marker, "schema", marker)) for marker in schema_mapping}
+
+
+def test_initial_config_schema_only_exposes_simple_location_and_lightning_fields() -> None:
+    flow = SimpleNamespace(hass=FakeHass())
+
+    schema = RadarHailRiskConfigFlow._base_schema(flow)  # type: ignore[arg-type]
+
+    assert _schema_fields(schema) == {
+        CONF_LOCATION_ENTITY_ID,
+        CONF_LIGHTNING_DISTANCE_ENTITY_ID,
+        CONF_LIGHTNING_COUNTER_ENTITY_ID,
+    }
+
+
+def test_blank_lightning_fields_are_radar_only_and_partial_pair_is_rejected() -> None:
+    cleaned = _clean_optional_entity_ids(
+        {
+            CONF_LIGHTNING_DISTANCE_ENTITY_ID: " ",
+            CONF_LIGHTNING_COUNTER_ENTITY_ID: "",
+        }
+    )
+
+    assert cleaned == {
+        CONF_LIGHTNING_DISTANCE_ENTITY_ID: None,
+        CONF_LIGHTNING_COUNTER_ENTITY_ID: None,
+    }
+    assert _has_partial_lightning_config(cleaned) is False
+    assert _has_partial_lightning_config(
+        {CONF_LIGHTNING_DISTANCE_ENTITY_ID: "sensor.lightning_distance"}
+    ) is True
+
+
+@pytest.mark.asyncio
+async def test_explicit_radar_only_selection_survives_options_update_and_reload() -> None:
+    hass = FakeHass()
+    now = datetime.now(timezone.utc)
+    hass.set_state("sensor.blitzortung_lightning_distance", "4.5", last_updated=now)
+    hass.set_state("sensor.blitzortung_lightning_count", "20", last_updated=now)
+
+    setup_flow = IsolatedConfigFlow()
+    setup_flow.hass = hass
+    setup = await setup_flow.async_step_user({})
+    assert setup["data"][CONF_LIGHTNING_DISTANCE_ENTITY_ID] is None
+    assert setup["data"][CONF_LIGHTNING_COUNTER_ENTITY_ID] is None
+
+    entry = SimpleNamespace(entry_id="entry-explicit-radar-only", data=setup["data"], options={})
+    options_flow = RadarHailRiskOptionsFlowHandler(entry)
+    saved = await options_flow.async_step_init({CONF_ANALYSIS_RADIUS_KM: 60})
+    assert saved["data"][CONF_LIGHTNING_DISTANCE_ENTITY_ID] is None
+    assert saved["data"][CONF_LIGHTNING_COUNTER_ENTITY_ID] is None
+
+    entry.options = saved["data"]
+    reloaded = RadarHailRiskCoordinator(
+        hass,
+        None,
+        "Radar Hail Risk",
+        entry,
+        session_factory=FakeSessionContext,
+    )
+    assert reloaded._build_lightning_snapshot(now) is None
+
+
+def test_legacy_entry_without_lightning_keys_retains_runtime_autodetection() -> None:
+    hass = FakeHass()
+    now = datetime.now(timezone.utc)
+    hass.set_state("sensor.blitzortung_lightning_distance", "4.5", last_updated=now)
+    hass.set_state("sensor.blitzortung_lightning_count", "20", last_updated=now)
+    legacy_entry = SimpleNamespace(entry_id="entry-legacy", data={}, options={})
+
+    coordinator = RadarHailRiskCoordinator(
+        hass,
+        None,
+        "Radar Hail Risk",
+        legacy_entry,
+        session_factory=FakeSessionContext,
+    )
+
+    snapshot = coordinator._build_lightning_snapshot(now)
+    assert snapshot is not None
+    assert snapshot.distance_km == 4.5
+    assert snapshot.counter == 20
+
+
 def test_options_flow_does_not_assign_home_assistant_config_entry_property() -> None:
     flow = ReadOnlyConfigEntryOptionsFlow(FakeEntry())
 
     assert flow._current_options()[CONF_ANALYSIS_RADIUS_KM] == 40
+
+
+def test_coordinator_still_honors_existing_entry_data_and_options_keys() -> None:
+    coordinator = RadarHailRiskCoordinator(
+        FakeHass(),
+        None,
+        "Radar Hail Risk",
+        FakeEntry(),
+        session_factory=FakeSessionContext,
+    )
+
+    config = coordinator._effective_config()
+    assert config[CONF_ANALYSIS_RADIUS_KM] == 40
+    assert config[CONF_RAINVIEWER_FRAMES] == 2
 
 
 @pytest.mark.asyncio
@@ -152,16 +281,20 @@ async def test_options_flow_uses_existing_options_as_defaults() -> None:
 
 
 @pytest.mark.asyncio
-async def test_options_flow_exposes_location_source_default() -> None:
-    class LocationEntry(FakeEntry):
-        options = {CONF_LOCATION_ENTITY_ID: "zone.home"}
-
-    flow = RadarHailRiskOptionsFlowHandler(LocationEntry())
+async def test_options_flow_only_exposes_advanced_fields_and_preserves_hidden_sources() -> None:
+    flow = RadarHailRiskOptionsFlowHandler(FakeEntry())
 
     result = await flow.async_step_init()
 
     schema = result["data_schema"]
-    assert _schema_default(schema, CONF_LOCATION_ENTITY_ID) == "zone.home"
+    assert _schema_fields(schema) == {
+        CONF_LIGHTNING_AZIMUTH_ENTITY_ID,
+        *OPTIONAL_CONF_DEFAULTS,
+    }
+
+    saved = await flow.async_step_init({CONF_ANALYSIS_RADIUS_KM: 60})
+    assert saved["data"][CONF_LIGHTNING_DISTANCE_ENTITY_ID] == "sensor.lightning_distance"
+    assert saved["data"][CONF_LIGHTNING_COUNTER_ENTITY_ID] == "sensor.lightning_count"
 
 
 def test_parameter_validation_rejects_unsafe_ranges_and_bad_order() -> None:
@@ -263,8 +396,9 @@ async def test_coordinator_degrades_to_lightning_when_radar_source_fails() -> No
         payload = await coordinator._async_update_data()
 
     assert payload["level"] == RISK_LEVEL_WARNING
+    assert payload[ATTR_EVIDENCE_KIND] == EVIDENCE_KIND_LIGHTNING_ONLY
     assert payload[ATTR_LIGHTNING_DISTANCE_KM] == 4.5
-    assert payload[ATTR_STALE] is False
+    assert payload[ATTR_STALE] is True
     assert "radar_source_error" in payload[ATTR_RAINVIEWER_DIAGNOSTICS]
     assert payload[ATTR_LIGHTNING_DIAGNOSTICS] == ()
     assert payload[ATTR_SOURCE_STATUS] == {

@@ -36,7 +36,6 @@ except Exception:  # pragma: no cover - local static/test environment only.
                 return None
 
 from .const import (
-    CONF_ANALYSIS_RADIUS_KM,
     CONF_CORE_URGENT_DBZ,
     CONF_CORE_WARNING_DBZ,
     CONF_CORE_WATCH_DBZ,
@@ -45,29 +44,10 @@ from .const import (
     CONF_LIGHTNING_DISTANCE_ENTITY_ID,
     CONF_LIGHTNING_TRIGGER_RADIUS_KM,
     CONF_LOCATION_ENTITY_ID,
-    CONF_MIN_ANALYSIS_INTERVAL_SECONDS,
-    CONF_MIN_CORE_PIXELS,
-    CONF_RAINVIEWER_FRAMES,
-    CONF_RAINVIEWER_ZOOM,
-    CONF_STALE_CLEAR_SECONDS,
     CONF_URGENT_CORE_DISTANCE_KM,
     CONF_URGENT_LIGHTNING_DISTANCE_KM,
     CONF_WARNING_CORE_DISTANCE_KM,
     CONF_WARNING_LIGHTNING_DISTANCE_KM,
-    DEFAULT_ANALYSIS_RADIUS_KM,
-    DEFAULT_CORE_URGENT_DBZ,
-    DEFAULT_CORE_WARNING_DBZ,
-    DEFAULT_CORE_WATCH_DBZ,
-    DEFAULT_LIGHTNING_TRIGGER_RADIUS_KM,
-    DEFAULT_MIN_ANALYSIS_INTERVAL_SECONDS,
-    DEFAULT_MIN_CORE_PIXELS,
-    DEFAULT_RAINVIEWER_FRAMES,
-    DEFAULT_RAINVIEWER_ZOOM,
-    DEFAULT_STALE_CLEAR_SECONDS,
-    DEFAULT_URGENT_CORE_DISTANCE_KM,
-    DEFAULT_URGENT_LIGHTNING_DISTANCE_KM,
-    DEFAULT_WARNING_CORE_DISTANCE_KM,
-    DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
     DOMAIN,
     OPTIONAL_CONF_DEFAULTS,
     PARAMETER_SPECS,
@@ -85,6 +65,8 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             user_input = _clean_optional_entity_ids(user_input)
+            user_input.setdefault(CONF_LIGHTNING_DISTANCE_ENTITY_ID, None)
+            user_input.setdefault(CONF_LIGHTNING_COUNTER_ENTITY_ID, None)
             validation_errors = _validate_parameter_ranges(user_input)
             if validation_errors:
                 return self.async_show_form(
@@ -114,7 +96,7 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
         return RadarHailRiskOptionsFlowHandler(config_entry)
 
     def _base_schema(self) -> dict[str, Any]:
-        """Return the setup schema with optional autodetected Blitzortung sensors."""
+        """Return the simple setup schema with optional autodetected lightning sensors."""
 
         candidates = autodetect_blitzortung_entities(_iter_hass_states(getattr(self, "hass", None)))
 
@@ -123,8 +105,6 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_LOCATION_ENTITY_ID: "",
                 CONF_LIGHTNING_DISTANCE_ENTITY_ID: candidates.distance_entity_id or str,
                 CONF_LIGHTNING_COUNTER_ENTITY_ID: candidates.counter_entity_id or str,
-                CONF_LIGHTNING_AZIMUTH_ENTITY_ID: candidates.azimuth_entity_id or str,
-                **OPTIONAL_CONF_DEFAULTS,
             }
 
         return {
@@ -145,60 +125,6 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", multiple=False)
             ),
-            _optional_entity_key(
-                CONF_LIGHTNING_AZIMUTH_ENTITY_ID, candidates.azimuth_entity_id
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="sensor", multiple=False)
-            ),
-            _number_key(CONF_ANALYSIS_RADIUS_KM, DEFAULT_ANALYSIS_RADIUS_KM): _number_selector(
-                CONF_ANALYSIS_RADIUS_KM
-            ),
-            _number_key(
-                CONF_LIGHTNING_TRIGGER_RADIUS_KM,
-                DEFAULT_LIGHTNING_TRIGGER_RADIUS_KM,
-            ): _number_selector(CONF_LIGHTNING_TRIGGER_RADIUS_KM),
-            _number_key(
-                CONF_WARNING_LIGHTNING_DISTANCE_KM,
-                DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
-            ): _number_selector(CONF_WARNING_LIGHTNING_DISTANCE_KM),
-            _number_key(
-                CONF_URGENT_LIGHTNING_DISTANCE_KM,
-                DEFAULT_URGENT_LIGHTNING_DISTANCE_KM,
-            ): _number_selector(CONF_URGENT_LIGHTNING_DISTANCE_KM),
-            _number_key(CONF_CORE_WATCH_DBZ, DEFAULT_CORE_WATCH_DBZ): _number_selector(
-                CONF_CORE_WATCH_DBZ
-            ),
-            _number_key(
-                CONF_CORE_WARNING_DBZ,
-                DEFAULT_CORE_WARNING_DBZ,
-            ): _number_selector(CONF_CORE_WARNING_DBZ),
-            _number_key(CONF_CORE_URGENT_DBZ, DEFAULT_CORE_URGENT_DBZ): _number_selector(
-                CONF_CORE_URGENT_DBZ
-            ),
-            _number_key(CONF_MIN_CORE_PIXELS, DEFAULT_MIN_CORE_PIXELS): _number_selector(
-                CONF_MIN_CORE_PIXELS
-            ),
-            _number_key(
-                CONF_MIN_ANALYSIS_INTERVAL_SECONDS,
-                DEFAULT_MIN_ANALYSIS_INTERVAL_SECONDS,
-            ): _number_selector(CONF_MIN_ANALYSIS_INTERVAL_SECONDS),
-            _number_key(CONF_STALE_CLEAR_SECONDS, DEFAULT_STALE_CLEAR_SECONDS): _number_selector(
-                CONF_STALE_CLEAR_SECONDS
-            ),
-            _number_key(CONF_RAINVIEWER_ZOOM, DEFAULT_RAINVIEWER_ZOOM): _number_selector(
-                CONF_RAINVIEWER_ZOOM
-            ),
-            _number_key(CONF_RAINVIEWER_FRAMES, DEFAULT_RAINVIEWER_FRAMES): _number_selector(
-                CONF_RAINVIEWER_FRAMES
-            ),
-            _number_key(
-                CONF_WARNING_CORE_DISTANCE_KM,
-                DEFAULT_WARNING_CORE_DISTANCE_KM,
-            ): _number_selector(CONF_WARNING_CORE_DISTANCE_KM),
-            _number_key(
-                CONF_URGENT_CORE_DISTANCE_KM,
-                DEFAULT_URGENT_CORE_DISTANCE_KM,
-            ): _number_selector(CONF_URGENT_CORE_DISTANCE_KM),
         }
 
 
@@ -228,6 +154,14 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
                     data_schema=vol.Schema(self._options_schema(current_options)) if vol else dict,
                     errors={"base": "lightning_pair_required"},
                 )
+            current_options = self._current_options()
+            for key in (
+                CONF_LOCATION_ENTITY_ID,
+                CONF_LIGHTNING_DISTANCE_ENTITY_ID,
+                CONF_LIGHTNING_COUNTER_ENTITY_ID,
+            ):
+                if key in current_options:
+                    user_input.setdefault(key, current_options[key])
             return self.async_create_entry(title="Radar Hail Risk", data=user_input)
 
         current_options = self._current_options()
@@ -251,13 +185,6 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
 
         if not vol:
             return {
-                CONF_LOCATION_ENTITY_ID: current_options.get(CONF_LOCATION_ENTITY_ID, ""),
-                CONF_LIGHTNING_DISTANCE_ENTITY_ID: current_options.get(
-                    CONF_LIGHTNING_DISTANCE_ENTITY_ID, ""
-                ),
-                CONF_LIGHTNING_COUNTER_ENTITY_ID: current_options.get(
-                    CONF_LIGHTNING_COUNTER_ENTITY_ID, ""
-                ),
                 CONF_LIGHTNING_AZIMUTH_ENTITY_ID: current_options.get(
                     CONF_LIGHTNING_AZIMUTH_ENTITY_ID, ""
                 ),
@@ -268,28 +195,6 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
             }
 
         return {
-            _optional_entity_key(
-                CONF_LOCATION_ENTITY_ID,
-                current_options.get(CONF_LOCATION_ENTITY_ID),
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain=["zone", "person", "device_tracker"], multiple=False
-                )
-            ),
-            _optional_entity_key(
-                CONF_LIGHTNING_DISTANCE_ENTITY_ID,
-                current_options.get(CONF_LIGHTNING_DISTANCE_ENTITY_ID),
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="sensor", device_class="distance", multiple=False
-                )
-            ),
-            _optional_entity_key(
-                CONF_LIGHTNING_COUNTER_ENTITY_ID,
-                current_options.get(CONF_LIGHTNING_COUNTER_ENTITY_ID),
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="sensor", multiple=False)
-            ),
             _optional_entity_key(
                 CONF_LIGHTNING_AZIMUTH_ENTITY_ID,
                 current_options.get(CONF_LIGHTNING_AZIMUTH_ENTITY_ID),
@@ -304,7 +209,7 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
 
 
 def _clean_optional_entity_ids(user_input: dict[str, Any]) -> dict[str, Any]:
-    """Drop blank optional lightning entity selectors from flow input."""
+    """Normalize optional selectors while preserving an explicit radar-only choice."""
 
     cleaned = dict(user_input)
     for key in (
@@ -315,7 +220,13 @@ def _clean_optional_entity_ids(user_input: dict[str, Any]) -> dict[str, Any]:
     ):
         value = cleaned.get(key)
         if value is None or (isinstance(value, str) and not value.strip()):
-            cleaned.pop(key, None)
+            if key in (
+                CONF_LIGHTNING_DISTANCE_ENTITY_ID,
+                CONF_LIGHTNING_COUNTER_ENTITY_ID,
+            ) and key in cleaned:
+                cleaned[key] = None
+            else:
+                cleaned.pop(key, None)
     return cleaned
 
 

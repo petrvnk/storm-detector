@@ -45,6 +45,7 @@ class RadarHailDataStaleBinarySensor(CoordinatorEntity[Any], BinarySensorEntity)
     _attr_has_entity_name = True
     _attr_name = "Data Stale"
     _attr_icon = "mdi:clock-alert-outline"
+    _attr_entity_registry_enabled_default = True
 
     def __init__(self, coordinator: Any | None = None, config_entry: Any | None = None) -> None:
         super().__init__(coordinator)
@@ -85,6 +86,7 @@ class RadarHailRiskActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity
     _attr_has_entity_name = True
     _attr_name = "Active"
     _attr_icon = "mdi:weather-hail"
+    _attr_entity_registry_enabled_default = True
 
     def __init__(self, coordinator: Any | None = None, config_entry: Any | None = None) -> None:
         super().__init__(coordinator)

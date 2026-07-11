@@ -14,5 +14,6 @@ def test_manifest_exists_and_has_required_fields() -> None:
     assert data["domain"] == "radar_hail_risk"
     assert data["name"] == "Radar Hail Risk"
     assert data.get("config_flow") is True
+    assert data.get("iot_class") == "cloud_polling"
     assert isinstance(data.get("requirements"), list)
     assert "loggers" in data

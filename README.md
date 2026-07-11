@@ -21,30 +21,36 @@ Current implemented slices:
 - Options/diagnostics/resilience hardening
 - Dashboard snippets and notification blueprint
 
-## Install via HACS custom repository
+## Current Simple RC install/test route — manual archive only
 
-1. HACS → Integrations → three-dot menu → Custom repositories.
-2. Add this repository URL.
-3. Category: `Integration`.
-4. Install **Radar Hail Risk**.
-5. Restart Home Assistant.
-6. Settings → Devices & services → Add integration → **Radar Hail Risk**.
-7. Optional but recommended: install/configure a Blitzortung-compatible integration and select its distance/counter sensors. If you skip this, Radar Hail Risk runs in radar-only mode.
+The **checksum-verified manual archive** is the only valid current install/test route for this unpushed RC. Verify the SHA-256 supplied with `radar_hail_risk-simple-rc.zip` before extracting it; do not substitute a repository checkout or HACS download.
 
-## Location and configurable parameters
+1. Run `sha256sum radar_hail_risk-simple-rc.zip` and compare the complete digest with the separately supplied reviewed checksum.
+2. Extract the verified ZIP outside the Home Assistant configuration directory.
+3. Copy only `custom_components/radar_hail_risk/` from the extracted archive to `<HA config>/custom_components/radar_hail_risk/`.
+4. Restart Home Assistant.
+5. Settings → Devices & services → Add integration → **Radar Hail Risk**.
+6. On the first setup screen, optionally select one location entity (for example `zone.home`) and a matching lightning distance/counter pair. Leave the location blank to use Home Assistant's core location; leave both lightning fields blank for radar-only mode.
+7. Keep the safe defaults for the first run. Technical thresholds, radar workload, stale timeout, and optional lightning azimuth are available later under **Configure → Options**.
 
-By default, Radar Hail Risk uses the Home Assistant core location (`hass.config`) as the single source of truth for radar center and distance calculations. In the options flow you can instead select a `zone`, `person`, or `device_tracker` with latitude/longitude attributes, for example `zone.home`. This is recommended when another integration already owns the canonical home/test location.
+### Conditional future HACS route (not currently authorized)
+
+HACS is **not** an equivalent current path. HACS instructions apply only after separately authorized publication of this exact reviewed source and SHA-256 checksum. If that separate authorization is given, add the authorized repository URL as a HACS custom repository in category `Integration`, install **Radar Hail Risk**, restart Home Assistant, and then use the same setup flow above. Until then, do not install or test this RC through HACS.
+
+## Location and advanced options
+
+By default, Radar Hail Risk uses the Home Assistant core location (`hass.config`) as the single source of truth for radar center and distance calculations. During initial setup you can instead select a `zone`, `person`, or `device_tracker` with latitude/longitude attributes, for example `zone.home`. This is recommended when another integration already owns the canonical home/test location.
 
 If the configured location entity is missing or has no coordinates, the integration degrades to `unavailable` with a diagnostic such as `missing_location_entity` instead of silently falling back to another position.
 
-The config/options flow exposes bounded number selectors for the main tuning parameters:
+The first setup screen deliberately contains only location, lightning distance, and lightning counter. The advanced options flow exposes bounded selectors for the optional lightning azimuth and these tuning parameters:
 
 | Parameter | Default | Allowed range | Meaning |
 |---|---:|---:|---|
 | `analysis_radius_km` | 50 km | 10–150 km | Radar search radius around the configured location. |
 | `lightning_trigger_radius_km` | 30 km | 5–150 km | Nearby lightning radius that can trigger or strengthen evaluation. |
 | `warning_lightning_distance_km` | 20 km | 1–100 km | Lightning distance contributing to `warning`. |
-| `urgent_lightning_distance_km` | 8 km | 1–100 km | Lightning distance contributing to `urgent`. |
+| `urgent_lightning_distance_km` | 8 km | 1–100 km | Legacy proximity boundary retained for compatibility; lightning alone is capped at `warning`, while current urgent radar evidence is required for `urgent`. |
 | `core_watch_dbz` | 50 dBZ | 35–75 dBZ | Radar core threshold for `watch`. |
 | `core_warning_dbz` | 55 dBZ | 35–75 dBZ | Radar core threshold for `warning`. |
 | `core_urgent_dbz` | 60 dBZ | 35–75 dBZ | Radar core threshold for `urgent`. |
@@ -62,6 +68,7 @@ Validation also enforces sensible relationships: `watch < warning < urgent` dBZ 
 
 Every risk entity includes support-oriented attributes that help explain degraded behavior and threshold-aware radar cores:
 
+- `evidence_kind` — stable discriminator: `none`, `radar_storm`, `radar_hail`, `lightning_only`, `radar_hail_with_lightning`, or `unavailable`. Automations should use this instead of parsing summary text.
 - `location_source` — `hass.config` or the selected `zone` / `person` / `device_tracker`.
 - `core_watch_distance_km`, `core_warning_distance_km`, `core_urgent_distance_km` — authoritative core distances at the configured watch/warning/urgent thresholds used by the risk model.
 - `core50_distance_km`, `core55_distance_km`, `core60_distance_km` — compatibility diagnostics at fixed 50/55/60 dBZ thresholds; they do not override the configured classification thresholds.
@@ -89,6 +96,8 @@ The config flow tries to autodetect sensors such as `sensor.*_lightning_distance
 
 Normal HA empty states such as `unknown`/`unavailable` from the lightning distance sensor are treated as “no current lightning distance”, not as integration failures.
 
+Lightning-only evidence can publish an immediate thunderstorm warning after a new nearby strike, but never `urgent` and never a positive hail claim. `urgent` always requires current urgent radar-core evidence. If radar is stale or unusable, the integration fails closed to `unavailable` unless current nearby lightning supports a degraded `lightning_only` warning.
+
 ## Entities
 
 Entity IDs may differ depending on Home Assistant naming. The examples below assume default names such as:
@@ -97,14 +106,10 @@ Entity IDs may differ depending on Home Assistant naming. The examples below ass
 |---|---|
 | `sensor.radar_hail_risk_level` | `none`, `watch`, `warning`, `urgent`, `unavailable` |
 | `sensor.radar_hail_risk_summary` | human-readable summary |
-| `sensor.radar_hail_risk_max_dbz` | maximum detected dBZ |
-| `sensor.radar_hail_risk_core_distance` | nearest selected storm core distance |
-| `sensor.radar_hail_risk_lightning_distance` | normalized lightning distance |
-| `sensor.radar_hail_risk_frame_age` | age of analyzed radar frame |
 | `binary_sensor.radar_hail_risk_active` | true when the risk level is active |
 | `binary_sensor.radar_hail_risk_data_stale` | true when source data is stale |
 
-Adjust entity IDs in examples to match your Home Assistant instance.
+These four entities are enabled by default for new installs. Diagnostic sensors (`Max dBZ`, core/lightning distance, frame age, and last error) and the storm-core device tracker remain available with their existing unique IDs, but are disabled by default for new entity-registry entries. Enable them from the integration's entity list when troubleshooting. Existing enabled entities remain enabled. Adjust entity IDs in examples to match your Home Assistant instance.
 
 ## Lovelace dashboard snippets and examples
 
@@ -126,22 +131,22 @@ type: custom:radar-hail-risk-card
 title: Krupové riziko
 ```
 
-The card reads the default Radar Hail Risk entities and renders status, radar/source health, core distances, lightning distance, frame age, confidence, and a compact SVG storm visualization.
+The card reads Radar Hail Risk entities and can render radar/source health, core distances, lightning distance, frame age, confidence, and a compact SVG storm visualization when the relevant diagnostic entities are enabled.
 
-### Minimal glance card
+### Minimal default-entity card
 
 ```yaml
-type: glance
+type: entities
 title: Radar Hail Risk
 entities:
   - entity: sensor.radar_hail_risk_level
-    name: Risk
-  - entity: sensor.radar_hail_risk_max_dbz
-    name: Max dBZ
-  - entity: sensor.radar_hail_risk_core_distance
-    name: Core distance
-  - entity: sensor.radar_hail_risk_lightning_distance
-    name: Lightning
+    name: Risk level
+  - entity: sensor.radar_hail_risk_summary
+    name: Summary
+  - entity: binary_sensor.radar_hail_risk_active
+    name: Active risk
+  - entity: binary_sensor.radar_hail_risk_data_stale
+    name: Data stale
 ```
 
 ### Status + detail entities
@@ -157,7 +162,7 @@ entities:
     name: Summary
   - entity: binary_sensor.radar_hail_risk_active
     name: Active risk
-  - entity: binary_sensor.radar_hail_data_stale
+  - entity: binary_sensor.radar_hail_risk_data_stale
     name: Data stale
   - type: section
     label: Radar
@@ -202,10 +207,8 @@ blueprints/automation/radar_hail_risk/hail_risk_notification.yaml
 
 Import/copy it into Home Assistant and choose:
 
-- risk level sensor
-- optional summary sensor
-- optional max dBZ sensor
-- optional lightning distance sensor
+- risk level sensor (`sensor.radar_hail_risk_level`)
+- optional summary sensor (`sensor.radar_hail_risk_summary`; otherwise the blueprint reads the level sensor's `summary` attribute)
 - notify service, e.g. `notify.mobile_app_phone`
 - minimum notification level: `watch`, `warning`, or `urgent`
 - title language: `en` or `cs`
@@ -213,15 +216,18 @@ Import/copy it into Home Assistant and choose:
 
 The blueprint is opt-in and does **not** create automations or dashboard changes by itself.
 
+Notification titles and messages use the level sensor's machine-readable `evidence_kind` attribute. Lightning-only warnings say thunderstorm/lightning and “hail not confirmed”; radar-supported warnings say “possible hail”. Missing or unknown evidence values fall back to conservative weather wording without a hail claim.
+
 ## Czech notification wording
 
 The blueprint supports Czech titles:
 
-| Level | Czech title |
+| Level / evidence | Czech title |
 |---|---|
-| `watch` | Sledování bouřky |
-| `warning` | Varování před kroupami |
-| `urgent` | Nebezpečí krup |
+| `watch` + `radar_storm` | Sledování bouřky |
+| `warning` + `lightning_only` | Blízká bouřka / blesky poblíž |
+| `warning` + radar hail evidence | Možné kroupy poblíž |
+| `urgent` + radar hail evidence | Vysoké riziko krup |
 
 ## Limitations and safety notes
 
@@ -236,6 +242,29 @@ The blueprint supports Czech titles:
 - Radar data source: [RainViewer](https://www.rainviewer.com/api.html)
 - Lightning context: Home Assistant entities from Blitzortung-compatible integrations/sensors
 - Platform: [Home Assistant](https://www.home-assistant.io/) and [HACS](https://www.hacs.xyz/)
+
+## Private colleague-test bundle
+
+Build the reviewed local archive from the explicit allowlist with:
+
+```bash
+uv run python scripts/build_colleague_bundle.py --output dist/radar_hail_risk-simple-rc.zip
+sha256sum dist/radar_hail_risk-simple-rc.zip
+```
+
+The generator normalizes ZIP member order, timestamps, and permissions; rejects
+symlinked, missing, secret-like, generated, research, and local Home Assistant paths;
+and performs clean-room extraction/layout checks before keeping the output. Run it a
+second time to a different temporary path and compare SHA-256 values when verifying a
+handoff. The archive is for private testing only: building it does not publish a HACS
+release, push a tag, or install anything into Home Assistant. For this unpushed RC,
+the checksum-verified manual archive remains the only valid current install/test route;
+HACS remains conditional on separately authorized publication of the exact reviewed
+source and SHA-256 checksum.
+
+The colleague install/test/upgrade/rollback/uninstall procedure is in
+[`docs/colleague-test-checklist.md`](docs/colleague-test-checklist.md). The minimal card
+shipped in the archive is `examples/lovelace/native-card.yaml`.
 
 ## Release readiness
 

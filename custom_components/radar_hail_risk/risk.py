@@ -6,6 +6,12 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from .const import (
+    EVIDENCE_KIND_LIGHTNING_ONLY,
+    EVIDENCE_KIND_NONE,
+    EVIDENCE_KIND_RADAR_HAIL,
+    EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING,
+    EVIDENCE_KIND_RADAR_STORM,
+    EVIDENCE_KIND_UNAVAILABLE,
     RISK_LEVEL_NONE,
     RISK_LEVEL_URGENT,
     RISK_LEVEL_WARNING,
@@ -13,6 +19,14 @@ from .const import (
 )
 
 RiskLevel = Literal["none", "watch", "warning", "urgent", "unavailable"]
+EvidenceKind = Literal[
+    "none",
+    "radar_storm",
+    "radar_hail",
+    "lightning_only",
+    "radar_hail_with_lightning",
+    "unavailable",
+]
 
 # Internal event markers are useful as attributes for debugging but should never leak
 # into the human-facing summary or last_error sensor. They are not source failures.
@@ -88,6 +102,7 @@ class HailRiskResult:
 
     level: RiskLevel
     summary: str
+    evidence_kind: EvidenceKind
     max_dbz: int | None = None
     core_distance_km: float | None = None
     core50_distance_km: float | None = None
@@ -161,23 +176,18 @@ def classify_from_thresholds(
     if max_dbz is None and core50_distance_km is None and lightning_distance_km is None:
         return "unavailable"
 
+    if core60_distance_km is not None and core60_distance_km <= urgent_core_distance_km:
+        return RISK_LEVEL_URGENT
+
     if (
         lightning_new_strike
         and lightning_triggered
         and lightning_distance_km is not None
         and lightning_distance_km <= warning_lightning_distance_km
     ):
-        # A new nearby strike is event evidence; proximity by itself remains warning.
-        if (
-            lightning_distance_km is not None
-            and lightning_distance_km <= urgent_lightning_distance_km
-            and (lightning_counter_delta or 0) > 0
-        ):
-            return RISK_LEVEL_URGENT
+        # Lightning can force immediate publication, but without current urgent radar
+        # evidence it is storm context rather than a hail-urgent signal.
         return RISK_LEVEL_WARNING
-
-    if core60_distance_km is not None and core60_distance_km <= urgent_core_distance_km:
-        return RISK_LEVEL_URGENT
 
     if core60_distance_km is not None and core60_distance_km <= warning_core_distance_km:
         return RISK_LEVEL_WARNING
@@ -218,6 +228,7 @@ def classify_from_thresholds(
 def build_summary(
     *,
     level: RiskLevel,
+    evidence_kind: EvidenceKind,
     max_dbz: int | None,
     core_distance_km: float | None,
     lightning_distance_km: float | None,
@@ -227,36 +238,59 @@ def build_summary(
 ) -> str:
     """Build a short user-facing summary for the main risk sensor."""
 
-    public_diagnostics = user_visible_diagnostics(diagnostics)
-    if public_diagnostics:
-        suffix = f" ({', '.join(public_diagnostics)})"
-    else:
-        suffix = ""
-
     if level == "unavailable":
-        return f"Risk unavailable{suffix}"
+        return "Risk unavailable"
+
+    if evidence_kind == EVIDENCE_KIND_LIGHTNING_ONLY:
+        return "Thunderstorm/lightning nearby; hail not confirmed"
+
+    if evidence_kind in {EVIDENCE_KIND_RADAR_HAIL, EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING}:
+        if level == RISK_LEVEL_URGENT:
+            summary = "High hail risk nearby"
+        else:
+            summary = "Possible hail nearby"
+        if evidence_kind == EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING:
+            summary += "; lightning also detected"
+        return summary
+
+    if evidence_kind == EVIDENCE_KIND_RADAR_STORM:
+        return "Storm watch: radar core detected"
 
     if level == "none":
-        if max_dbz is None and frame_age_seconds is not None:
-            return "Radar available: no threshold risk detected" + suffix
-        if max_dbz is None:
-            return "No radar cores detected" + suffix
-        if selected_core_threshold_dbz is None or core_distance_km is None:
-            return f"Max dBZ {max_dbz} with low risk" + suffix
-        return (
-            f"Max dBZ {max_dbz}, closest core: {selected_core_threshold_dbz}+{core_distance_km:.1f} km"
-            + suffix
-        )
+        return "No radar risk detected"
 
-    if level == "watch":
-        return f"Watch: max {max_dbz if max_dbz is not None else 'n/a'} dBZ" + suffix
-    if level == "warning":
+    return "No current warning evidence; previous level awaiting confirmation"
+
+
+def evidence_kind_for_levels(
+    *, level: RiskLevel, radar_level: RiskLevel, lightning_level: RiskLevel
+) -> EvidenceKind:
+    """Return the stable machine-readable evidence discriminator for a payload."""
+
+    if level == "unavailable":
+        return EVIDENCE_KIND_UNAVAILABLE
+    if level == RISK_LEVEL_NONE:
+        return EVIDENCE_KIND_NONE
+    if level == RISK_LEVEL_WATCH:
         return (
-            "Warning: "
-            + (f"max {max_dbz if max_dbz is not None else 'n/a'} dBZ" if max_dbz is not None else "core risk")
-            + suffix
+            EVIDENCE_KIND_RADAR_STORM
+            if radar_level in {RISK_LEVEL_WATCH, RISK_LEVEL_WARNING, RISK_LEVEL_URGENT}
+            else EVIDENCE_KIND_NONE
         )
-    return "Urgent risk" + suffix
+    if level == RISK_LEVEL_URGENT and radar_level != RISK_LEVEL_URGENT:
+        return EVIDENCE_KIND_NONE
+
+    has_radar_hail = radar_level in {RISK_LEVEL_WARNING, RISK_LEVEL_URGENT}
+    has_lightning = lightning_level == RISK_LEVEL_WARNING
+    if has_radar_hail and has_lightning:
+        return EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING
+    if has_radar_hail:
+        return EVIDENCE_KIND_RADAR_HAIL
+    if has_lightning:
+        return EVIDENCE_KIND_LIGHTNING_ONLY
+    if radar_level == RISK_LEVEL_WATCH:
+        return EVIDENCE_KIND_RADAR_STORM
+    return EVIDENCE_KIND_NONE
 
 
 def normalize_optional_int(value: Any, *, default: int) -> int:

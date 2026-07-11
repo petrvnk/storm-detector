@@ -5,9 +5,19 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from custom_components.radar_hail_risk.binary_sensor import RadarHailRiskActiveBinarySensor
-from custom_components.radar_hail_risk.const import RISK_LEVEL_URGENT, RISK_LEVEL_WARNING
+from custom_components.radar_hail_risk.const import (
+    EVIDENCE_KIND_LIGHTNING_ONLY,
+    EVIDENCE_KIND_NONE,
+    EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING,
+    RISK_LEVEL_URGENT,
+    RISK_LEVEL_WARNING,
+)
 from custom_components.radar_hail_risk.rainviewer import AnalyzedFrame, _motion_from_frame_results
-from custom_components.radar_hail_risk.risk import RiskLevelHysteresis, classify_from_thresholds
+from custom_components.radar_hail_risk.risk import (
+    RiskLevelHysteresis,
+    classify_from_thresholds,
+    evidence_kind_for_levels,
+)
 
 
 def _frame(
@@ -177,7 +187,7 @@ def test_motion_uses_selected_urgent_core_when_omitted_from_watch_summaries() ->
     assert motion.eta_minutes == 20
 
 
-def test_lightning_proximity_warns_but_only_new_nearby_strike_is_urgent() -> None:
+def test_lightning_only_new_nearby_strike_is_capped_at_warning() -> None:
     inputs = {
         "max_dbz": None,
         "core_distance_km": None,
@@ -200,7 +210,52 @@ def test_lightning_proximity_warns_but_only_new_nearby_strike_is_urgent() -> Non
         classify_from_thresholds(
             **{**inputs, "lightning_counter_delta": 1}, lightning_new_strike=True
         )
+        == RISK_LEVEL_WARNING
+    )
+
+
+def test_radar_urgent_core_with_new_lightning_remains_urgent() -> None:
+    assert (
+        classify_from_thresholds(
+            max_dbz=62,
+            core_distance_km=None,
+            lightning_distance_km=4.0,
+            watch_dbz=50,
+            warning_dbz=55,
+            urgent_dbz=60,
+            warning_core_distance_km=25,
+            urgent_core_distance_km=15,
+            warning_lightning_distance_km=20,
+            urgent_lightning_distance_km=8,
+            lightning_triggered=True,
+            lightning_counter_delta=1,
+            lightning_new_strike=True,
+            core50_distance_km=4.0,
+            core55_distance_km=4.0,
+            core60_distance_km=4.0,
+        )
         == RISK_LEVEL_URGENT
+    )
+
+
+def test_evidence_kind_describes_published_level_without_pending_overclaim() -> None:
+    assert (
+        evidence_kind_for_levels(
+            level="none", radar_level="warning", lightning_level="unavailable"
+        )
+        == EVIDENCE_KIND_NONE
+    )
+    assert (
+        evidence_kind_for_levels(
+            level="warning", radar_level="unavailable", lightning_level="warning"
+        )
+        == EVIDENCE_KIND_LIGHTNING_ONLY
+    )
+    assert (
+        evidence_kind_for_levels(
+            level="warning", radar_level="warning", lightning_level="warning"
+        )
+        == EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING
     )
 
 

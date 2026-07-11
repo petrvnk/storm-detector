@@ -21,20 +21,6 @@ blueprint:
       selector:
         entity:
           domain: sensor
-    max_dbz_sensor:
-      name: Max dBZ sensor
-      description: Optional sensor with the strongest detected radar reflectivity.
-      default: ""
-      selector:
-        entity:
-          domain: sensor
-    lightning_distance_sensor:
-      name: Lightning distance sensor
-      description: Optional sensor with normalized nearest lightning distance.
-      default: ""
-      selector:
-        entity:
-          domain: sensor
     notify_service:
       name: Notify service
       description: "Example: notify.mobile_app_phone or notify.persistent_notification."
@@ -80,39 +66,35 @@ trigger:
 variables:
   risk_level_entity: !input risk_level_sensor
   summary_entity: !input risk_summary_sensor
-  max_dbz_entity: !input max_dbz_sensor
-  lightning_distance_entity: !input lightning_distance_sensor
   minimum_level: !input minimum_level
   title_language: !input title_language
   cooldown_minutes: !input cooldown_minutes
   current_level: "{{ states(risk_level_entity) }}"
+  evidence_kind: "{{ state_attr(risk_level_entity, 'evidence_kind') or 'unknown' }}"
   summary_text: >-
     {% if summary_entity %}
       {{ states(summary_entity) }}
     {% else %}
       {{ state_attr(risk_level_entity, 'summary') or current_level }}
     {% endif %}
-  detail_text: >-
-    {%- set parts = [] -%}
-    {%- if max_dbz_entity and states(max_dbz_entity) not in ['unknown', 'unavailable', 'none'] -%}
-      {%- set parts = parts + ['max ' ~ states(max_dbz_entity) ~ ' dBZ'] -%}
-    {%- endif -%}
-    {%- if lightning_distance_entity and states(lightning_distance_entity) not in ['unknown', 'unavailable', 'none'] -%}
-      {%- set parts = parts + ['lightning ' ~ states(lightning_distance_entity) ~ ' km'] -%}
-    {%- endif -%}
-    {{ parts | join(', ') }}
   message_text: >-
-    {{ summary_text }}{% if detail_text %}\n{{ detail_text }}{% endif %}
+    {% if title_language == 'cs' %}
+      {% if evidence_kind == 'lightning_only' %}Blízká bouřka / blesky poblíž; kroupy nejsou potvrzené{% elif evidence_kind == 'radar_hail' and current_level == 'urgent' %}Radar ukazuje vysoké riziko krup poblíž{% elif evidence_kind == 'radar_hail' and current_level == 'warning' %}Radar ukazuje možné kroupy poblíž{% elif evidence_kind == 'radar_hail_with_lightning' and current_level == 'urgent' %}Radar ukazuje vysoké riziko krup poblíž; blesky jsou také poblíž{% elif evidence_kind == 'radar_hail_with_lightning' and current_level == 'warning' %}Radar ukazuje možné kroupy poblíž; blesky jsou také poblíž{% elif evidence_kind == 'radar_storm' %}Sledování bouřky{% else %}Změna stavu počasí; radarové potvrzení není k dispozici{% endif %}
+    {% else %}
+      {% if evidence_kind == 'lightning_only' %}Thunderstorm / lightning nearby; hail not confirmed{% elif evidence_kind in ['radar_hail', 'radar_hail_with_lightning'] %}{{ summary_text }}{% elif evidence_kind == 'radar_storm' %}Storm watch{% else %}Weather risk state changed; radar confirmation unavailable{% endif %}
+    {% endif %}
   level_rank: >-
     {{ {'none': 0, 'unavailable': 0, 'watch': 1, 'warning': 2, 'urgent': 3}.get(current_level, 0) }}
   min_rank: >-
     {{ {'watch': 1, 'warning': 2, 'urgent': 3}.get(minimum_level, 2) }}
   title_text: >-
     {% if title_language == 'cs' %}
-      {% if current_level == 'urgent' %}Nebezpečí krup{% elif current_level == 'warning' %}Varování před kroupami{% elif current_level == 'watch' %}Sledování bouřky{% else %}Radar Hail Risk{% endif %}
+      {% if evidence_kind == 'lightning_only' %}Blízká bouřka / blesky poblíž{% elif current_level == 'urgent' and evidence_kind in ['radar_hail', 'radar_hail_with_lightning'] %}Vysoké riziko krup{% elif current_level == 'warning' and evidence_kind in ['radar_hail', 'radar_hail_with_lightning'] %}Možné kroupy poblíž{% elif current_level == 'watch' and evidence_kind == 'radar_storm' %}Sledování bouřky{% else %}Upozornění na počasí{% endif %}
     {% else %}
-      {% if current_level == 'urgent' %}Hail risk urgent{% elif current_level == 'warning' %}Hail risk warning{% elif current_level == 'watch' %}Storm watch{% else %}Radar Hail Risk{% endif %}
+      {% if evidence_kind == 'lightning_only' %}Thunderstorm / lightning nearby{% elif current_level == 'urgent' and evidence_kind in ['radar_hail', 'radar_hail_with_lightning'] %}High hail risk nearby{% elif current_level == 'warning' and evidence_kind in ['radar_hail', 'radar_hail_with_lightning'] %}Possible hail nearby{% elif current_level == 'watch' and evidence_kind == 'radar_storm' %}Storm watch{% else %}Weather risk update{% endif %}
     {% endif %}
+  notification_icon: >-
+    {% if evidence_kind == 'lightning_only' %}mdi:weather-lightning{% elif evidence_kind in ['radar_hail', 'radar_hail_with_lightning'] %}mdi:weather-hail{% else %}mdi:weather-cloudy-alert{% endif %}
 
 action:
   - condition: template
@@ -128,4 +110,4 @@ action:
       data:
         tag: radar_hail_risk
         group: weather
-        notification_icon: mdi:weather-hail
+        notification_icon: "{{ notification_icon }}"

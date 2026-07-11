@@ -20,6 +20,8 @@ Initial HACS-readiness build.
 - Bounded config/options number selectors with validation for radar radius, lightning distances, dBZ thresholds, stale timeout, RainViewer zoom/frames, and analysis cadence.
 - Manual Lovelace dashboard snippets in `README.md`.
 - Opt-in notification blueprint with Czech and English titles.
+- Stable additive `evidence_kind` payload/entity attribute and evidence-aware notification wording.
+- Fail-closed radar outage semantics: lightning-only events are capped at thunderstorm `warning`, while `urgent` requires current urgent radar evidence.
 - HACS validation GitHub Actions workflow.
 - Unit/scaffold tests for staged implementation slices.
 

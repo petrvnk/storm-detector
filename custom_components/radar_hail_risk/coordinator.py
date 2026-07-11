@@ -23,6 +23,7 @@ from .const import (
     ATTR_DBZ_TREND,
     ATTR_DEGRADATION_REASONS,
     ATTR_DISTANCE_TREND,
+    ATTR_EVIDENCE_KIND,
     ATTR_FRAME_AGE_SECONDS,
     ATTR_FRAME_TIME,
     ATTR_FRAMES_ANALYZED,
@@ -86,8 +87,10 @@ from .const import (
     DEFAULT_URGENT_LIGHTNING_DISTANCE_KM,
     DEFAULT_WARNING_CORE_DISTANCE_KM,
     DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
+    EVIDENCE_KIND_UNAVAILABLE,
     OPTIONAL_CONF_DEFAULTS,
     RISK_LEVEL_UNAVAILABLE,
+    RISK_LEVEL_WARNING,
 )
 from .ha_fallback import FallbackDataUpdateCoordinator, FallbackUpdateFailed
 from .lightning import (
@@ -102,6 +105,7 @@ from .risk import (
     RiskLevelHysteresis,
     build_summary,
     classify_from_thresholds,
+    evidence_kind_for_levels,
     normalize_optional_float,
     normalize_optional_int,
     user_visible_diagnostics,
@@ -418,6 +422,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
         return {
             **payload,
             ATTR_SUMMARY: result.summary,
+            ATTR_EVIDENCE_KIND: result.evidence_kind,
             ATTR_MAX_DBZ: result.max_dbz,
             ATTR_CORE_DISTANCE_KM: result.core_distance_km,
             ATTR_CORE50_DISTANCE_KM: result.core50_distance_km,
@@ -474,11 +479,24 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
         counter_entity_id = config.get(CONF_LIGHTNING_COUNTER_ENTITY_ID)
         azimuth_entity_id = config.get(CONF_LIGHTNING_AZIMUTH_ENTITY_ID)
 
-        if not distance_entity_id or not counter_entity_id or not azimuth_entity_id:
+        entry_data = getattr(self.entry, "data", {}) or {}
+        entry_options = getattr(self.entry, "options", {}) or {}
+        has_lightning_selection = any(
+            key in entry_data or key in entry_options
+            for key in (
+                CONF_LIGHTNING_DISTANCE_ENTITY_ID,
+                CONF_LIGHTNING_COUNTER_ENTITY_ID,
+            )
+        )
+
+        if (not distance_entity_id or not counter_entity_id) and not has_lightning_selection:
             candidates = autodetect_blitzortung_entities(_iter_hass_states(self.hass))
             distance_entity_id = distance_entity_id or candidates.distance_entity_id
             counter_entity_id = counter_entity_id or candidates.counter_entity_id
             azimuth_entity_id = azimuth_entity_id or candidates.azimuth_entity_id
+        elif distance_entity_id and counter_entity_id and not azimuth_entity_id:
+            candidates = autodetect_blitzortung_entities(_iter_hass_states(self.hass))
+            azimuth_entity_id = candidates.azimuth_entity_id
 
         if not distance_entity_id or not counter_entity_id:
             return None
@@ -516,6 +534,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                 HailRiskResult(
                     level=RISK_LEVEL_UNAVAILABLE,
                     summary="Location source is not configured or has no coordinates",
+                    evidence_kind=EVIDENCE_KIND_UNAVAILABLE,
                     last_error=location_error,
                     is_stale=True,
                     diagnostics=(location_error,),
@@ -540,6 +559,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     HailRiskResult(
                         level=RISK_LEVEL_UNAVAILABLE,
                         summary="aiohttp is not available in this environment",
+                        evidence_kind=EVIDENCE_KIND_UNAVAILABLE,
                         last_error="aiohttp is not available in this environment",
                         is_stale=True,
                         diagnostics=("missing_aiohttp_dependency",),
@@ -823,7 +843,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     radar_diagnostics=radar_diagnostics,
                     lightning_diagnostics=tuple(lightning_diagnostics),
                 )
-                source_data_stale = bool(radar_stale)
+                source_data_stale = bool(radar_stale or analysis is None)
                 warning_lightning_distance_km = normalize_optional_int(
                     cfg.get(CONF_WARNING_LIGHTNING_DISTANCE_KM),
                     default=DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
@@ -886,12 +906,26 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     lightning_counter_delta=lightning_counter_delta,
                     lightning_new_strike=lightning_new_strike,
                 )
+                if radar_level == RISK_LEVEL_UNAVAILABLE:
+                    candidate_level = (
+                        RISK_LEVEL_WARNING
+                        if lightning_level == RISK_LEVEL_WARNING
+                        else RISK_LEVEL_UNAVAILABLE
+                    )
                 has_current_signal = radar_level not in ("none", "unavailable") or (
                     lightning_level not in ("none", "unavailable")
                 )
                 level = self._risk_hysteresis.update(
                     candidate_level,
                     force=candidate_level == "unavailable" or lightning_new_strike,
+                )
+                if level == "urgent" and radar_level != "urgent":
+                    level = self._risk_hysteresis.update(candidate_level, force=True)
+
+                evidence_kind = evidence_kind_for_levels(
+                    level=level,
+                    radar_level=radar_level,
+                    lightning_level=lightning_level,
                 )
 
                 confidence_score, confidence_level = _confidence_from_signals(
@@ -908,6 +942,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
 
                 summary = build_summary(
                     level=level,
+                    evidence_kind=evidence_kind,
                     max_dbz=max_dbz,
                     core_distance_km=selected_distance,
                     lightning_distance_km=lightning_distance_km,
@@ -920,6 +955,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     HailRiskResult(
                         level=level,
                         summary=summary,
+                        evidence_kind=evidence_kind,
                         max_dbz=max_dbz,
                         core_distance_km=selected_distance,
                         core50_distance_km=core50_distance,

@@ -79,6 +79,7 @@ PARAMETER_SPECS: Final = {
 
 ATTR_LEVEL: Final = "level"
 ATTR_SUMMARY: Final = "summary"
+ATTR_EVIDENCE_KIND: Final = "evidence_kind"
 ATTR_MAX_DBZ: Final = "max_dbz"
 ATTR_CORE_DISTANCE_KM: Final = "core_distance_km"
 ATTR_CORE50_DISTANCE_KM: Final = "core50_distance_km"
@@ -129,6 +130,22 @@ RISK_LEVEL_WATCH: Final = "watch"
 RISK_LEVEL_WARNING: Final = "warning"
 RISK_LEVEL_URGENT: Final = "urgent"
 RISK_LEVEL_UNAVAILABLE: Final = "unavailable"
+
+EVIDENCE_KIND_NONE: Final = "none"
+EVIDENCE_KIND_RADAR_STORM: Final = "radar_storm"
+EVIDENCE_KIND_RADAR_HAIL: Final = "radar_hail"
+EVIDENCE_KIND_LIGHTNING_ONLY: Final = "lightning_only"
+EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING: Final = "radar_hail_with_lightning"
+EVIDENCE_KIND_UNAVAILABLE: Final = "unavailable"
+
+EVIDENCE_KINDS: Final = (
+    EVIDENCE_KIND_NONE,
+    EVIDENCE_KIND_RADAR_STORM,
+    EVIDENCE_KIND_RADAR_HAIL,
+    EVIDENCE_KIND_LIGHTNING_ONLY,
+    EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING,
+    EVIDENCE_KIND_UNAVAILABLE,
+)
 
 RISK_LEVELS = [
     RISK_LEVEL_NONE,
