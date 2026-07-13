@@ -128,10 +128,10 @@ A polished cockpit-style web component is available in `frontend/radar-hail-risk
 
 ```yaml
 type: custom:radar-hail-risk-card
-title: Krupové riziko
+title: Bouřky v okolí
 ```
 
-The card reads Radar Hail Risk entities and can render radar/source health, core distances, lightning distance, frame age, confidence, and a compact SVG storm visualization when the relevant diagnostic entities are enabled.
+The card uses `level`, `evidence_kind`, and source freshness to progressively disclose only current user-relevant information. A clear or unavailable state stays compact; storm, lightning, and radar-supported possible-hail states show only trustworthy distance, movement, ETA, and corroborating-lightning facts that are actually available.
 
 ### Minimal default-entity card
 

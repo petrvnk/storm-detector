@@ -2,13 +2,12 @@ class RadarHailRiskCard extends HTMLElement {
   static getStubConfig() {
     return {
       type: 'custom:radar-hail-risk-card',
-      title: 'Krupové riziko',
+      title: 'Bouřky v okolí',
       level_entity: 'sensor.radar_hail_risk_level',
       summary_entity: 'sensor.radar_hail_risk_summary',
       max_dbz_entity: 'sensor.radar_hail_risk_max_dbz',
       core_distance_entity: 'sensor.radar_hail_risk_core_distance',
       lightning_distance_entity: 'sensor.radar_hail_risk_lightning_distance',
-      frame_age_entity: 'sensor.radar_hail_risk_frame_age',
       active_entity: 'binary_sensor.radar_hail_risk_active',
       stale_entity: 'binary_sensor.radar_hail_risk_data_stale',
     };
@@ -17,21 +16,18 @@ class RadarHailRiskCard extends HTMLElement {
   setConfig(config) {
     if (!config) throw new Error('Invalid configuration');
     this.config = {
-      title: 'Krupové riziko',
+      title: 'Bouřky v okolí',
       level_entity: 'sensor.radar_hail_risk_level',
       summary_entity: 'sensor.radar_hail_risk_summary',
       max_dbz_entity: 'sensor.radar_hail_risk_max_dbz',
       core_distance_entity: 'sensor.radar_hail_risk_core_distance',
       lightning_distance_entity: 'sensor.radar_hail_risk_lightning_distance',
-      frame_age_entity: 'sensor.radar_hail_risk_frame_age',
       active_entity: 'binary_sensor.radar_hail_risk_active',
       stale_entity: 'binary_sensor.radar_hail_risk_data_stale',
       home_label: 'Domov',
       ...config,
     };
-    if (!this.shadowRoot) {
-      this.attachShadow({ mode: 'open' });
-    }
+    if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
   }
 
   set hass(hass) {
@@ -40,111 +36,220 @@ class RadarHailRiskCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 6;
+    return this._cardSize || 1;
   }
 
   render() {
     if (!this.shadowRoot || !this._hass || !this.config) return;
-    const c = this.config;
-    const levelState = this.state(c.level_entity);
-    const level = this.levelValue(levelState?.state);
-    const attrs = levelState?.attributes || {};
-    const summary = this.state(c.summary_entity)?.state || attrs.summary || 'Bez aktuálního shrnutí';
-    const maxDbz = this.number(this.state(c.max_dbz_entity)?.state);
-    const coreDistance = this.number(this.state(c.core_distance_entity)?.state ?? attrs.selected_core_distance_km);
-    const lightningDistance = this.number(this.state(c.lightning_distance_entity)?.state ?? attrs.lightning_distance_km);
-    const frameAge = this.number(this.state(c.frame_age_entity)?.state ?? attrs.frame_age_seconds);
-    const stale = this.state(c.stale_entity)?.state === 'on' || attrs.is_stale === true;
-    const active = this.state(c.active_entity)?.state === 'on';
-    const core50 = this.number(attrs.core50_distance_km);
-    const core55 = this.number(attrs.core55_distance_km);
-    const core60 = this.number(attrs.core60_distance_km);
-    const stormCores = Array.isArray(attrs.storm_cores) ? attrs.storm_cores : [];
-    const coreCount = this.number(attrs.core_count) ?? stormCores.length;
+
+    const state = this.state(this.config.level_entity);
+    const level = this.levelValue(state?.state);
+    const attrs = state?.attributes || {};
     const source = attrs.source_status || {};
-    const confidence = this.number(attrs.confidence_score);
-    const trend = attrs.distance_trend || '—';
-    const dbzTrend = attrs.dbz_trend || '—';
-    const speed = this.number(attrs.storm_motion_speed_kmh);
-    const bearing = this.number(attrs.storm_motion_bearing);
+    const stale = this.state(this.config.stale_entity)?.state === 'on' || attrs.is_stale === true;
+    const evidence = String(attrs.evidence_kind || 'none').toLowerCase();
+    const mode = this.displayMode(level, evidence, stale);
+    const presentation = this.presentation(mode);
+
+    if (mode === 'clear' || mode === 'unavailable') {
+      this._cardSize = 1;
+      this.shadowRoot.innerHTML = this.compactCard(presentation, mode);
+      return;
+    }
+
+    const radarCurrent = source.radar === 'ok' && !stale;
+    const lightningCurrent = source.lightning === 'ok' && !stale;
+    const coreDistance = radarCurrent
+      ? this.number(
+          this.state(this.config.core_distance_entity)?.state ??
+            attrs.selected_core_distance_km ??
+            attrs.core_distance_km,
+        )
+      : null;
+    const lightningDistance = lightningCurrent
+      ? this.number(
+          this.state(this.config.lightning_distance_entity)?.state ?? attrs.lightning_distance_km,
+        )
+      : null;
     const approaching = attrs.storm_approaching === true;
-    const eta = this.number(attrs.storm_eta_minutes);
-    const lightningTriggered = attrs.lightning_triggered === true;
+    const receding = attrs.distance_trend === 'receding';
+    const eta = approaching ? this.number(attrs.storm_eta_minutes) : null;
+    const facts = [];
 
-    const theme = this.theme(level, stale);
-    const statusLabel = this.statusLabel(level, stale);
-    const frameText = frameAge == null ? '—' : frameAge < 90 ? `${Math.round(frameAge)} s` : `${Math.round(frameAge / 60)} min`;
-    const coreText = coreDistance == null ? '—' : `${coreDistance.toFixed(1)} km`;
-    const lightningText = lightningDistance == null ? '—' : `${lightningDistance.toFixed(1)} km`;
-    const dbzText = maxDbz == null ? '—' : `${Math.round(maxDbz)} dBZ`;
+    if (coreDistance != null && mode !== 'lightning') {
+      facts.push(this.fact('mdi:map-marker-distance', 'Nejbližší jádro', `${coreDistance.toFixed(1)} km`));
+    }
+    if (approaching) {
+      facts.push(this.fact('mdi:arrow-collapse', 'Pohyb', 'Přibližuje se'));
+    } else if (receding) {
+      facts.push(this.fact('mdi:arrow-expand', 'Pohyb', 'Vzdaluje se'));
+    }
+    if (eta != null) {
+      facts.push(this.fact('mdi:clock-outline', 'Příchod', this.formatEta(eta)));
+    }
+    if (lightningDistance != null) {
+      facts.push(this.fact('mdi:flash', 'Nejbližší blesk', `${lightningDistance.toFixed(1)} km`));
+    } else if (evidence === 'radar_hail_with_lightning') {
+      facts.push(this.fact('mdi:flash', 'Blesky', 'Také detekovány'));
+    }
 
+    const showRadar = radarCurrent && coreDistance != null && mode !== 'lightning';
+    this._cardSize = showRadar ? 4 : 3;
     this.shadowRoot.innerHTML = `
-      <style>${this.css(theme)}</style>
-      <ha-card class="risk-card ${theme.name}">
-        <div class="glow"></div>
+      <style>${this.css(presentation.accent, presentation.glow)}</style>
+      <ha-card class="risk-card ${mode}">
+        <div class="accent-line"></div>
         <section class="hero">
-          <div>
-            <div class="eyebrow">${this.escape(c.title)}</div>
-            <div class="status">${statusLabel}</div>
-            <div class="summary">${this.escape(summary)}</div>
-          </div>
-          <div class="badge ${active ? 'active' : ''}">
-            <span>${active ? 'AKTIVNÍ' : 'MONITOR'}</span>
-            <strong>${stale ? 'OBNOVA' : 'ŽIVĚ'}</strong>
+          <div class="icon"><ha-icon icon="${presentation.icon}"></ha-icon></div>
+          <div class="headline">
+            <div class="eyebrow">${this.escape(this.config.title)}</div>
+            <div class="status">${this.escape(presentation.title)}</div>
+            <div class="message">${this.escape(this.message(mode, { coreDistance, approaching, receding }))}</div>
           </div>
         </section>
-
-        <section class="radar-wrap">
-          ${this.radarSvg({ coreDistance, lightningDistance, bearing, level, approaching, lightningTriggered, stormCores, theme })}
-          <div class="radar-legend">
-            <div><span class="dot home"></span>${this.escape(c.home_label)}</div>
-            <div><span class="dot core"></span>${coreCount || 0} jader · nejbližší ${coreText}</div>
-            <div><span class="dot lightning"></span>Blesk ${lightningText}</div>
-          </div>
-        </section>
-
-        <section class="metrics">
-          ${this.metric('Max dBZ', dbzText, 'mdi:radar')}
-          ${this.metric('Jádro', coreText, 'mdi:map-marker-distance')}
-          ${this.metric('Blesk', lightningText, 'mdi:flash')}
-          ${this.metric('Radar age', frameText, 'mdi:clock-outline')}
-        </section>
-
-        <section class="thresholds">
-          ${this.threshold('50+', core50, 15)}
-          ${this.threshold('55+', core55, 25)}
-          ${this.threshold('60+', core60, 15)}
-        </section>
-
-        ${this.coreList(stormCores)}
-
-        <section class="chips">
-          ${this.chip('Radar', this.sourceLabel(source.radar || 'unknown'))}
-          ${this.chip('Blesky', this.sourceLabel(source.lightning || 'unknown'))}
-          ${this.chip('Data', stale ? 'obnovuji' : 'aktuální')}
-          ${confidence == null ? '' : this.chip('Confidence', `${Math.round(confidence)} %`)}
-        </section>
-
-        <section class="motion">
-          <div>
-            <span>Pohyb</span>
-            <strong>${approaching ? 'Přibližuje se' : trend === 'receding' ? 'Vzdaluje se' : this.escape(String(trend))}</strong>
-          </div>
-          <div>
-            <span>Trend dBZ</span>
-            <strong>${this.escape(String(dbzTrend))}</strong>
-          </div>
-          <div>
-            <span>Rychlost</span>
-            <strong>${speed == null ? '—' : `${speed.toFixed(1)} km/h`}</strong>
-          </div>
-          <div>
-            <span>ETA</span>
-            <strong>${eta == null ? '—' : `${Math.round(eta)} min`}</strong>
-          </div>
-        </section>
+        ${showRadar ? this.radar(coreDistance, attrs.storm_motion_bearing, approaching) : ''}
+        ${facts.length ? `<section class="facts">${facts.join('')}</section>` : ''}
+        ${mode === 'lightning' ? '<div class="hail-note">Kroupy nejsou radarově potvrzené</div>' : ''}
+        <div class="safety-note">Orientační radarové upozornění · sledujte oficiální výstrahy</div>
       </ha-card>
     `;
+  }
+
+  compactCard(presentation, mode) {
+    const detail = mode === 'clear'
+      ? 'Nic významného nezjištěno'
+      : 'Detekce dočasně není dostupná';
+    return `
+      <style>${this.css(presentation.accent, presentation.glow)}</style>
+      <ha-card class="risk-card compact ${mode}">
+        <div class="compact-icon"><ha-icon icon="${presentation.icon}"></ha-icon></div>
+        <div class="compact-copy">
+          <div class="eyebrow">${this.escape(this.config.title)}</div>
+          <strong>${detail}</strong>
+        </div>
+      </ha-card>
+    `;
+  }
+
+  displayMode(level, evidence, stale) {
+    if (stale || level === 'unavailable') return 'unavailable';
+    if (level === 'none') return 'clear';
+    if (evidence === 'lightning_only') return 'lightning';
+    if (evidence === 'radar_hail_with_lightning' || evidence === 'radar_hail') {
+      return level === 'urgent' ? 'hail-high' : 'hail-possible';
+    }
+    if (evidence === 'radar_storm') return 'storm';
+    return 'weather-attention';
+  }
+
+  presentation(mode) {
+    const modes = {
+      clear: {
+        title: 'Klid',
+        icon: 'mdi:weather-partly-cloudy',
+        accent: '#65a30d',
+        glow: 'rgba(101,163,13,.12)',
+      },
+      unavailable: {
+        title: 'Bez aktuálních dat',
+        icon: 'mdi:cloud-alert-outline',
+        accent: '#94a3b8',
+        glow: 'rgba(148,163,184,.12)',
+      },
+      storm: {
+        title: 'Bouřka v okolí',
+        icon: 'mdi:weather-lightning-rainy',
+        accent: '#eab308',
+        glow: 'rgba(234,179,8,.22)',
+      },
+      lightning: {
+        title: 'Blesky poblíž',
+        icon: 'mdi:weather-lightning',
+        accent: '#f59e0b',
+        glow: 'rgba(245,158,11,.24)',
+      },
+      'hail-possible': {
+        title: 'Možné kroupy',
+        icon: 'mdi:weather-hail',
+        accent: '#f97316',
+        glow: 'rgba(249,115,22,.28)',
+      },
+      'hail-high': {
+        title: 'Vysoká možnost krup',
+        icon: 'mdi:alert-decagram',
+        accent: '#ef4444',
+        glow: 'rgba(239,68,68,.30)',
+      },
+      'weather-attention': {
+        title: 'Počasí vyžaduje pozornost',
+        icon: 'mdi:weather-cloudy-alert',
+        accent: '#eab308',
+        glow: 'rgba(234,179,8,.20)',
+      },
+    };
+    return modes[mode] || modes['weather-attention'];
+  }
+
+  message(mode, context) {
+    const { coreDistance, approaching, receding } = context;
+    if (mode === 'lightning') return 'V okolí byla zaznamenána aktuální blesková aktivita.';
+    if (mode === 'hail-possible') return 'Radar ukazuje silné jádro s možností krup.';
+    if (mode === 'hail-high') return 'Silné radarové jádro je blízko domova.';
+    if (mode === 'storm') {
+      if (approaching) return 'Radarové jádro se přibližuje k domovu.';
+      if (receding) return 'Radarové jádro se vzdaluje od domova.';
+      if (coreDistance != null) return 'Radar zachytil bouřkové jádro v širším okolí.';
+      return 'Radar zachytil bouřkovou aktivitu v okolí.';
+    }
+    return 'Byla zjištěna aktuální změna počasí.';
+  }
+
+  fact(icon, label, value) {
+    return `
+      <div class="fact">
+        <ha-icon icon="${icon}"></ha-icon>
+        <div><span>${this.escape(label)}</span><strong>${this.escape(value)}</strong></div>
+      </div>
+    `;
+  }
+
+  radar(distance, bearing, approaching) {
+    const point = this.point(distance, this.number(bearing) ?? 315, 50);
+    return `
+      <section class="radar-wrap">
+        <svg class="radar" viewBox="0 0 180 180" role="img" aria-label="Poloha bouřkového jádra vůči domovu">
+          <circle class="radar-bg" cx="90" cy="90" r="72" />
+          <circle class="ring" cx="90" cy="90" r="36" />
+          <circle class="ring" cx="90" cy="90" r="70" />
+          <line class="axis" x1="90" y1="20" x2="90" y2="160" />
+          <line class="axis" x1="20" y1="90" x2="160" y2="90" />
+          <circle class="home-node" cx="90" cy="90" r="6" />
+          <circle class="core-pulse" cx="${point.x}" cy="${point.y}" r="14" />
+          <circle class="core-node" cx="${point.x}" cy="${point.y}" r="8" />
+          <text class="north" x="90" y="14" text-anchor="middle">S</text>
+        </svg>
+        <div class="radar-copy">
+          <strong>${distance.toFixed(1)} km</strong>
+          <span>od ${this.escape(this.config.home_label)}</span>
+          ${approaching ? '<em>Přibližuje se</em>' : ''}
+        </div>
+      </section>
+    `;
+  }
+
+  point(distance, bearingDeg, maxKm) {
+    const clamped = Math.min(Math.max(distance ?? maxKm, 0), maxKm);
+    const radius = (clamped / maxKm) * 68;
+    const rad = (Number(bearingDeg) - 90) * Math.PI / 180;
+    return { x: 90 + Math.cos(rad) * radius, y: 90 + Math.sin(rad) * radius };
+  }
+
+  formatEta(minutes) {
+    const value = Math.max(1, Math.round(minutes));
+    if (value < 10) return 'méně než 10 min';
+    const lower = Math.floor(value / 5) * 5;
+    const upper = Math.ceil(value / 5) * 5;
+    return lower === upper ? `přibližně ${lower} min` : `přibližně ${lower}–${upper} min`;
   }
 
   state(entityId) {
@@ -153,13 +258,9 @@ class RadarHailRiskCard extends HTMLElement {
 
   levelValue(value) {
     const normalized = String(value ?? '').toLowerCase();
-    if (['none', 'watch', 'warning', 'urgent', 'unavailable'].includes(normalized)) return normalized;
-    return 'unavailable';
-  }
-
-  safe(value, fallback) {
-    if (value == null || ['unknown', 'unavailable', ''].includes(String(value))) return fallback;
-    return String(value);
+    return ['none', 'watch', 'warning', 'urgent', 'unavailable'].includes(normalized)
+      ? normalized
+      : 'unavailable';
   }
 
   number(value) {
@@ -168,208 +269,61 @@ class RadarHailRiskCard extends HTMLElement {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  statusLabel(level, stale) {
-    if (stale) return 'ČEKÁM NA RADAR';
-    return {
-      urgent: 'VYSOKÉ RIZIKO',
-      warning: 'VAROVÁNÍ',
-      watch: 'SLEDOVAT',
-      none: 'V KLIDU',
-      unavailable: 'ČEKÁM NA DATA',
-    }[level] || String(level).toUpperCase();
-  }
-
-  theme(level, stale) {
-    if (stale || level === 'unavailable') {
-      return { name: 'stale', accent: '#94a3b8', glow: 'rgba(148,163,184,.24)' };
-    }
-    const map = {
-      urgent: { accent: '#fb3b5f', glow: 'rgba(251,59,95,.42)' },
-      warning: { accent: '#fb923c', glow: 'rgba(251,146,60,.34)' },
-      watch: { accent: '#facc15', glow: 'rgba(250,204,21,.30)' },
-      none: { accent: '#34d399', glow: 'rgba(52,211,153,.22)' },
-    };
-    return { name: level, ...(map[level] || map.none) };
-  }
-
-  metric(label, value, icon) {
-    return `
-      <div class="metric">
-        <ha-icon icon="${icon}"></ha-icon>
-        <span>${this.escape(label)}</span>
-        <strong>${this.escape(value)}</strong>
-      </div>
-    `;
-  }
-
-  threshold(label, distance, warnLimit) {
-    const value = distance == null ? '—' : `${distance.toFixed(1)} km`;
-    const hot = distance != null && distance <= warnLimit;
-    return `<div class="threshold ${hot ? 'hot' : ''}"><span>${label}</span><strong>${value}</strong></div>`;
-  }
-
-  chip(label, value) {
-    const normalized = String(value).toLowerCase();
-    const cls = normalized.includes('ok') || normalized.includes('aktuální') || normalized.includes('žádoucí') ? 'ok' : normalized.includes('stale') || normalized.includes('error') || normalized.includes('unavailable') || normalized.includes('obnovuji') || normalized.includes('čekám') ? 'bad' : 'neutral';
-    return `<div class="chip ${cls}"><span>${this.escape(label)}</span><strong>${this.escape(value)}</strong></div>`;
-  }
-
-  sourceLabel(value) {
-    const normalized = String(value).toLowerCase();
-    return {
-      ok: 'OK',
-      stale: 'čekám',
-      degraded: 'omezeně',
-      error: 'chyba',
-      not_configured: 'vypnuto',
-      unknown: 'neznámé',
-    }[normalized] || value;
-  }
-
-  coreList(stormCores) {
-    if (!Array.isArray(stormCores) || stormCores.length === 0) return '';
-    const rows = stormCores.slice(0, 6).map((core, idx) => {
-      const distance = this.number(core.distance_km);
-      const maxDbz = this.number(core.max_dbz);
-      const area = this.number(core.area_km2);
-      const cls = maxDbz >= 60 ? 'urgent' : maxDbz >= 55 ? 'warning' : 'watch';
-      return `<div class="core-row ${cls}">
-        <span class="core-index">${idx + 1}</span>
-        <strong>${maxDbz == null ? '—' : Math.round(maxDbz)} dBZ</strong>
-        <span>${distance == null ? '—' : distance.toFixed(1) + ' km'}</span>
-        <span>${area == null ? '' : area.toFixed(1) + ' km²'}</span>
-      </div>`;
-    }).join('');
-    return `<section class="core-list"><div class="core-list-title">Bouřková jádra</div>${rows}</section>`;
-  }
-
-  radarSvg({ coreDistance, lightningDistance, bearing, approaching, lightningTriggered, stormCores, theme }) {
-    const fallbackCore = this.point(coreDistance, bearing ?? 315, 58);
-    const coreNodes = (stormCores || []).slice(0, 6).map((core, idx) => {
-      const distance = this.number(core.distance_km);
-      const coreBearing = this.number(core.bearing_degrees) ?? bearing ?? 315;
-      const point = this.point(distance, coreBearing, 58);
-      const maxDbz = this.number(core.max_dbz) ?? 50;
-      const radius = idx === 0 ? 8 : 5.5;
-      const cls = maxDbz >= 60 ? 'core-urgent' : maxDbz >= 55 ? 'core-warning' : 'core-watch';
-      return `<g class="core-group ${cls}">
-        <circle class="core-node" cx="${point.x}" cy="${point.y}" r="${radius}"/>
-        <circle class="core-pulse" cx="${point.x}" cy="${point.y}" r="${radius + 6}"/>
-        <text class="core-label" x="${point.x + 9}" y="${point.y - 7}">${idx + 1}</text>
-      </g>`;
-    }).join('');
-    const fallbackCoreNode = coreDistance == null || coreNodes ? '' : `<circle class="core-node" cx="${fallbackCore.x}" cy="${fallbackCore.y}" r="8"/><circle class="core-pulse" cx="${fallbackCore.x}" cy="${fallbackCore.y}" r="14"/>`;
-    const lightning = this.point(lightningDistance, 250, 58);
-    const arrow = bearing == null ? '' : `<g transform="rotate(${bearing} 100 100)"><path class="motion-arrow" d="M100 26 L106 44 L100 40 L94 44 Z" /></g>`;
-    const lightningNode = lightningDistance == null ? '' : `<path class="lightning-node ${lightningTriggered ? 'triggered' : ''}" d="M${lightning.x - 5} ${lightning.y - 11} L${lightning.x + 3} ${lightning.y - 11} L${lightning.x - 2} ${lightning.y - 1} L${lightning.x + 7} ${lightning.y - 1} L${lightning.x - 5} ${lightning.y + 13} L${lightning.x - 1} ${lightning.y + 2} L${lightning.x - 9} ${lightning.y + 2} Z"/>`;
-    return `
-      <svg class="radar" viewBox="0 0 200 200" role="img" aria-label="Radar storm visualization">
-        <defs>
-          <radialGradient id="radarFill" cx="50%" cy="50%" r="60%">
-            <stop offset="0%" stop-color="${theme.accent}" stop-opacity="0.22"/>
-            <stop offset="65%" stop-color="${theme.accent}" stop-opacity="0.05"/>
-            <stop offset="100%" stop-color="#020617" stop-opacity="0"/>
-          </radialGradient>
-        </defs>
-        <circle cx="100" cy="100" r="76" fill="url(#radarFill)"/>
-        <circle class="ring" cx="100" cy="100" r="24"/>
-        <circle class="ring" cx="100" cy="100" r="48"/>
-        <circle class="ring outer" cx="100" cy="100" r="72"/>
-        <line class="axis" x1="100" y1="28" x2="100" y2="172"/>
-        <line class="axis" x1="28" y1="100" x2="172" y2="100"/>
-        ${arrow}
-        <circle class="home-node" cx="100" cy="100" r="6"/>
-        ${fallbackCoreNode}
-        ${coreNodes}
-        ${lightningNode}
-        <text class="north" x="100" y="20" text-anchor="middle">N</text>
-        <text class="range" x="124" y="97">25</text>
-        <text class="range" x="149" y="97">50 km</text>
-        ${approaching ? '<text class="approach" x="100" y="187" text-anchor="middle">APPROACHING</text>' : ''}
-      </svg>
-    `;
-  }
-
-  point(distance, bearingDeg, maxKm) {
-    const clamped = Math.min(Math.max(distance ?? maxKm, 0), maxKm);
-    const radius = (clamped / maxKm) * 72;
-    const rad = (Number(bearingDeg) - 90) * Math.PI / 180;
-    return { x: 100 + Math.cos(rad) * radius, y: 100 + Math.sin(rad) * radius };
-  }
-
-  css(theme) {
+  css(accent, glow) {
     return `
       :host { display:block; }
       ha-card.risk-card {
-        position: relative;
-        overflow: hidden;
-        padding: 20px;
-        border-radius: 28px;
-        color: #f8fafc;
+        display:block;
+        position:relative;
+        overflow:hidden;
+        padding:18px;
+        border-radius:24px;
+        color:var(--primary-text-color, #f8fafc);
         background:
-          linear-gradient(145deg, rgba(15,23,42,.96), rgba(2,6,23,.98)),
-          radial-gradient(circle at 25% 0%, ${theme.glow}, transparent 38%);
-        border: 1px solid color-mix(in srgb, ${theme.accent} 45%, rgba(148,163,184,.25));
-        box-shadow: 0 24px 70px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.05);
+          radial-gradient(circle at 100% 0%, ${glow}, transparent 38%),
+          var(--ha-card-background, var(--card-background-color, #111827));
+        border:1px solid color-mix(in srgb, ${accent} 42%, var(--divider-color, #334155));
+        box-shadow:0 12px 36px rgba(0,0,0,.18);
       }
-      .glow { position:absolute; inset:-30% -20% auto auto; width:240px; height:240px; border-radius:999px; background:${theme.glow}; filter: blur(28px); pointer-events:none; }
-      .hero { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; position:relative; z-index:1; }
-      .eyebrow { color:#94a3b8; font-size:12px; letter-spacing:.16em; text-transform:uppercase; font-weight:800; }
-      .status { margin-top:6px; font-size:34px; line-height:1; font-weight:950; letter-spacing:-.04em; color:${theme.accent}; text-shadow:0 0 28px ${theme.glow}; }
-      .summary { margin-top:9px; max-width:560px; color:#dbeafe; font-size:14px; line-height:1.35; }
-      .badge { min-width:76px; padding:10px 12px; border-radius:18px; background:rgba(15,23,42,.72); border:1px solid rgba(148,163,184,.24); text-align:center; }
-      .badge span { display:block; color:#94a3b8; font-size:10px; letter-spacing:.12em; font-weight:800; }
-      .badge strong { display:block; margin-top:2px; color:${theme.accent}; font-size:13px; }
-      .badge.active { border-color:${theme.accent}; box-shadow:0 0 24px ${theme.glow}; }
-      .radar-wrap { display:grid; grid-template-columns:minmax(190px, 1fr) .9fr; gap:14px; align-items:center; margin:18px 0 14px; }
-      .radar { width:100%; max-height:260px; min-height:210px; }
-      .ring { fill:none; stroke:rgba(148,163,184,.26); stroke-width:1; stroke-dasharray:3 5; }
-      .ring.outer { stroke:${theme.accent}; stroke-opacity:.45; }
-      .axis { stroke:rgba(148,163,184,.12); stroke-width:1; }
-      .home-node { fill:#e2e8f0; stroke:#020617; stroke-width:2; }
-      .core-node { fill:${theme.accent}; stroke:#fff7ed; stroke-width:1.5; filter:drop-shadow(0 0 10px ${theme.accent}); }
-      .core-group.core-watch .core-node { fill:#facc15; }
-      .core-group.core-warning .core-node { fill:#fb923c; }
-      .core-group.core-urgent .core-node { fill:#fb3b5f; }
-      .core-label { fill:#f8fafc; font-size:10px; font-weight:900; paint-order:stroke; stroke:#020617; stroke-width:3px; }
-      .core-pulse { fill:none; stroke:${theme.accent}; stroke-width:2; opacity:.55; }
-      .lightning-node { fill:#fbbf24; stroke:#fef3c7; stroke-width:1; opacity:.85; filter:drop-shadow(0 0 8px rgba(251,191,36,.55)); }
-      .lightning-node.triggered { fill:#f59e0b; opacity:1; }
-      .motion-arrow { fill:${theme.accent}; opacity:.8; }
-      .north, .range, .approach { fill:#94a3b8; font-size:9px; font-weight:800; letter-spacing:.08em; }
-      .approach { fill:#fb7185; }
-      .radar-legend { display:flex; flex-direction:column; gap:10px; color:#cbd5e1; font-size:13px; }
-      .radar-legend div { display:flex; align-items:center; gap:9px; padding:9px 10px; border-radius:14px; background:rgba(15,23,42,.55); border:1px solid rgba(148,163,184,.14); }
-      .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
-      .dot.home { background:#e2e8f0; } .dot.core { background:${theme.accent}; } .dot.lightning { background:#fbbf24; clip-path: polygon(40% 0, 100% 0, 58% 43%, 100% 43%, 28% 100%, 45% 56%, 0 56%); border-radius:0; }
-      .metrics { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; }
-      .metric, .threshold, .chip, .motion > div { background:rgba(15,23,42,.68); border:1px solid rgba(148,163,184,.16); border-radius:16px; padding:11px; }
-      .metric ha-icon { color:${theme.accent}; width:20px; height:20px; }
-      .metric span, .motion span { display:block; color:#94a3b8; font-size:11px; margin-top:4px; }
-      .metric strong, .motion strong { display:block; color:#f8fafc; font-size:15px; margin-top:2px; }
-      .thresholds { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; margin-top:10px; }
-      .threshold { display:flex; justify-content:space-between; align-items:center; }
-      .threshold span { color:#94a3b8; font-weight:800; } .threshold strong { color:#e2e8f0; }
-      .threshold.hot { border-color:${theme.accent}; background:color-mix(in srgb, ${theme.accent} 14%, rgba(15,23,42,.72)); }
-      .core-list { margin-top:10px; padding:12px; border-radius:18px; background:rgba(15,23,42,.50); border:1px solid rgba(148,163,184,.14); }
-      .core-list-title { color:#94a3b8; font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.12em; margin-bottom:8px; }
-      .core-row { display:grid; grid-template-columns:28px 1fr 1fr 1fr; align-items:center; gap:8px; padding:7px 0; border-top:1px solid rgba(148,163,184,.10); color:#cbd5e1; font-size:13px; }
-      .core-row:first-of-type { border-top:0; }
-      .core-index { width:22px; height:22px; border-radius:999px; display:inline-grid; place-items:center; background:rgba(148,163,184,.16); color:#f8fafc; font-weight:900; }
-      .core-row.watch strong { color:#facc15; }
-      .core-row.warning strong { color:#fb923c; }
-      .core-row.urgent strong { color:#fb3b5f; }
-      .chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
-      .chip { display:flex; gap:7px; align-items:center; padding:8px 10px; border-radius:999px; }
-      .chip span { color:#94a3b8; font-size:11px; } .chip strong { font-size:12px; }
-      .chip.ok strong { color:#34d399; } .chip.bad strong { color:#fb7185; } .chip.neutral strong { color:#fbbf24; }
-      .motion { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; margin-top:12px; }
-      @media (max-width: 720px) {
-        ha-card.risk-card { padding:16px; border-radius:22px; }
-        .status { font-size:28px; }
-        .radar-wrap { grid-template-columns:1fr; }
-        .radar-legend { display:grid; grid-template-columns:1fr; }
-        .metrics, .motion { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+      ha-card.compact { display:flex; align-items:center; gap:13px; padding:13px 16px; border-radius:18px; box-shadow:none; }
+      .compact-icon, .icon { display:grid; place-items:center; flex:0 0 auto; color:${accent}; background:${glow}; border:1px solid color-mix(in srgb, ${accent} 40%, transparent); }
+      .compact-icon { width:38px; height:38px; border-radius:12px; }
+      .compact-icon ha-icon { width:22px; height:22px; }
+      .compact-copy { min-width:0; }
+      .compact-copy strong { display:block; margin-top:2px; font-size:14px; }
+      .eyebrow { color:var(--secondary-text-color, #94a3b8); font-size:11px; line-height:1.2; letter-spacing:.09em; text-transform:uppercase; font-weight:750; }
+      .accent-line { position:absolute; inset:0 0 auto; height:3px; background:${accent}; }
+      .hero { display:flex; align-items:flex-start; gap:14px; }
+      .icon { width:48px; height:48px; border-radius:15px; }
+      .icon ha-icon { width:28px; height:28px; }
+      .headline { min-width:0; }
+      .status { margin-top:4px; color:${accent}; font-size:27px; line-height:1.08; font-weight:850; letter-spacing:-.025em; }
+      .message { margin-top:7px; color:var(--secondary-text-color, #cbd5e1); font-size:14px; line-height:1.4; }
+      .facts { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:9px; margin-top:14px; }
+      .fact { display:flex; align-items:center; gap:10px; min-width:0; padding:10px 11px; border-radius:14px; background:color-mix(in srgb, var(--card-background-color, #111827) 88%, ${accent}); border:1px solid var(--divider-color, rgba(148,163,184,.16)); }
+      .fact ha-icon { flex:0 0 auto; width:20px; height:20px; color:${accent}; }
+      .fact span { display:block; color:var(--secondary-text-color, #94a3b8); font-size:10px; }
+      .fact strong { display:block; overflow:hidden; margin-top:1px; font-size:14px; text-overflow:ellipsis; white-space:nowrap; }
+      .radar-wrap { display:grid; grid-template-columns:minmax(150px, 210px) 1fr; align-items:center; gap:10px; margin-top:12px; padding:8px 12px; border-radius:18px; background:color-mix(in srgb, var(--card-background-color, #111827) 92%, ${accent}); }
+      .radar { width:100%; max-height:190px; }
+      .radar-bg { fill:${glow}; }
+      .ring { fill:none; stroke:var(--divider-color, rgba(148,163,184,.25)); stroke-width:1; stroke-dasharray:3 5; }
+      .axis { stroke:var(--divider-color, rgba(148,163,184,.14)); stroke-width:1; }
+      .home-node { fill:var(--primary-text-color, #f8fafc); stroke:var(--card-background-color, #111827); stroke-width:2; }
+      .core-node { fill:${accent}; stroke:#fff; stroke-width:1.5; filter:drop-shadow(0 0 8px ${accent}); }
+      .core-pulse { fill:none; stroke:${accent}; stroke-width:2; opacity:.42; }
+      .north { fill:var(--secondary-text-color, #94a3b8); font-size:9px; font-weight:800; }
+      .radar-copy strong { display:block; color:${accent}; font-size:25px; }
+      .radar-copy span { display:block; color:var(--secondary-text-color, #94a3b8); font-size:12px; }
+      .radar-copy em { display:inline-block; margin-top:8px; padding:5px 8px; border-radius:999px; color:${accent}; background:${glow}; font-size:11px; font-style:normal; font-weight:750; }
+      .hail-note { margin-top:13px; padding:9px 11px; border-radius:12px; color:var(--secondary-text-color, #cbd5e1); background:var(--secondary-background-color, rgba(15,23,42,.45)); font-size:12px; }
+      .safety-note { margin-top:13px; color:var(--secondary-text-color, #94a3b8); font-size:10px; }
+      @media (max-width:600px) {
+        ha-card.risk-card { padding:15px; border-radius:20px; }
+        ha-card.compact { padding:12px 14px; }
+        .status { font-size:23px; }
+        .facts { grid-template-columns:1fr; }
+        .radar-wrap { grid-template-columns:minmax(125px, 165px) 1fr; }
       }
     `;
   }
@@ -388,6 +342,6 @@ customElements.define('radar-hail-risk-card', RadarHailRiskCard);
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'radar-hail-risk-card',
-  name: 'Radar Hail Risk Card',
-  description: 'A polished cockpit card for Radar Hail Risk entities.',
+  name: 'Bouřky a možné kroupy',
+  description: 'Adaptivní karta zobrazující jen aktuální a prakticky relevantní údaje.',
 });
