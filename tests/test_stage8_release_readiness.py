@@ -47,18 +47,17 @@ def test_manifest_and_hacs_metadata_are_release_ready() -> None:
 def test_readme_contains_release_limitations_credits_and_migration_notes() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert "Current Simple RC install/test route — manual archive only" in readme
-    assert "Limitations and safety notes" in readme
+    assert "Install with HACS" in readme
+    assert "https://github.com/petrvnk/radar-hail-risk" in readme
+    assert "Limitations" in readme
     assert "not an official warning source" in readme
     assert "Credits" in readme
     assert "RainViewer" in readme
     assert "Blitzortung-compatible" in readme
-    assert "Use only one active alerting setup" in readme
-    assert "radar-only mode" in readme
-    assert "hacs/action@main" in readme
+    assert "radar-only" in readme
     assert "examples/lovelace/native-card.yaml" in readme
-    assert "examples/lovelace/mushroom-card.yaml" in readme
-    assert "examples/lovelace/weather-tab.yaml" in readme
+    assert len(readme.splitlines()) < 180
+    assert "unpushed RC" not in readme
 
 
 def test_lovelace_examples_use_clean_entity_ids() -> None:

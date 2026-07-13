@@ -266,20 +266,20 @@ def test_colleague_checklist_covers_required_handoff_paths() -> None:
     assert manifest["domain"] == "radar_hail_risk"
 
 
-def test_current_simple_rc_docs_make_manual_archive_the_only_install_route() -> None:
+def test_public_readme_and_private_rc_checklist_describe_their_actual_install_routes() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     checklist = (ROOT / "docs" / "colleague-test-checklist.md").read_text(encoding="utf-8")
 
-    for document in (readme, checklist):
-        normalized = document.lower()
-        assert "only valid current install/test route for this unpushed rc" in normalized
-        assert "checksum-verified manual archive" in normalized
-        assert "separately authorized publication" in normalized
-        assert "exact reviewed source and sha-256" in normalized
+    normalized = checklist.lower()
+    assert "only valid current install/test route for this unpushed rc" in normalized
+    assert "checksum-verified manual archive" in normalized
+    assert "separately authorized publication" in normalized
+    assert "exact reviewed source and sha-256" in normalized
 
-    assert "Quick start with a HACS custom repository" not in readme
+    assert "Install with HACS" in readme
+    assert "https://github.com/petrvnk/radar-hail-risk" in readme
+    assert "only valid current install/test route for this unpushed rc" not in readme.lower()
     assert "Choose one path." not in checklist
-    assert "Conditional future HACS route (not currently authorized)" in readme
     assert "Conditional HACS route (not currently authorized)" in checklist
 
 
