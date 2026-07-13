@@ -1064,17 +1064,22 @@ def _lightning_source_status(
     diagnostics_tuple = tuple(diagnostics)
     if not snapshot_configured:
         return "not_configured"
-    if is_stale:
-        return "stale"
     non_actionable = {
         "lightning_not_configured",
         "lightning_strike_delta",
         "lightning_counter_delta",
         "lightning_counter_reset",
+        "stale_distance_entity",
+        "stale_counter_entity",
     }
     actionable = [item for item in diagnostics_tuple if item not in non_actionable]
     if actionable:
         return "degraded"
+    if is_stale:
+        # Blitzortung-compatible event sensors normally retain the last strike
+        # until another strike arrives. An old timestamp therefore means there
+        # is no current lightning context, not that the source is broken.
+        return "idle"
     return "ok"
 
 
@@ -1088,6 +1093,8 @@ def _degradation_reasons(
         "lightning_strike_delta",
         "lightning_counter_delta",
         "lightning_counter_reset",
+        "stale_distance_entity",
+        "stale_counter_entity",
     }
     return tuple(
         dict.fromkeys(

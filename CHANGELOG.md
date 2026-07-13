@@ -1,8 +1,12 @@
 # Changelog
 
-## 0.0.1 - unreleased
+## 0.0.1 - 2026-07-13
 
-Initial HACS-readiness build.
+Initial HACS-ready prerelease.
+
+### Fixed
+
+- Treat old Blitzortung event timestamps as normal idle lightning context instead of an actionable source degradation, while continuing to exclude old strike distance/counter values from risk classification.
 
 ### Added
 
