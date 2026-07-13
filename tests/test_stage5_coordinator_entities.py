@@ -1010,8 +1010,11 @@ async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:
     assert payload[ATTR_LAST_ERROR] is None
     assert payload[ATTR_SUMMARY] == "High hail risk nearby"
     assert payload[ATTR_STALE] is False
+    assert payload["source_status"]["lightning"] == "idle"
     assert "stale_distance_entity" in payload[ATTR_LIGHTNING_DIAGNOSTICS]
     assert "stale_counter_entity" in payload[ATTR_LIGHTNING_DIAGNOSTICS]
+    assert "stale_distance_entity" not in payload["degradation_reasons"]
+    assert "stale_counter_entity" not in payload["degradation_reasons"]
 
 
 async def test_coordinator_without_coordinates_is_unavailable() -> None:
