@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.3 - 2026-07-14
+
+### Fixed
+
+- Restored the adaptive card's useful storm-core details: selected-core intensity and area now appear alongside distance, motion, and ETA.
+- Scale the schematic radar to distant detected cores instead of pinning every core beyond 50 km to a fixed 50 km scale.
+
+### Changed
+
+- Increased the default analysis radius from 50 km to 80 km so strong nearby storms just outside the old hard boundary produce an early `watch`; warning and urgent proximity gates remain unchanged.
+
 ## 0.0.2 - 2026-07-14
 
 ### Fixed

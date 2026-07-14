@@ -18,7 +18,7 @@ from custom_components.radar_hail_risk.const import (
 
 def test_constants_default_contract() -> None:
     assert DOMAIN == "radar_hail_risk"
-    assert DEFAULT_ANALYSIS_RADIUS_KM == 50
+    assert DEFAULT_ANALYSIS_RADIUS_KM == 80
     assert DEFAULT_CORE_WARNING_DBZ == 55
     assert DEFAULT_URGENT_CORE_DISTANCE_KM == 15
     assert CONF_ANALYSIS_RADIUS_KM in OPTIONAL_CONF_DEFAULTS
