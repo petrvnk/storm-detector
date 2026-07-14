@@ -77,6 +77,9 @@ class RadarHailRiskCard extends HTMLElement {
         }, null)
       : null;
     const coreBearing = this.number(selectedCore?.bearing_degrees);
+    const renderableCores = stormCores.filter(
+      (core) => Number.isFinite(this.number(core?.distance_km)) && Number.isFinite(this.number(core?.bearing_degrees)),
+    );
     const lightningDistance = lightningCurrent
       ? this.number(
           this.state(this.config.lightning_distance_entity)?.state ?? attrs.lightning_distance_km,
@@ -101,6 +104,9 @@ class RadarHailRiskCard extends HTMLElement {
     }
     if (coreArea != null && mode !== 'lightning') {
       facts.push(this.fact('mdi:selection-ellipse', 'Plocha jádra', `${coreArea.toFixed(1)} km²`));
+    }
+    if (renderableCores.length > 1 && mode !== 'lightning') {
+      facts.push(this.fact('mdi:dots-circle', 'Detekovaná jádra', String(renderableCores.length)));
     }
     if (approaching) {
       facts.push(this.fact('mdi:arrow-collapse', 'Pohyb', 'Přibližuje se'));
@@ -130,7 +136,7 @@ class RadarHailRiskCard extends HTMLElement {
             <div class="message">${this.escape(this.message(mode, { coreDistance, approaching, receding }))}</div>
           </div>
         </section>
-        ${showRadar ? this.radar(coreDistance, coreBearing, approaching) : ''}
+        ${showRadar ? this.radar(renderableCores, selectedCore, coreDistance, coreBearing, approaching) : ''}
         ${facts.length ? `<section class="facts">${facts.join('')}</section>` : ''}
         ${mode === 'lightning' ? '<div class="hail-note">Kroupy nejsou radarově potvrzené</div>' : ''}
         <div class="safety-note">Orientační radarové upozornění · sledujte oficiální výstrahy</div>
@@ -236,25 +242,40 @@ class RadarHailRiskCard extends HTMLElement {
     `;
   }
 
-  radar(distance, bearing, approaching) {
-    const maxKm = Math.max(50, Math.ceil(distance / 20) * 20);
-    const point = Number.isFinite(bearing) ? this.point(distance, bearing, maxKm) : null;
+  radar(cores, selectedCore, distance, bearing, approaching) {
+    const maxDistance = Math.max(distance, ...cores.map((core) => this.number(core.distance_km) ?? 0));
+    const maxKm = Math.max(50, Math.ceil(maxDistance / 20) * 20);
+    const marks = cores
+      .map((core) => ({
+        point: this.point(this.number(core.distance_km), this.number(core.bearing_degrees), maxKm),
+        selected: core === selectedCore,
+      }))
+      .sort((left, right) => Number(left.selected) - Number(right.selected));
+    if (!marks.some((mark) => mark.selected) && Number.isFinite(bearing)) {
+      marks.push({ point: this.point(distance, bearing, maxKm), selected: true });
+    }
+    const coreMarks = marks.map((mark) => {
+      if (mark.selected) {
+        return `<circle class="core-pulse selected" cx="${mark.point.x}" cy="${mark.point.y}" r="14" />
+          <circle class="core-node selected" cx="${mark.point.x}" cy="${mark.point.y}" r="8" />`;
+      }
+      return `<circle class="core-node secondary" cx="${mark.point.x}" cy="${mark.point.y}" r="5" />`;
+    }).join('');
     return `
       <section class="radar-wrap">
-        <svg class="radar" viewBox="0 0 180 180" role="img" aria-label="Poloha bouřkového jádra vůči domovu">
+        <svg class="radar" viewBox="0 0 180 180" role="img" aria-label="Polohy bouřkových jader vůči domovu">
           <circle class="radar-bg" cx="90" cy="90" r="72" />
           <circle class="ring" cx="90" cy="90" r="36" />
           <circle class="ring" cx="90" cy="90" r="70" />
           <line class="axis" x1="90" y1="20" x2="90" y2="160" />
           <line class="axis" x1="20" y1="90" x2="160" y2="90" />
           <circle class="home-node" cx="90" cy="90" r="6" />
-          ${point ? `<circle class="core-pulse" cx="${point.x}" cy="${point.y}" r="14" />
-          <circle class="core-node" cx="${point.x}" cy="${point.y}" r="8" />` : ''}
+          ${coreMarks}
           <text class="north" x="90" y="14" text-anchor="middle">S</text>
         </svg>
         <div class="radar-copy">
           <strong>${distance.toFixed(1)} km</strong>
-          <span>od ${this.escape(this.config.home_label)}</span>
+          <span>hlavní jádro od ${this.escape(this.config.home_label)}</span>
           ${approaching ? '<em>Přibližuje se</em>' : ''}
         </div>
       </section>
@@ -335,6 +356,8 @@ class RadarHailRiskCard extends HTMLElement {
       .axis { stroke:var(--divider-color, rgba(148,163,184,.14)); stroke-width:1; }
       .home-node { fill:var(--primary-text-color, #f8fafc); stroke:var(--card-background-color, #111827); stroke-width:2; }
       .core-node { fill:${accent}; stroke:#fff; stroke-width:1.5; filter:drop-shadow(0 0 8px ${accent}); }
+      .core-node.secondary { opacity:.68; stroke-width:1; filter:drop-shadow(0 0 4px ${accent}); }
+      .core-node.selected { opacity:1; }
       .core-pulse { fill:none; stroke:${accent}; stroke-width:2; opacity:.42; }
       .north { fill:var(--secondary-text-color, #94a3b8); font-size:9px; font-weight:800; }
       .radar-copy strong { display:block; color:${accent}; font-size:25px; }
