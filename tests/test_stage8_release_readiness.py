@@ -34,7 +34,7 @@ def test_manifest_and_hacs_metadata_are_release_ready() -> None:
     hacs = json.loads((ROOT / "hacs.json").read_text(encoding="utf-8"))
 
     assert manifest["domain"] == "radar_hail_risk"
-    assert manifest["version"] == "0.0.3"
+    assert manifest["version"] == "0.0.4"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].endswith("/issues")
     assert manifest["config_flow"] is True

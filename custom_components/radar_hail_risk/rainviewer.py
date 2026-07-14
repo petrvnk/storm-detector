@@ -39,6 +39,8 @@ MAX_PARALLEL_TILE_FETCHES = 4
 MAX_TRACK_SPEED_KMH = 180.0
 MAX_TRACK_INTENSITY_DELTA_DBZ = 15
 MIN_TRACK_DISTANCE_KM = 2.0
+MIN_APPROACHING_RADIAL_SPEED_KMH = 10.0
+MAX_ACTIONABLE_ETA_MINUTES = 180
 
 _T = TypeVar("_T")
 
@@ -1314,10 +1316,15 @@ def _motion_from_frame_results(frame_results: list[AnalyzedFrame]) -> StormMotio
     speed_kmh = moved_km / elapsed_hours
     distance_delta = latest.distance_km - older.distance_km
     radial_closing_speed_kmh = -distance_delta / elapsed_hours
-    approaching = distance_delta < -0.5 and radial_closing_speed_kmh > 1
+    approaching = (
+        distance_delta < -0.5
+        and radial_closing_speed_kmh >= MIN_APPROACHING_RADIAL_SPEED_KMH
+    )
     eta_minutes = None
     if approaching:
-        eta_minutes = max(0, round((latest.distance_km / radial_closing_speed_kmh) * 60))
+        estimate = max(0, round((latest.distance_km / radial_closing_speed_kmh) * 60))
+        if estimate <= MAX_ACTIONABLE_ETA_MINUTES:
+            eta_minutes = estimate
 
     dbz_delta = latest.max_dbz - older.max_dbz
     return StormMotion(

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.4 - 2026-07-14
+
+### Fixed
+
+- Draw the schematic core at its geographic bearing from home instead of incorrectly
+  using the storm's direction of motion.
+- Suppress misleading "approaching" and ETA labels for slow radial drift; an approach
+  now requires at least 10 km/h closing speed and ETA is shown only up to 180 minutes.
+
 ## 0.0.3 - 2026-07-14
 
 ### Fixed

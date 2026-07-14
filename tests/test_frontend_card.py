@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -190,3 +191,24 @@ def test_radar_storm_shows_core_intensity_and_area() -> None:
     assert "56 dBZ" in html
     assert "Plocha jádra" in html
     assert "18.7 km²" in html
+
+
+def test_schematic_uses_core_bearing_not_motion_bearing() -> None:
+    html = _render(
+        _states(
+            "watch",
+            evidence_kind="radar_storm",
+            attributes={
+                "selected_core_distance_km": 40.0,
+                "storm_motion_bearing": 0.0,
+                "storm_cores": [{"distance_km": 40.0, "bearing_degrees": 180.0}],
+                "source_status": {"radar": "ok", "lightning": "not_configured"},
+            },
+        )
+    )
+
+    match = re.search(r'class="core-node" cx="([^"]+)" cy="([^"]+)"', html)
+    assert match is not None
+    x, y = (float(value) for value in match.groups())
+    assert abs(x - 90) < 1
+    assert y > 130
