@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.2 - 2026-07-14
+
+### Fixed
+
+- Detect connected storm activity in the five-dBZ band below the configured watch threshold, so a valid 46-49 dBZ nearby echo is surfaced as `watch` instead of a green clear state.
+- Preserve the connected-component minimum-pixel filter for near-watch activity; isolated high-reflectivity pixels still do not create an alert.
+
+### Changed
+
+- Use precise clear-state wording that says no strong nearby radar core was detected rather than implying that all weather is safe.
+- Describe radar-only `watch` evidence as nearby storm activity without making a hail claim.
+
 ## 0.0.1 - 2026-07-13
 
 Initial HACS-ready prerelease.

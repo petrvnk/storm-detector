@@ -862,6 +862,17 @@ def _analyse_dbz_grid(
         )
 
     pixel_area_km2 = (_meters_per_pixel(center_latitude, zoom, tile_size) / 1000) ** 2
+    # Keep the configured hail-oriented watch threshold authoritative, but detect a
+    # narrow five-dBZ storm band below it as a connected component too.  This lets
+    # the risk model surface 46-49 dBZ storm activity as WATCH without promoting
+    # isolated raw pixels or weakening WARNING/URGENT hail thresholds.
+    near_watch_dbz = max(0, core_watch_dbz - 5)
+    cores_near_watch = _component_cores_from_points(
+        points,
+        threshold_dbz=near_watch_dbz,
+        pixel_area_km2=pixel_area_km2,
+        min_core_pixels=min_core_pixels,
+    )
     cores_watch = _component_cores_from_points(
         points,
         threshold_dbz=core_watch_dbz,
@@ -902,7 +913,8 @@ def _analyse_dbz_grid(
     best50 = best_core(cores50)
     best55 = best_core(cores55)
     best60 = best_core(cores60)
-    best_watch = best_core(cores_watch)
+    watch_cores = cores_watch or cores_near_watch
+    best_watch = best_core(watch_cores)
     best_warning = best_core(cores_warning)
     best_urgent = best_core(cores_urgent)
 
@@ -932,7 +944,7 @@ def _analyse_dbz_grid(
     else:
         core_urgent_distance, core_urgent_lat, core_urgent_lon = (None, None, None)
 
-    selected_core = (cores_urgent or cores_warning or cores_watch or [None])[0]
+    selected_core = (cores_urgent or cores_warning or watch_cores or [None])[0]
     if selected_core is None:
         selected_area = None
         selected_pixels = None
@@ -957,7 +969,7 @@ def _analyse_dbz_grid(
         selected_centroid_lon = selected_core.centroid_longitude
 
     storm_cores = _storm_core_summaries(
-        cores_watch,
+        watch_cores,
         center_latitude=center_latitude,
         center_longitude=center_longitude,
     )
@@ -994,7 +1006,7 @@ def _analyse_dbz_grid(
         selected_core_centroid_latitude=selected_centroid_lat,
         selected_core_centroid_longitude=selected_centroid_lon,
         storm_cores=storm_cores,
-        core_count=len(cores_watch),
+        core_count=len(watch_cores),
         analyzed_pixels=analyzed_pixels,
     )
 
@@ -1398,17 +1410,17 @@ async def analyze_recent_frames(
         return None
 
     if latest.core_urgent_distance_km is not None:
-        selected_threshold = core_urgent_dbz
+        selected_threshold = latest.selected_core_threshold_dbz
         selected_distance = latest.core_urgent_distance_km
         selected_lat = latest.core_urgent_latitude
         selected_lon = latest.core_urgent_longitude
     elif latest.core_warning_distance_km is not None:
-        selected_threshold = core_warning_dbz
+        selected_threshold = latest.selected_core_threshold_dbz
         selected_distance = latest.core_warning_distance_km
         selected_lat = latest.core_warning_latitude
         selected_lon = latest.core_warning_longitude
     elif latest.core_watch_distance_km is not None:
-        selected_threshold = core_watch_dbz
+        selected_threshold = latest.selected_core_threshold_dbz
         selected_distance = latest.core_watch_distance_km
         selected_lat = latest.core_watch_latitude
         selected_lon = latest.core_watch_longitude

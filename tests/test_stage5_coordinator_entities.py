@@ -49,6 +49,7 @@ from custom_components.radar_hail_risk.const import (
     EVIDENCE_KIND_NONE,
     EVIDENCE_KIND_RADAR_HAIL,
     EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING,
+    EVIDENCE_KIND_RADAR_STORM,
     EVIDENCE_KIND_UNAVAILABLE,
     RISK_LEVEL_NONE,
     RISK_LEVEL_UNAVAILABLE,
@@ -499,6 +500,61 @@ async def test_coordinator_ignores_raw_max_dbz_when_filtered_noise_is_not_a_vali
     assert payload[ATTR_SELECTED_CORE_LONGITUDE] is None
     assert payload[ATTR_LIGHTNING_DISTANCE_KM] is None
     assert payload["lightning_diagnostics"] == ("lightning_not_configured",)
+
+
+async def test_coordinator_surfaces_connected_near_watch_storm() -> None:
+    hass = FakeHass()
+
+    async def _fake_meta(*_args: object, **_kwargs: object):
+        return {"radar": {"past": []}, "host": "https://tilecache.rainviewer.com"}
+
+    async def _fake_color(*_args: object, **_kwargs: object):
+        return {"#ffffff": 0}
+
+    async def _fake_analysis(*_args: object, **_kwargs: object):
+        return SimpleNamespace(
+            max_dbz=48,
+            max_core_dbz=48,
+            core50_distance_km=None,
+            core55_distance_km=None,
+            core60_distance_km=None,
+            core_watch_distance_km=12,
+            core_warning_distance_km=None,
+            core_urgent_distance_km=None,
+            selected_core_threshold_dbz=45,
+            selected_core_distance_km=12,
+            selected_core_latitude=50.1,
+            selected_core_longitude=14.5,
+            frame_age_seconds=120,
+            frame_time=1710000000,
+            frames_analyzed=4,
+        )
+
+    with patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        _fake_meta,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        _fake_color,
+    ), patch(
+        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        _fake_analysis,
+    ):
+        coordinator = RadarHailRiskCoordinator(
+            hass,
+            None,
+            "Radar Hail Risk",
+            FakeRadarOnlyEntry(),
+            session_factory=FakeSessionContext,
+        )
+        payload = await coordinator._async_update_data()
+
+    assert payload["level"] == RISK_LEVEL_WATCH
+    assert payload[ATTR_EVIDENCE_KIND] == EVIDENCE_KIND_RADAR_STORM
+    assert payload[ATTR_MAX_DBZ] == 48
+    assert payload[ATTR_CORE_WATCH_DISTANCE_KM] == 12
+    assert payload[ATTR_SELECTED_CORE_THRESHOLD_DBZ] == 45
+    assert payload[ATTR_SUMMARY] == "Storm activity detected nearby"
 
 
 async def test_radar_only_outage_is_unavailable_without_analysis() -> None:

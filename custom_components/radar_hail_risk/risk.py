@@ -254,10 +254,10 @@ def build_summary(
         return summary
 
     if evidence_kind == EVIDENCE_KIND_RADAR_STORM:
-        return "Storm watch: radar core detected"
+        return "Storm activity detected nearby"
 
     if level == "none":
-        return "No radar risk detected"
+        return "No strong radar core detected nearby"
 
     return "No current warning evidence; previous level awaiting confirmation"
 
