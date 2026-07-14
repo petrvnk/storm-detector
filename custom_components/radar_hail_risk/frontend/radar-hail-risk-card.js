@@ -74,10 +74,22 @@ class RadarHailRiskCard extends HTMLElement {
     const approaching = attrs.storm_approaching === true;
     const receding = attrs.distance_trend === 'receding';
     const eta = approaching ? this.number(attrs.storm_eta_minutes) : null;
+    const coreMaxDbz = radarCurrent
+      ? this.number(
+          attrs.selected_core_max_dbz ?? this.state(this.config.max_dbz_entity)?.state,
+        )
+      : null;
+    const coreArea = radarCurrent ? this.number(attrs.selected_core_area_km2) : null;
     const facts = [];
 
     if (coreDistance != null && mode !== 'lightning') {
       facts.push(this.fact('mdi:map-marker-distance', 'Nejbližší jádro', `${coreDistance.toFixed(1)} km`));
+    }
+    if (coreMaxDbz != null && mode !== 'lightning') {
+      facts.push(this.fact('mdi:radar', 'Intenzita jádra', `${Math.round(coreMaxDbz)} dBZ`));
+    }
+    if (coreArea != null && mode !== 'lightning') {
+      facts.push(this.fact('mdi:selection-ellipse', 'Plocha jádra', `${coreArea.toFixed(1)} km²`));
     }
     if (approaching) {
       facts.push(this.fact('mdi:arrow-collapse', 'Pohyb', 'Přibližuje se'));
@@ -214,7 +226,8 @@ class RadarHailRiskCard extends HTMLElement {
   }
 
   radar(distance, bearing, approaching) {
-    const point = this.point(distance, this.number(bearing) ?? 315, 50);
+    const maxKm = Math.max(50, Math.ceil(distance / 20) * 20);
+    const point = this.point(distance, this.number(bearing) ?? 315, maxKm);
     return `
       <section class="radar-wrap">
         <svg class="radar" viewBox="0 0 180 180" role="img" aria-label="Poloha bouřkového jádra vůči domovu">

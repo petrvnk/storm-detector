@@ -168,3 +168,25 @@ def test_unreliable_or_stale_optional_values_are_omitted() -> None:
     assert "ETA" not in html
     assert "7.0 km" not in html
     assert "Confidence" not in html
+
+
+def test_radar_storm_shows_core_intensity_and_area() -> None:
+    html = _render(
+        _states(
+            "watch",
+            evidence_kind="radar_storm",
+            attributes={
+                "selected_core_distance_km": 63.4,
+                "selected_core_max_dbz": 56,
+                "selected_core_area_km2": 18.7,
+                "source_status": {"radar": "ok", "lightning": "not_configured"},
+            },
+        )
+    )
+
+    assert 'aria-label="Poloha bouřkového jádra vůči domovu"' in html
+    assert "63.4 km" in html
+    assert "Intenzita jádra" in html
+    assert "56 dBZ" in html
+    assert "Plocha jádra" in html
+    assert "18.7 km²" in html
