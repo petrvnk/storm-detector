@@ -117,7 +117,7 @@ class RadarHailRiskCard extends HTMLElement {
 
   compactCard(presentation, mode) {
     const detail = mode === 'clear'
-      ? 'Nic významného nezjištěno'
+      ? 'Silné radarové jádro v okolí nezjištěno'
       : 'Detekce dočasně není dostupná';
     return `
       <style>${this.css(presentation.accent, presentation.glow)}</style>

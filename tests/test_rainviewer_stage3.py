@@ -201,7 +201,53 @@ async def test_analyze_single_frame_detects_core_near_center() -> None:
 
 
 @pytest.mark.asyncio
-async def test_analyze_single_frame_uses_configured_core_thresholds() -> None:
+async def test_analyze_single_frame_detects_connected_near_watch_storm() -> None:
+    center_lat, center_lon = global_px_to_latlon(10000.4, 10000.4, 7)
+    px, py = latlon_to_global_px(center_lat, center_lon, 7)
+    px_int = int(px)
+    py_int = int(py)
+    local_x = px_int % 512
+    local_y = py_int % 512
+
+    zoom = 7
+    host = "https://tilecache.rainviewer.com"
+    path = "/near-watch"
+    tx0 = px_int // 512
+    ty0 = py_int // 512
+
+    lookup = {(255, 165, 0, 255): 48}
+    img = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+    img.putpixel((local_x, local_y), (255, 165, 0, 255))
+    img.putpixel((local_x + 1, local_y), (255, 165, 0, 255))
+    payload = io.BytesIO()
+    img.save(payload, format="PNG")
+    tile_url = f"{host}{path}/512/{zoom}/{tx0}/{ty0}/2/1_1.png"
+    session = FakeSession({tile_url: FakeResponse(200, bytes_payload=payload.getvalue())})
+
+    frame_result = await analyze_single_radar_frame(
+        session,
+        host,
+        {"time": 123, "path": path},
+        center_lat,
+        center_lon,
+        analysis_radius_km=20,
+        zoom=zoom,
+        color_lookup=lookup,
+        core_watch_dbz=50,
+        min_core_pixels=2,
+    )
+
+    assert isinstance(frame_result, AnalyzedFrame)
+    assert frame_result.max_dbz == 48
+    assert frame_result.max_core_dbz == 48
+    assert frame_result.selected_core_threshold_dbz == 45
+    assert frame_result.core_watch_distance_km is not None
+    assert frame_result.core50_distance_km is None
+    assert frame_result.selected_core_pixel_count == 2
+
+
+@pytest.mark.asyncio
+async def test_analyze_single_frame_uses_configured_near_watch_band() -> None:
     center_lat, center_lon = global_px_to_latlon(10000.4, 10000.4, 7)
     px, py = latlon_to_global_px(center_lat, center_lon, 7)
     px_int = int(px)
@@ -236,9 +282,10 @@ async def test_analyze_single_frame_uses_configured_core_thresholds() -> None:
 
     assert isinstance(frame_result, AnalyzedFrame)
     assert frame_result.max_dbz == 58
-    assert frame_result.selected_core_threshold_dbz is None
-    assert frame_result.selected_core_distance_km is None
-    assert frame_result.core_watch_distance_km is None
+    assert frame_result.max_core_dbz == 58
+    assert frame_result.selected_core_threshold_dbz == 55
+    assert frame_result.selected_core_distance_km is not None
+    assert frame_result.core_watch_distance_km is not None
     assert frame_result.core_warning_distance_km is None
     assert frame_result.core_urgent_distance_km is None
     assert frame_result.core50_distance_km is not None
@@ -471,8 +518,11 @@ async def test_analyze_single_frame_keeps_analysis_with_partial_tile_failures() 
 
 
 @pytest.mark.asyncio
-async def test_analyze_recent_frames_selects_watch_core_location() -> None:
-    """50+ dBZ watch cores should expose coordinates for the map card."""
+@pytest.mark.parametrize(("dbz", "expected_threshold"), ((53, 50), (48, 45)))
+async def test_analyze_recent_frames_selects_watch_core_location(
+    dbz: int, expected_threshold: int
+) -> None:
+    """Connected watch and near-watch cores should expose truthful map metadata."""
 
     center_lat, center_lon = global_px_to_latlon(11000.4, 11000.4, 7)
     px, py = latlon_to_global_px(center_lat, center_lon, 7)
@@ -483,8 +533,8 @@ async def test_analyze_recent_frames_selects_watch_core_location() -> None:
 
     host = "https://tilecache.rainviewer.com"
     path = "/watch"
-    lookup = {(255, 128, 0, 255): 53}
-    tile = _mk_radar_tile(512, lookup, (local_x, local_y), 53)
+    lookup = {(255, 128, 0, 255): dbz}
+    tile = _mk_radar_tile(512, lookup, (local_x, local_y), dbz)
     session = FakeSession(
         {
             f"{host}{path}/512/7/{tx0}/{ty0}/2/1_1.png": FakeResponse(
@@ -506,8 +556,8 @@ async def test_analyze_recent_frames_selects_watch_core_location() -> None:
     )
 
     assert result is not None
-    assert result.max_dbz == 53
-    assert result.selected_core_threshold_dbz == 50
+    assert result.max_dbz == dbz
+    assert result.selected_core_threshold_dbz == expected_threshold
     assert result.selected_core_distance_km is not None
     assert result.selected_core_latitude is not None
     assert result.selected_core_longitude is not None

@@ -68,7 +68,7 @@ def _states(
 def test_clear_state_is_compact_and_hides_diagnostics() -> None:
     html = _render(_states("none", evidence_kind="none"))
 
-    assert "Nic významného nezjištěno" in html
+    assert "Silné radarové jádro v okolí nezjištěno" in html
     assert "Max dBZ" not in html
     assert "Confidence" not in html
     assert "<svg" not in html
