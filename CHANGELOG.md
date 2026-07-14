@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.5 - 2026-07-14
+
+### Changed
+
+- Render every currently detected radar core in the schematic while keeping the core
+  that drives the risk state larger and highlighted.
+- Show the number of detected cores and label the selected distance as the main core.
+
 ## 0.0.4 - 2026-07-14
 
 ### Fixed

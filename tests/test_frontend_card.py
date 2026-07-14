@@ -185,7 +185,7 @@ def test_radar_storm_shows_core_intensity_and_area() -> None:
         )
     )
 
-    assert 'aria-label="Poloha bouřkového jádra vůči domovu"' in html
+    assert 'aria-label="Polohy bouřkových jader vůči domovu"' in html
     assert "63.4 km" in html
     assert "Intenzita jádra" in html
     assert "56 dBZ" in html
@@ -207,8 +207,32 @@ def test_schematic_uses_core_bearing_not_motion_bearing() -> None:
         )
     )
 
-    match = re.search(r'class="core-node" cx="([^"]+)" cy="([^"]+)"', html)
+    match = re.search(r'class="core-node selected" cx="([^"]+)" cy="([^"]+)"', html)
     assert match is not None
     x, y = (float(value) for value in match.groups())
     assert abs(x - 90) < 1
     assert y > 130
+
+
+def test_schematic_renders_all_detected_cores_and_highlights_selected() -> None:
+    html = _render(
+        _states(
+            "watch",
+            evidence_kind="radar_storm",
+            attributes={
+                "selected_core_distance_km": 25.0,
+                "selected_core_max_dbz": 55,
+                "storm_cores": [
+                    {"distance_km": 25.0, "bearing_degrees": 180.0, "max_dbz": 55},
+                    {"distance_km": 42.0, "bearing_degrees": 240.0, "max_dbz": 49},
+                    {"distance_km": 68.0, "bearing_degrees": 300.0, "max_dbz": 46},
+                ],
+                "source_status": {"radar": "ok", "lightning": "not_configured"},
+            },
+        )
+    )
+
+    assert html.count('class="core-node secondary"') == 2
+    assert html.count('class="core-node selected"') == 1
+    assert "Detekovaná jádra" in html
+    assert ">3</strong>" in html
