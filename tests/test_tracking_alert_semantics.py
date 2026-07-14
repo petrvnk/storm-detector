@@ -187,6 +187,39 @@ def test_motion_uses_selected_urgent_core_when_omitted_from_watch_summaries() ->
     assert motion.eta_minutes == 20
 
 
+def test_motion_does_not_claim_approach_for_slow_radial_drift() -> None:
+    latest = _frame(
+        frame_time=2_000,
+        selected_distance_km=77.0,
+        selected_latitude=0.69,
+        selected_longitude=0.10,
+        selected_max_dbz=46,
+        storm_cores=(
+            _core(distance_km=77.0, latitude=0.69, longitude=0.10, max_dbz=46),
+        ),
+        selected_threshold_dbz=45,
+    )
+    older = _frame(
+        frame_time=1_400,
+        selected_distance_km=78.0,
+        selected_latitude=0.70,
+        selected_longitude=-0.10,
+        selected_max_dbz=46,
+        storm_cores=(
+            _core(distance_km=78.0, latitude=0.70, longitude=-0.10, max_dbz=46),
+        ),
+        selected_threshold_dbz=45,
+    )
+
+    motion = _motion_from_frame_results([latest, older])
+
+    assert motion.speed_kmh is not None
+    assert motion.speed_kmh > 100
+    assert motion.approaching is False
+    assert motion.eta_minutes is None
+    assert motion.distance_trend == "stable"
+
+
 def test_lightning_only_new_nearby_strike_is_capped_at_warning() -> None:
     inputs = {
         "max_dbz": None,

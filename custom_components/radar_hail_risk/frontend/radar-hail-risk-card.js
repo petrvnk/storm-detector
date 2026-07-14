@@ -66,6 +66,17 @@ class RadarHailRiskCard extends HTMLElement {
             attrs.core_distance_km,
         )
       : null;
+    const stormCores = Array.isArray(attrs.storm_cores) ? attrs.storm_cores : [];
+    const selectedCore = Number.isFinite(coreDistance)
+      ? stormCores.reduce((best, core) => {
+          const distance = this.number(core?.distance_km);
+          if (!Number.isFinite(distance)) return best;
+          if (!best) return core;
+          const bestDistance = this.number(best.distance_km);
+          return Math.abs(distance - coreDistance) < Math.abs(bestDistance - coreDistance) ? core : best;
+        }, null)
+      : null;
+    const coreBearing = this.number(selectedCore?.bearing_degrees);
     const lightningDistance = lightningCurrent
       ? this.number(
           this.state(this.config.lightning_distance_entity)?.state ?? attrs.lightning_distance_km,
@@ -119,7 +130,7 @@ class RadarHailRiskCard extends HTMLElement {
             <div class="message">${this.escape(this.message(mode, { coreDistance, approaching, receding }))}</div>
           </div>
         </section>
-        ${showRadar ? this.radar(coreDistance, attrs.storm_motion_bearing, approaching) : ''}
+        ${showRadar ? this.radar(coreDistance, coreBearing, approaching) : ''}
         ${facts.length ? `<section class="facts">${facts.join('')}</section>` : ''}
         ${mode === 'lightning' ? '<div class="hail-note">Kroupy nejsou radarově potvrzené</div>' : ''}
         <div class="safety-note">Orientační radarové upozornění · sledujte oficiální výstrahy</div>
@@ -227,7 +238,7 @@ class RadarHailRiskCard extends HTMLElement {
 
   radar(distance, bearing, approaching) {
     const maxKm = Math.max(50, Math.ceil(distance / 20) * 20);
-    const point = this.point(distance, this.number(bearing) ?? 315, maxKm);
+    const point = Number.isFinite(bearing) ? this.point(distance, bearing, maxKm) : null;
     return `
       <section class="radar-wrap">
         <svg class="radar" viewBox="0 0 180 180" role="img" aria-label="Poloha bouřkového jádra vůči domovu">
@@ -237,8 +248,8 @@ class RadarHailRiskCard extends HTMLElement {
           <line class="axis" x1="90" y1="20" x2="90" y2="160" />
           <line class="axis" x1="20" y1="90" x2="160" y2="90" />
           <circle class="home-node" cx="90" cy="90" r="6" />
-          <circle class="core-pulse" cx="${point.x}" cy="${point.y}" r="14" />
-          <circle class="core-node" cx="${point.x}" cy="${point.y}" r="8" />
+          ${point ? `<circle class="core-pulse" cx="${point.x}" cy="${point.y}" r="14" />
+          <circle class="core-node" cx="${point.x}" cy="${point.y}" r="8" />` : ''}
           <text class="north" x="90" y="14" text-anchor="middle">S</text>
         </svg>
         <div class="radar-copy">
