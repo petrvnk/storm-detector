@@ -545,7 +545,11 @@ async def test_analyze_recent_frames_selects_watch_core_location(
 
     result = await analyze_recent_frames(
         session,
-        {"host": host, "radar": {"past": [{"time": 1200, "path": path}]}},
+        {
+            "generated": 1250,
+            "host": host,
+            "radar": {"past": [{"time": 1200, "path": path}]},
+        },
         center_latitude=center_lat,
         center_longitude=center_lon,
         analysis_radius_km=20,
@@ -561,6 +565,16 @@ async def test_analyze_recent_frames_selects_watch_core_location(
     assert result.selected_core_distance_km is not None
     assert result.selected_core_latitude is not None
     assert result.selected_core_longitude is not None
+    assert result.frame_host == host
+    assert result.frame_path == path
+    assert result.metadata_generated_time == 1250
+    assert result.tile_size == 512
+    assert result.display_zoom == 7
+    assert result.max_native_zoom == 7
+    assert result.color_scheme_id == 2
+    assert result.tile_options == "1_1"
+    assert result.selected_core_centroid_latitude is not None
+    assert result.selected_core_centroid_longitude is not None
 
 
 @pytest.mark.asyncio

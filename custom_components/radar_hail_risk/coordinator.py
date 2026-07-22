@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
@@ -40,6 +41,7 @@ from .const import (
     ATTR_LIGHTNING_TRIGGERED,
     ATTR_LOCATION_SOURCE,
     ATTR_MAX_DBZ,
+    ATTR_RADAR_OVERLAY,
     ATTR_RAINVIEWER_DIAGNOSTICS,
     ATTR_SELECTED_CORE_AREA_KM2,
     ATTR_SELECTED_CORE_DISTANCE_KM,
@@ -74,6 +76,7 @@ from .const import (
     CONF_URGENT_LIGHTNING_DISTANCE_KM,
     CONF_WARNING_CORE_DISTANCE_KM,
     CONF_WARNING_LIGHTNING_DISTANCE_KM,
+    DEFAULT_ANALYSIS_RADIUS_KM,
     DEFAULT_CORE_URGENT_DBZ,
     DEFAULT_CORE_WARNING_DBZ,
     DEFAULT_CORE_WATCH_DBZ,
@@ -99,7 +102,15 @@ from .lightning import (
     destination_point,
     haversine_km,
 )
-from .rainviewer import analyze_recent_frames, fetch_radar_metadata, fetch_rainviewer_color_lookup
+from .rainviewer import (
+    RADAR_OVERLAY_CORE_LIMIT,
+    RAINVIEWER_MAX_NATIVE_ZOOM,
+    analyze_recent_frames,
+    bearing_degrees,
+    build_rainviewer_tile_url_template,
+    fetch_radar_metadata,
+    fetch_rainviewer_color_lookup,
+)
 from .risk import (
     HailRiskResult,
     RiskLevelHysteresis,
@@ -129,6 +140,7 @@ except Exception:  # pragma: no cover
 
 
 RADAR_ANALYSIS_DEADLINE_SECONDS = 45.0
+RADAR_OVERLAY_SERIALIZED_MAX_BYTES = 16 * 1024
 
 
 async def _await_if_needed(value: Any) -> Any:
@@ -334,6 +346,422 @@ def _adapt_core_evidence(
     )
 
 
+def _overlay_risk_band(
+    max_dbz: int,
+    distance_km: float,
+    *,
+    watch_dbz: int,
+    warning_dbz: int,
+    urgent_dbz: int,
+    warning_radius_km: int,
+    urgent_radius_km: int,
+    warning_distance_km: float | None = None,
+    urgent_distance_km: float | None = None,
+) -> str:
+    if urgent_distance_km is None and max_dbz >= urgent_dbz:
+        urgent_distance_km = distance_km
+    if warning_distance_km is None and max_dbz >= warning_dbz:
+        warning_distance_km = distance_km
+    if urgent_distance_km is not None and urgent_distance_km <= urgent_radius_km:
+        return "urgent"
+    if (
+        urgent_distance_km is not None
+        and urgent_distance_km <= warning_radius_km
+        or warning_distance_km is not None
+        and warning_distance_km <= warning_radius_km
+        or max_dbz >= urgent_dbz
+        and distance_km <= urgent_radius_km
+    ):
+        return "warning"
+    if max_dbz >= watch_dbz:
+        return "watch"
+    return "near_watch"
+
+
+def _build_overlay_cores(
+    analysis: Any,
+    *,
+    frame_time: int,
+    center_latitude: float,
+    center_longitude: float,
+    watch_dbz: int,
+    warning_dbz: int,
+    urgent_dbz: int,
+    warning_radius_km: int,
+    urgent_radius_km: int,
+) -> tuple[list[dict[str, Any]], str | None, dict[str, int | bool]]:
+    """Normalize render cores and force the selected risk driver into the cap."""
+
+    normalized: list[dict[str, Any]] = []
+    selected_component_position: int | None = None
+    overlay_cores = getattr(analysis, "overlay_cores", None)
+    raw_cores = overlay_cores or getattr(analysis, "storm_cores", ()) or ()
+    for ordinal, raw in enumerate(raw_cores, start=1):
+        if not isinstance(raw, dict):
+            continue
+        try:
+            index = int(raw.get("index", ordinal))
+            threshold = int(raw["threshold_dbz"])
+            max_dbz = int(raw["max_dbz"])
+            distance_km = round(float(raw["distance_km"]), 3)
+            latitude = float(raw["latitude"])
+            longitude = float(raw["longitude"])
+            centroid_latitude = float(raw.get("centroid_latitude", latitude))
+            centroid_longitude = float(raw.get("centroid_longitude", longitude))
+            warning_distance_km = raw.get("warning_distance_km")
+            urgent_distance_km = raw.get("urgent_distance_km")
+            warning_distance_km = (
+                float(warning_distance_km) if warning_distance_km is not None else None
+            )
+            urgent_distance_km = (
+                float(urgent_distance_km) if urgent_distance_km is not None else None
+            )
+            position = len(normalized)
+            normalized.append(
+                {
+                    "id": f"{frame_time}:core:{index}",
+                    "frame_time": frame_time,
+                    "index": index,
+                    "selected": False,
+                    "role": "secondary",
+                    "risk_band": _overlay_risk_band(
+                        max_dbz,
+                        distance_km,
+                        watch_dbz=watch_dbz,
+                        warning_dbz=warning_dbz,
+                        urgent_dbz=urgent_dbz,
+                        warning_radius_km=warning_radius_km,
+                        urgent_radius_km=urgent_radius_km,
+                        warning_distance_km=warning_distance_km,
+                        urgent_distance_km=urgent_distance_km,
+                    ),
+                    "threshold_dbz": threshold,
+                    "max_dbz": max_dbz,
+                    "distance_km": distance_km,
+                    "bearing_degrees": round(float(raw["bearing_degrees"]), 1),
+                    "latitude": round(latitude, 6),
+                    "longitude": round(longitude, 6),
+                    "centroid_latitude": round(centroid_latitude, 6),
+                    "centroid_longitude": round(centroid_longitude, 6),
+                    "render_latitude": round(centroid_latitude, 6),
+                    "render_longitude": round(centroid_longitude, 6),
+                    "area_km2": round(float(raw["area_km2"]), 3),
+                    "pixel_count": int(raw["pixel_count"]),
+                }
+            )
+            if raw.get("selected") is True:
+                selected_component_position = position
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    selected_threshold = getattr(analysis, "selected_core_threshold_dbz", None)
+    selected_distance = getattr(analysis, "selected_core_distance_km", None)
+    selected_latitude = getattr(analysis, "selected_core_latitude", None)
+    selected_longitude = getattr(analysis, "selected_core_longitude", None)
+    selected_core: dict[str, Any] | None = None
+    selected_position: int | None = None
+    if (
+        selected_threshold is not None
+        and selected_distance is not None
+        and selected_latitude is not None
+        and selected_longitude is not None
+    ):
+        selected_distance = float(selected_distance)
+        selected_latitude = float(selected_latitude)
+        selected_longitude = float(selected_longitude)
+        matches: list[tuple[int, dict[str, Any]]] = []
+        if selected_component_position is not None:
+            selected_position = selected_component_position
+            selected_core = dict(normalized[selected_position])
+        else:
+            matches = [
+                (position, core)
+                for position, core in enumerate(normalized)
+                if abs(float(core["latitude"]) - selected_latitude) <= 0.00001
+                and abs(float(core["longitude"]) - selected_longitude) <= 0.00001
+            ]
+        if selected_core is None and matches:
+            selected_position, selected_core = min(
+                matches,
+                key=lambda item: abs(float(item[1]["distance_km"]) - selected_distance),
+            )
+            selected_core = dict(selected_core)
+        elif selected_core is None:
+            index = max((int(core["index"]) for core in normalized), default=0) + 1
+            selected_core = {
+                "id": f"{frame_time}:core:{index}",
+                "frame_time": frame_time,
+                "index": index,
+                "latitude": round(selected_latitude, 6),
+                "longitude": round(selected_longitude, 6),
+            }
+
+        selected_centroid_latitude = getattr(
+            analysis, "selected_core_centroid_latitude", None
+        )
+        selected_centroid_longitude = getattr(
+            analysis, "selected_core_centroid_longitude", None
+        )
+        if selected_centroid_latitude is None:
+            selected_centroid_latitude = selected_core.get(
+                "centroid_latitude", selected_latitude
+            )
+        if selected_centroid_longitude is None:
+            selected_centroid_longitude = selected_core.get(
+                "centroid_longitude", selected_longitude
+            )
+        selected_max_dbz = int(
+            getattr(analysis, "selected_core_max_dbz", None)
+            or selected_core.get("max_dbz", 0)
+        )
+        selected_risk_band = selected_core.get("risk_band")
+        if selected_risk_band not in {"near_watch", "watch", "warning", "urgent"}:
+            selected_risk_band = _overlay_risk_band(
+                selected_max_dbz,
+                selected_distance,
+                watch_dbz=watch_dbz,
+                warning_dbz=warning_dbz,
+                urgent_dbz=urgent_dbz,
+                warning_radius_km=warning_radius_km,
+                urgent_radius_km=urgent_radius_km,
+            )
+        selected_core.update(
+            {
+                "selected": True,
+                "role": "risk_driver",
+                "risk_band": selected_risk_band,
+                "threshold_dbz": int(selected_threshold),
+                "max_dbz": selected_max_dbz,
+                "distance_km": selected_distance,
+                "bearing_degrees": bearing_degrees(
+                    center_latitude,
+                    center_longitude,
+                    selected_latitude,
+                    selected_longitude,
+                ),
+                "latitude": selected_latitude,
+                "longitude": selected_longitude,
+                "centroid_latitude": round(float(selected_centroid_latitude), 6),
+                "centroid_longitude": round(float(selected_centroid_longitude), 6),
+                "render_latitude": round(float(selected_centroid_latitude), 6),
+                "render_longitude": round(float(selected_centroid_longitude), 6),
+                "area_km2": round(
+                    float(
+                        getattr(analysis, "selected_core_area_km2", None)
+                        or selected_core.get("area_km2", 0.0)
+                    ),
+                    3,
+                ),
+                "pixel_count": int(
+                    getattr(analysis, "selected_core_pixel_count", None)
+                    or selected_core.get("pixel_count", 0)
+                ),
+            }
+        )
+
+    rendered = [dict(core) for core in normalized[:RADAR_OVERLAY_CORE_LIMIT]]
+    selected_forced = bool(
+        getattr(analysis, "overlay_selected_core_forced_included", False)
+    )
+    if selected_core is not None:
+        if selected_position is not None and selected_position < len(rendered):
+            rendered[selected_position] = selected_core
+        elif len(rendered) < RADAR_OVERLAY_CORE_LIMIT:
+            rendered.append(selected_core)
+        elif rendered:
+            rendered[-1] = selected_core
+            selected_forced = True
+
+    selected_id = selected_core["id"] if selected_core is not None else None
+    for core in rendered:
+        core["selected"] = core["id"] == selected_id
+        core["role"] = "risk_driver" if core["selected"] else "secondary"
+
+    try:
+        core_count_total = max(
+            int(getattr(analysis, "core_count", 0)), len(normalized), len(rendered)
+        )
+    except (TypeError, ValueError):
+        core_count_total = len(normalized)
+    return rendered, selected_id, {
+        "core_count_total": core_count_total,
+        "core_count_rendered": len(rendered),
+        "core_limit": RADAR_OVERLAY_CORE_LIMIT,
+        "selected_core_forced_included": selected_forced,
+    }
+
+
+def _build_radar_overlay(
+    analysis: Any,
+    *,
+    radar_status: str,
+    radar_stale: bool,
+    frame_age_seconds: int | None,
+    center_latitude: float,
+    center_longitude: float,
+    location_source: str,
+    analysis_radius_km: float,
+    warning_radius_km: int,
+    urgent_radius_km: int,
+    watch_dbz: int,
+    warning_dbz: int,
+    urgent_dbz: int,
+    min_core_pixels: int,
+) -> dict[str, Any]:
+    """Build a fail-closed live-overlay contract after source/stale evaluation."""
+
+    base: dict[str, Any] = {
+        "schema_version": 1,
+        "status": "unavailable",
+        "provider": "RainViewer",
+        "mode": "rainviewer_tile_mosaic",
+        "attribution": {
+            "label": "Weather data by RainViewer",
+            "url": "https://www.rainviewer.com/",
+        },
+        "frame": None,
+        "viewport": {
+            "center_latitude": round(float(center_latitude), 6),
+            "center_longitude": round(float(center_longitude), 6),
+            "location_source": location_source,
+            "radius_km": float(analysis_radius_km),
+            "warning_radius_km": int(warning_radius_km),
+            "urgent_radius_km": int(urgent_radius_km),
+        },
+        "thresholds": {
+            "near_watch_dbz": max(0, int(watch_dbz) - 5),
+            "watch_dbz": int(watch_dbz),
+            "warning_dbz": int(warning_dbz),
+            "urgent_dbz": int(urgent_dbz),
+            "min_core_pixels": int(min_core_pixels),
+        },
+        "selected_core_id": None,
+        "cores": [],
+        "limits": {
+            "core_count_total": 0,
+            "core_count_rendered": 0,
+            "core_limit": RADAR_OVERLAY_CORE_LIMIT,
+            "selected_core_forced_included": False,
+        },
+    }
+
+    def _serialized_size(payload: dict[str, Any]) -> int:
+        return len(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+
+    def _fail_overlay(status: str) -> dict[str, Any]:
+        base["status"] = status
+        base["frame"] = None
+        base["selected_core_id"] = None
+        base["cores"] = []
+        base["limits"] = {
+            "core_count_total": 0,
+            "core_count_rendered": 0,
+            "core_limit": RADAR_OVERLAY_CORE_LIMIT,
+            "selected_core_forced_included": False,
+        }
+        try:
+            oversized = _serialized_size(base) > RADAR_OVERLAY_SERIALIZED_MAX_BYTES
+        except (OverflowError, TypeError, ValueError):
+            oversized = True
+        if oversized:
+            base["viewport"]["location_source"] = "unknown"
+        return base
+
+    if radar_stale:
+        return _fail_overlay("stale")
+    if analysis is None:
+        return _fail_overlay(
+            "degraded" if radar_status == "degraded" else "unavailable"
+        )
+    if radar_status != "ok":
+        return _fail_overlay("degraded")
+
+    frame_time = getattr(analysis, "frame_time", None)
+    frame_host = getattr(analysis, "frame_host", None)
+    frame_path = getattr(analysis, "frame_path", None)
+    tile_size = getattr(analysis, "tile_size", 512)
+    color_scheme_id = getattr(analysis, "color_scheme_id", 2)
+    tile_options = getattr(analysis, "tile_options", "1_1")
+    if not isinstance(frame_time, int):
+        return _fail_overlay("degraded")
+    tile_template = build_rainviewer_tile_url_template(
+        frame_host,
+        frame_path,
+        tile_size=tile_size,
+        color_scheme_id=color_scheme_id,
+        options=tile_options,
+    )
+    if tile_template is None:
+        return _fail_overlay("degraded")
+
+    try:
+        max_native_zoom = max(
+            0,
+            min(
+                int(getattr(analysis, "max_native_zoom", RAINVIEWER_MAX_NATIVE_ZOOM)),
+                RAINVIEWER_MAX_NATIVE_ZOOM,
+            ),
+        )
+        display_zoom = max(
+            0,
+            min(int(getattr(analysis, "display_zoom", max_native_zoom)), max_native_zoom),
+        )
+        cores, selected_core_id, limits = _build_overlay_cores(
+            analysis,
+            frame_time=frame_time,
+            center_latitude=center_latitude,
+            center_longitude=center_longitude,
+            watch_dbz=watch_dbz,
+            warning_dbz=warning_dbz,
+            urgent_dbz=urgent_dbz,
+            warning_radius_km=warning_radius_km,
+            urgent_radius_km=urgent_radius_km,
+        )
+        frame_time_iso = (
+            datetime.fromtimestamp(frame_time, tz=timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+    except (OSError, OverflowError, TypeError, ValueError):
+        base["status"] = "degraded"
+        return _fail_overlay("degraded")
+    generated_time = getattr(analysis, "metadata_generated_time", None)
+    try:
+        generated_time = int(generated_time) if generated_time is not None else None
+    except (TypeError, ValueError):
+        generated_time = None
+
+    base.update(
+        {
+            "status": "ok",
+            "frame": {
+                "time": frame_time,
+                "time_iso": frame_time_iso,
+                "age_seconds": frame_age_seconds,
+                "generated_time": generated_time,
+                "host": frame_host,
+                "path": frame_path,
+                "tile_url_template": tile_template,
+                "tile_size": 512,
+                "display_zoom": display_zoom,
+                "max_native_zoom": max_native_zoom,
+                "color_scheme_id": int(color_scheme_id),
+                "options": str(tile_options),
+            },
+            "selected_core_id": selected_core_id,
+            "cores": cores,
+            "limits": limits,
+        },
+    )
+    try:
+        payload_size = _serialized_size(base)
+    except (OverflowError, TypeError, ValueError):
+        return _fail_overlay("degraded")
+    if payload_size > RADAR_OVERLAY_SERIALIZED_MAX_BYTES:
+        return _fail_overlay("degraded")
+    return base
+
+
 class RadarHailRiskCoordinator(DataUpdateCoordinator):
     """Polls RainViewer and optional lightning sensor states and publishes risk."""
 
@@ -469,6 +897,16 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             ATTR_LOCATION_SOURCE: extras.get(ATTR_LOCATION_SOURCE) if extras else None,
             ATTR_SOURCE_STATUS: extras.get(ATTR_SOURCE_STATUS) if extras else {},
             ATTR_DEGRADATION_REASONS: extras.get(ATTR_DEGRADATION_REASONS) if extras else (),
+            ATTR_RADAR_OVERLAY: (extras or {}).get(ATTR_RADAR_OVERLAY)
+            or {
+                "schema_version": 1,
+                "status": "unavailable",
+                "provider": "RainViewer",
+                "mode": "rainviewer_tile_mosaic",
+                "frame": None,
+                "selected_core_id": None,
+                "cores": [],
+            },
             ATTR_STALE: result.is_stale,
             "update_count": self._update_count,
         }
@@ -580,6 +1018,10 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             async def _run_with_session(session: Any) -> dict[str, Any]:
                 center_latitude, center_longitude = location_lat, location_lon
                 cfg = self._effective_config()
+                analysis_radius_km = normalize_optional_float(
+                    cfg.get(CONF_ANALYSIS_RADIUS_KM),
+                    default=DEFAULT_ANALYSIS_RADIUS_KM,
+                )
 
                 radar_diagnostics: list[str] = []
                 lightning_diagnostics: Iterable[str] = ()
@@ -615,10 +1057,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                                 meta,
                                 center_latitude,
                                 center_longitude,
-                                analysis_radius_km=normalize_optional_float(
-                                    cfg.get(CONF_ANALYSIS_RADIUS_KM),
-                                    default=50.0,
-                                ),
+                                analysis_radius_km=analysis_radius_km,
                                 required_frames=normalize_optional_int(
                                     cfg.get(CONF_RAINVIEWER_FRAMES),
                                     default=DEFAULT_RAINVIEWER_FRAMES,
@@ -839,6 +1278,25 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         is_stale=lightning_stale,
                     ),
                 }
+                radar_overlay = _build_radar_overlay(
+                    analysis,
+                    radar_status=source_status["radar"],
+                    radar_stale=radar_stale,
+                    frame_age_seconds=frame_age,
+                    center_latitude=center_latitude,
+                    center_longitude=center_longitude,
+                    location_source=location_source,
+                    analysis_radius_km=analysis_radius_km,
+                    warning_radius_km=warning_core_distance_km,
+                    urgent_radius_km=urgent_core_distance_km,
+                    watch_dbz=watch_dbz,
+                    warning_dbz=warning_dbz,
+                    urgent_dbz=urgent_dbz,
+                    min_core_pixels=normalize_optional_int(
+                        cfg.get(CONF_MIN_CORE_PIXELS),
+                        default=DEFAULT_MIN_CORE_PIXELS,
+                    ),
+                )
                 degradation_reasons = _degradation_reasons(
                     radar_diagnostics=radar_diagnostics,
                     lightning_diagnostics=tuple(lightning_diagnostics),
@@ -1003,6 +1461,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         ATTR_LOCATION_SOURCE: location_source,
                         ATTR_SOURCE_STATUS: source_status,
                         ATTR_DEGRADATION_REASONS: degradation_reasons,
+                        ATTR_RADAR_OVERLAY: radar_overlay,
                     },
                 )
 

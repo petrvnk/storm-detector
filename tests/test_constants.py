@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from custom_components.radar_hail_risk.const import (
+    ATTR_RADAR_OVERLAY,
     CONF_ANALYSIS_RADIUS_KM,
     DATA_KEY_RESULT,
     DEFAULT_ANALYSIS_RADIUS_KM,
@@ -26,6 +27,7 @@ def test_constants_default_contract() -> None:
     assert PARAMETER_SPECS[CONF_ANALYSIS_RADIUS_KM]["unit"] == "km"
     assert DATA_KEY_RESULT == "hail_risk_result"
     assert "sensor" in PLATFORMS
+    assert ATTR_RADAR_OVERLAY == "radar_overlay"
     assert EVIDENCE_KINDS == (
         "none",
         "radar_storm",
