@@ -15,6 +15,7 @@ import math
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, TypeVar
+from urllib.parse import urlsplit
 
 from .async_utils import drain_future
 
@@ -31,6 +32,15 @@ RAINVIEWER_METADATA_ENDPOINTS = (
 RAINVIEWER_COLOR_TABLE_URL = "https://www.rainviewer.com/files/rainviewer_api_colors_table.csv"
 RAINVIEWER_TILE_SIZE = 512
 RAINVIEWER_TILE_SCALE = "2"
+RAINVIEWER_COLOR_SCHEME_ID = 2
+RAINVIEWER_TILE_OPTIONS = "1_1"
+RAINVIEWER_MAX_NATIVE_ZOOM = 7
+RAINVIEWER_MAX_HOST_LENGTH = 267
+RAINVIEWER_MAX_PATH_LENGTH = 80
+RAINVIEWER_MAX_FRAME_ID_LENGTH = 64
+RAINVIEWER_MAX_OPTIONS_LENGTH = 32
+RAINVIEWER_MAX_TILE_TEMPLATE_LENGTH = 512
+RADAR_OVERLAY_CORE_LIMIT = 12
 RAINVIEWER_COLOR_SCHEME = "Universal Blue"
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 20
 DEFAULT_RETRY_ATTEMPTS = 1
@@ -78,6 +88,7 @@ class StormCore:
     nearest_longitude: float
     distance_km: float
     pixel_count: int
+    pixel_keys: frozenset[tuple[int, int]] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -142,6 +153,9 @@ class AnalyzedFrame:
     storm_cores: tuple[dict[str, int | float], ...]
     core_count: int
     analyzed_pixels: int
+    frame_path: str = ""
+    overlay_cores: tuple[dict[str, int | float], ...] = ()
+    overlay_selected_core_forced_included: bool = False
 
 
 @dataclass(frozen=True)
@@ -174,6 +188,18 @@ class RadarAnalysis:
     dbz_trend: str | None
     distance_trend: str | None
     frames_analyzed: int
+    frame_host: str
+    frame_path: str
+    metadata_generated_time: int | None
+    tile_size: int
+    display_zoom: int
+    max_native_zoom: int
+    color_scheme_id: int
+    tile_options: str
+    selected_core_centroid_latitude: float | None
+    selected_core_centroid_longitude: float | None
+    overlay_cores: tuple[dict[str, int | float], ...] = ()
+    overlay_selected_core_forced_included: bool = False
 
 
 def _is_mapping_cached(cache: dict[str, tuple[float, Any]], key: str, ttl_seconds: int) -> bool:
@@ -742,6 +768,7 @@ def _component_cores_from_points(
                 nearest_longitude=float(nearest[2]),
                 distance_km=float(nearest[3]),
                 pixel_count=len(samples),
+                pixel_keys=frozenset(component),
             )
         )
 
@@ -755,38 +782,75 @@ def _storm_core_summaries(
     center_latitude: float,
     center_longitude: float,
     limit: int = 8,
-) -> tuple[dict[str, int | float], ...]:
+    selected_core: StormCore | None = None,
+    warning_cores: list[StormCore] | None = None,
+    urgent_cores: list[StormCore] | None = None,
+) -> tuple[tuple[dict[str, int | float], ...], bool]:
     """Return a compact top-N core list safe for HA attributes and Lovelace."""
 
-    summaries: list[dict[str, int | float]] = []
-    for index, core in enumerate(
-        sorted(cores, key=lambda item: (item.distance_km, -item.max_dbz, -item.pixel_count))[:limit],
-        start=1,
-    ):
-        summaries.append(
-            {
-                "index": index,
-                "threshold_dbz": int(core.threshold_dbz),
-                "max_dbz": int(core.max_dbz),
-                "distance_km": round(float(core.distance_km), 3),
-                "bearing_degrees": round(
-                    bearing_degrees(
-                        center_latitude,
-                        center_longitude,
-                        core.nearest_latitude,
-                        core.nearest_longitude,
-                    ),
-                    1,
-                ),
-                "latitude": round(float(core.nearest_latitude), 6),
-                "longitude": round(float(core.nearest_longitude), 6),
-                "centroid_latitude": round(float(core.centroid_latitude), 6),
-                "centroid_longitude": round(float(core.centroid_longitude), 6),
-                "area_km2": round(float(core.area_km2), 3),
-                "pixel_count": int(core.pixel_count),
-            }
+    def contains(parent: StormCore, child: StormCore) -> bool:
+        return bool(child.pixel_keys) and child.pixel_keys.issubset(parent.pixel_keys)
+
+    def nearest_nested_distance(
+        parent: StormCore, nested_cores: list[StormCore] | None
+    ) -> float | None:
+        distances = [
+            core.distance_km for core in nested_cores or () if contains(parent, core)
+        ]
+        return min(distances, default=None)
+
+    ranked = sorted(cores, key=lambda item: (item.distance_km, -item.max_dbz, -item.pixel_count))
+    indexed_cores = list(enumerate(ranked, start=1))
+    selected_item: tuple[int, StormCore] | None = None
+    if selected_core is not None:
+        selected_item = next(
+            (
+                item
+                for item in indexed_cores
+                if contains(item[1], selected_core)
+            ),
+            None,
         )
-    return tuple(summaries)
+
+    selected_forced = False
+    rendered = indexed_cores[:limit]
+    if selected_item is not None and selected_item not in rendered and rendered:
+        rendered[-1] = selected_item
+        selected_forced = True
+
+    summaries: list[dict[str, int | float]] = []
+    for index, core in rendered:
+        summary: dict[str, int | float] = {
+            "index": index,
+            "threshold_dbz": int(core.threshold_dbz),
+            "max_dbz": int(core.max_dbz),
+            "distance_km": round(float(core.distance_km), 3),
+            "bearing_degrees": round(
+                bearing_degrees(
+                    center_latitude,
+                    center_longitude,
+                    core.nearest_latitude,
+                    core.nearest_longitude,
+                ),
+                1,
+            ),
+            "latitude": round(float(core.nearest_latitude), 6),
+            "longitude": round(float(core.nearest_longitude), 6),
+            "centroid_latitude": round(float(core.centroid_latitude), 6),
+            "centroid_longitude": round(float(core.centroid_longitude), 6),
+            "area_km2": round(float(core.area_km2), 3),
+            "pixel_count": int(core.pixel_count),
+        }
+        if selected_core is not None:
+            summary["selected"] = selected_item is not None and index == selected_item[0]
+            warning_distance = nearest_nested_distance(core, warning_cores)
+            urgent_distance = nearest_nested_distance(core, urgent_cores)
+            if warning_distance is not None:
+                summary["warning_distance_km"] = round(float(warning_distance), 3)
+            if urgent_distance is not None:
+                summary["urgent_distance_km"] = round(float(urgent_distance), 3)
+        summaries.append(summary)
+    return tuple(summaries), selected_forced
 
 
 def _analyse_dbz_grid(
@@ -796,6 +860,7 @@ def _analyse_dbz_grid(
     zoom: int,
     tile_size: int,
     frame_time: int,
+    frame_path: str,
     *,
     core_watch_dbz: int,
     core_warning_dbz: int,
@@ -806,6 +871,7 @@ def _analyse_dbz_grid(
     if not points:
         return AnalyzedFrame(
             frame_time=frame_time,
+            frame_path=frame_path,
             max_dbz=None,
             max_core_dbz=None,
             core50_distance_km=None,
@@ -970,14 +1036,24 @@ def _analyse_dbz_grid(
         selected_centroid_lat = selected_core.centroid_latitude
         selected_centroid_lon = selected_core.centroid_longitude
 
-    storm_cores = _storm_core_summaries(
+    storm_cores, _ = _storm_core_summaries(
         watch_cores,
         center_latitude=center_latitude,
         center_longitude=center_longitude,
     )
+    overlay_cores, overlay_selected_core_forced_included = _storm_core_summaries(
+        watch_cores,
+        center_latitude=center_latitude,
+        center_longitude=center_longitude,
+        limit=RADAR_OVERLAY_CORE_LIMIT,
+        selected_core=selected_core,
+        warning_cores=cores_warning,
+        urgent_cores=cores_urgent,
+    )
 
     return AnalyzedFrame(
         frame_time=frame_time,
+        frame_path=frame_path,
         max_dbz=max_dbz,
         max_core_dbz=max_core_dbz,
         core50_distance_km=core50_distance,
@@ -1010,6 +1086,8 @@ def _analyse_dbz_grid(
         storm_cores=storm_cores,
         core_count=len(watch_cores),
         analyzed_pixels=analyzed_pixels,
+        overlay_cores=overlay_cores,
+        overlay_selected_core_forced_included=overlay_selected_core_forced_included,
     )
 
 
@@ -1023,6 +1101,119 @@ def _select_frame_url(
     scale: str = RAINVIEWER_TILE_SCALE,
 ) -> str:
     return f"{host.rstrip('/')}{path}/{tile_size}/{zoom}/{x}/{y}/{scale}/1_1.png"
+
+
+def build_rainviewer_tile_url_template(
+    host: Any,
+    path: Any,
+    *,
+    tile_size: int = RAINVIEWER_TILE_SIZE,
+    color_scheme_id: int = RAINVIEWER_COLOR_SCHEME_ID,
+    options: str = RAINVIEWER_TILE_OPTIONS,
+) -> str | None:
+    """Build a constrained HTTPS RainViewer XYZ tile template."""
+
+    if tile_size != RAINVIEWER_TILE_SIZE:
+        return None
+    if not isinstance(host, str) or not isinstance(path, str):
+        return None
+    if (
+        not host
+        or len(host) > RAINVIEWER_MAX_HOST_LENGTH
+        or not path
+        or len(path) > RAINVIEWER_MAX_PATH_LENGTH
+    ):
+        return None
+    if any(character.isspace() or ord(character) < 32 for character in (*host, *path)):
+        return None
+    if any(character in host + path for character in "{}"):
+        return None
+
+    parsed_host = urlsplit(host)
+    try:
+        parsed_host.port
+    except ValueError:
+        return None
+    if (
+        parsed_host.scheme != "https"
+        or not parsed_host.hostname
+        or parsed_host.username is not None
+        or parsed_host.password is not None
+        or parsed_host.path not in {"", "/"}
+        or parsed_host.query
+        or parsed_host.fragment
+        or "\\" in parsed_host.netloc
+    ):
+        return None
+    labels = parsed_host.hostname.split(".")
+    if any(
+        not label
+        or label.startswith("-")
+        or label.endswith("-")
+        or len(label) > 63
+        or not label.isascii()
+        or any(not (character.isalnum() or character == "-") for character in label)
+        for label in labels
+    ):
+        return None
+    hostname = parsed_host.hostname.lower()
+    if (
+        hostname != "rainviewer.com"
+        and not hostname.endswith(".rainviewer.com")
+    ) or parsed_host.port not in {None, 443}:
+        return None
+    if "?" in path or "#" in path or "\\" in path:
+        return None
+
+    path_segments = path.strip("/").split("/")
+    if not path_segments or any(
+        not segment
+        or segment in {".", ".."}
+        or any(
+            not character.isascii()
+            or not (character.isalnum() or character in {"-", "_", "."})
+            for character in segment
+        )
+        for segment in path_segments
+    ):
+        return None
+    if (
+        len(path_segments) != 3
+        or path_segments[:2] != ["v2", "radar"]
+        or not 1 <= len(path_segments[2]) <= RAINVIEWER_MAX_FRAME_ID_LENGTH
+        or not path_segments[2][0].isascii()
+        or not path_segments[2][0].isalnum()
+        or any(
+            not character.isascii()
+            or not (character.isalnum() or character in {"-", "_"})
+            for character in path_segments[2][1:]
+        )
+    ):
+        return None
+    normalized_path = "/" + "/".join(path_segments)
+    try:
+        normalized_color = int(color_scheme_id)
+    except (TypeError, ValueError):
+        return None
+    if not 0 <= normalized_color <= 255:
+        return None
+    normalized_options = str(options)
+    if not 1 <= len(normalized_options) <= RAINVIEWER_MAX_OPTIONS_LENGTH or any(
+        character.isspace() or not (character.isalnum() or character == "_")
+        for character in normalized_options
+    ):
+        return None
+
+    origin = f"https://{parsed_host.netloc}"
+    tile_template = (
+        f"{origin}{normalized_path}/{RAINVIEWER_TILE_SIZE}/"
+        f"{{z}}/{{x}}/{{y}}/{normalized_color}/{normalized_options}.png"
+    )
+    return (
+        tile_template
+        if len(tile_template) <= RAINVIEWER_MAX_TILE_TEMPLATE_LENGTH
+        else None
+    )
 
 
 async def analyze_single_radar_frame(
@@ -1133,6 +1324,7 @@ async def analyze_single_radar_frame(
         zoom,
         tile_size,
         frame_time,
+        path,
         core_watch_dbz=core_watch_dbz,
         core_warning_dbz=core_warning_dbz,
         core_urgent_dbz=core_urgent_dbz,
@@ -1442,6 +1634,10 @@ async def analyze_recent_frames(
         frame_age_seconds = 0
 
     motion = _motion_from_frame_results(frame_results)
+    try:
+        metadata_generated_time = int(metadata["generated"])
+    except (KeyError, TypeError, ValueError):
+        metadata_generated_time = None
 
     return RadarAnalysis(
         frame_time=latest.frame_time,
@@ -1470,4 +1666,18 @@ async def analyze_recent_frames(
         dbz_trend=motion.dbz_trend,
         distance_trend=motion.distance_trend,
         frames_analyzed=len(frame_results),
+        frame_host=host,
+        frame_path=latest.frame_path,
+        metadata_generated_time=metadata_generated_time,
+        tile_size=RAINVIEWER_TILE_SIZE,
+        display_zoom=min(max(0, int(zoom)), RAINVIEWER_MAX_NATIVE_ZOOM),
+        max_native_zoom=RAINVIEWER_MAX_NATIVE_ZOOM,
+        color_scheme_id=RAINVIEWER_COLOR_SCHEME_ID,
+        tile_options=RAINVIEWER_TILE_OPTIONS,
+        selected_core_centroid_latitude=latest.selected_core_centroid_latitude,
+        selected_core_centroid_longitude=latest.selected_core_centroid_longitude,
+        overlay_cores=latest.overlay_cores,
+        overlay_selected_core_forced_included=(
+            latest.overlay_selected_core_forced_included
+        ),
     )

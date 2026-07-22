@@ -93,9 +93,22 @@ Then add a manual card:
 ```yaml
 type: custom:radar-hail-risk-card
 title: Bouřky v okolí
+radar_overlay: auto
 ```
 
-The clear and unavailable states stay minimal. Storm details appear only during current activity, and hail wording appears only with radar-supported evidence.
+`radar_overlay` controls the live RainViewer layer:
+
+- `auto` (default) shows it only for current radar-supported storm or hail activity. Clear, unavailable, and stale states stay compact; lightning-only keeps its lightning UX without a live layer.
+- `off` always uses the schematic radar view.
+- `always` shows a valid current radar layer even without a detected core; stale or unavailable data still stays hidden.
+
+The card is non-interactive: it has no pan, zoom, playback, or hover-only details. Storm details appear only during current activity, and hail wording appears only with radar-supported evidence. If RainViewer tiles are unavailable or blocked, the card falls back to its schematic radar view without changing the reported risk state.
+
+### RainViewer data and browser requests
+
+The live overlay loads image tiles directly from RainViewer in the browser for the displayed area. This adds browser-side requests to RainViewer's tile host; the frontend does not request RainViewer metadata or load external JavaScript.
+
+The repository's MIT license covers the integration code, not RainViewer radar data. RainViewer data, terms, attribution, and availability are separate, and availability is not guaranteed. The live radar module therefore keeps a visible **Weather data by RainViewer** link and retains the schematic fallback when tile images cannot be loaded.
 
 ## Notification blueprint
 

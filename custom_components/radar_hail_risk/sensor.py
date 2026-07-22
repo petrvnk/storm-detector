@@ -34,6 +34,7 @@ from .const import (
     ATTR_LIGHTNING_TRIGGERED,
     ATTR_LOCATION_SOURCE,
     ATTR_MAX_DBZ,
+    ATTR_RADAR_OVERLAY,
     ATTR_SELECTED_CORE_AREA_KM2,
     ATTR_SELECTED_CORE_DISTANCE_KM,
     ATTR_SELECTED_CORE_LATITUDE,
@@ -194,6 +195,14 @@ class RadarHailRiskLevelSensor(RadarHailRiskSensorBase):
 
     def __init__(self, coordinator: Any, config_entry: Any) -> None:
         super().__init__(coordinator, config_entry, key="level", title="Level")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        attributes = super().extra_state_attributes
+        attributes[ATTR_RADAR_OVERLAY] = (self._coordinator.data or {}).get(
+            ATTR_RADAR_OVERLAY
+        )
+        return attributes
 
     @property
     def icon(self) -> str:

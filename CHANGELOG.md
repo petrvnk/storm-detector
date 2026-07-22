@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.0.6 - 2026-07-22
+
+### Added
+
+- Display the synchronized live RainViewer radar frame directly in the custom card,
+  with every detected storm core projected over the same frame and the risk-driving
+  core highlighted.
+- Add fail-closed live-overlay states, visible RainViewer attribution, mobile marker
+  sizing, reduced-motion behavior, and configurable `auto`, `off`, and `always` modes.
+
+### Security
+
+- Validate RainViewer hosts, frame paths, templates, and payload sizes before exposing
+  renderable browser URLs; stale, malformed, or oversized overlays fall back safely to
+  the schematic view.
+
 ## 0.0.5 - 2026-07-14
 
 ### Changed

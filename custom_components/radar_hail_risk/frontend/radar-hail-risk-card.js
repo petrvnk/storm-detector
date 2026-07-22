@@ -15,6 +15,9 @@ class RadarHailRiskCard extends HTMLElement {
 
   setConfig(config) {
     if (!config) throw new Error('Invalid configuration');
+    const radarOverlay = ['auto', 'off', 'always'].includes(config.radar_overlay)
+      ? config.radar_overlay
+      : 'auto';
     this.config = {
       title: 'Bouřky v okolí',
       level_entity: 'sensor.radar_hail_risk_level',
@@ -25,7 +28,9 @@ class RadarHailRiskCard extends HTMLElement {
       active_entity: 'binary_sensor.radar_hail_risk_active',
       stale_entity: 'binary_sensor.radar_hail_risk_data_stale',
       home_label: 'Domov',
+      radar_overlay: 'auto',
       ...config,
+      radar_overlay: radarOverlay,
     };
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
   }
@@ -50,8 +55,15 @@ class RadarHailRiskCard extends HTMLElement {
     const evidence = String(attrs.evidence_kind || 'none').toLowerCase();
     const mode = this.displayMode(level, evidence, stale);
     const presentation = this.presentation(mode);
+    const overlay = this.validRadarOverlay(attrs, stale, source);
+    const liveOverlayEligible = this.liveOverlayEligible(evidence, overlay);
+    const tileError = liveOverlayEligible
+      && this._radarTileErrorFrameTime === overlay.frame.time;
+    const liveRadar = liveOverlayEligible
+      ? this.liveRadar(overlay)
+      : null;
 
-    if (mode === 'clear' || mode === 'unavailable') {
+    if (mode === 'unavailable' || (mode === 'clear' && !liveRadar)) {
       this._cardSize = 1;
       this.shadowRoot.innerHTML = this.compactCard(presentation, mode);
       return;
@@ -94,6 +106,12 @@ class RadarHailRiskCard extends HTMLElement {
         )
       : null;
     const coreArea = radarCurrent ? this.number(attrs.selected_core_area_km2) : null;
+    const liveCoreCount = liveRadar && Number.isInteger(overlay?.limits?.core_count_rendered)
+      ? overlay.limits.core_count_rendered
+      : null;
+    const liveCoreTotal = liveRadar && Number.isInteger(overlay?.limits?.core_count_total)
+      ? overlay.limits.core_count_total
+      : null;
     const facts = [];
 
     if (coreDistance != null && mode !== 'lightning') {
@@ -105,7 +123,11 @@ class RadarHailRiskCard extends HTMLElement {
     if (coreArea != null && mode !== 'lightning') {
       facts.push(this.fact('mdi:selection-ellipse', 'Plocha jádra', `${coreArea.toFixed(1)} km²`));
     }
-    if (renderableCores.length > 1 && mode !== 'lightning') {
+    if (liveCoreCount != null && liveCoreTotal > liveCoreCount && mode !== 'lightning') {
+      facts.push(this.fact('mdi:dots-circle', 'Zobrazeno', `${liveCoreCount} z ${liveCoreTotal} jader`));
+    } else if (liveCoreCount > 1 && mode !== 'lightning') {
+      facts.push(this.fact('mdi:dots-circle', 'Detekovaná jádra', String(liveCoreCount)));
+    } else if (!liveRadar && renderableCores.length > 1 && mode !== 'lightning') {
       facts.push(this.fact('mdi:dots-circle', 'Detekovaná jádra', String(renderableCores.length)));
     }
     if (approaching) {
@@ -122,8 +144,11 @@ class RadarHailRiskCard extends HTMLElement {
       facts.push(this.fact('mdi:flash', 'Blesky', 'Také detekovány'));
     }
 
-    const showRadar = radarCurrent && coreDistance != null && mode !== 'lightning';
-    this._cardSize = showRadar ? 4 : 3;
+    const showSchematic = radarCurrent && coreDistance != null && mode !== 'lightning';
+    const radarModule = liveRadar?.html || (
+      showSchematic ? this.radar(renderableCores, selectedCore, coreDistance, coreBearing, approaching) : ''
+    );
+    this._cardSize = liveRadar ? 5 : (showSchematic ? 4 : 3);
     this.shadowRoot.innerHTML = `
       <style>${this.css(presentation.accent, presentation.glow)}</style>
       <ha-card class="risk-card ${mode}">
@@ -136,12 +161,14 @@ class RadarHailRiskCard extends HTMLElement {
             <div class="message">${this.escape(this.message(mode, { coreDistance, approaching, receding }))}</div>
           </div>
         </section>
-        ${showRadar ? this.radar(renderableCores, selectedCore, coreDistance, coreBearing, approaching) : ''}
+        ${radarModule}
+        ${tileError ? '<div class="radar-error">Radarová vrstva se nepodařila načíst, zobrazuji schematický náhled.</div>' : ''}
         ${facts.length ? `<section class="facts">${facts.join('')}</section>` : ''}
         ${mode === 'lightning' ? '<div class="hail-note">Kroupy nejsou radarově potvrzené</div>' : ''}
-        <div class="safety-note">Orientační radarové upozornění · sledujte oficiální výstrahy</div>
+        ${liveRadar || mode === 'lightning' ? '' : '<div class="safety-note">Radarová aktivita není potvrzené krupobití · sledujte oficiální výstrahy.</div>'}
       </ha-card>
     `;
+    if (liveRadar) this.bindRadarTileErrors(liveRadar.frameTime);
   }
 
   compactCard(presentation, mode) {
@@ -221,6 +248,7 @@ class RadarHailRiskCard extends HTMLElement {
 
   message(mode, context) {
     const { coreDistance, approaching, receding } = context;
+    if (mode === 'clear') return 'Silné radarové jádro v okolí nezjištěno.';
     if (mode === 'lightning') return 'V okolí byla zaznamenána aktuální blesková aktivita.';
     if (mode === 'hail-possible') return 'Radar ukazuje silné jádro s možností krup.';
     if (mode === 'hail-high') return 'Silné radarové jádro je blízko domova.';
@@ -240,6 +268,270 @@ class RadarHailRiskCard extends HTMLElement {
         <div><span>${this.escape(label)}</span><strong>${this.escape(value)}</strong></div>
       </div>
     `;
+  }
+
+  liveOverlayEligible(evidence, overlay) {
+    if (!overlay || this.config.radar_overlay === 'off') return false;
+    if (this.config.radar_overlay === 'always') return true;
+    return ['radar_storm', 'radar_hail', 'radar_hail_with_lightning'].includes(evidence);
+  }
+
+  validRadarOverlay(attrs, stale, source) {
+    const overlay = attrs.radar_overlay;
+    if (!overlay || typeof overlay !== 'object' || Array.isArray(overlay)) return null;
+    if (overlay.schema_version !== 1 || overlay.status !== 'ok') return null;
+    if (source.radar !== 'ok' || stale || attrs.is_stale === true) return null;
+
+    const frame = overlay.frame;
+    if (!frame || typeof frame !== 'object' || Array.isArray(frame)) return null;
+    if (!Number.isInteger(frame.time) || frame.time < 0 || frame.time !== attrs.frame_time) return null;
+    const frameAge = this.number(frame.age_seconds);
+    const attrsFrameAge = this.number(attrs.frame_age_seconds);
+    if (frameAge == null || attrsFrameAge == null || Math.abs(frameAge - attrsFrameAge) > 1) return null;
+    if (!this.validTileTemplate(frame.tile_url_template)) return null;
+    const displayZoom = this.number(frame.display_zoom);
+    const maxNativeZoom = this.number(frame.max_native_zoom);
+    const tileSize = this.number(frame.tile_size) || 512;
+    if (displayZoom == null || maxNativeZoom == null || displayZoom < 0 || maxNativeZoom < 0) return null;
+    if (tileSize <= 0) return null;
+
+    const viewport = overlay.viewport;
+    const centerLatitude = this.number(viewport?.center_latitude);
+    const centerLongitude = this.number(viewport?.center_longitude);
+    const radiusKm = this.number(viewport?.radius_km);
+    if (!this.validLatLon(centerLatitude, centerLongitude) || radiusKm == null || radiusKm <= 0) return null;
+
+    const cores = Array.isArray(overlay.cores) ? overlay.cores : null;
+    if (!cores || cores.some((core) => !core || core.frame_time !== frame.time)) return null;
+    const selectedId = overlay.selected_core_id;
+    const selectedCores = cores.filter((core) => core.selected === true);
+    if (selectedId != null) {
+      if (typeof selectedId !== 'string' || selectedId.trim() === '') return null;
+      const matches = cores.filter((core) => core.id === selectedId);
+      if (matches.length !== 1 || selectedCores.length !== 1 || matches[0] !== selectedCores[0]) return null;
+      const selected = matches[0];
+      if (!this.corePosition(selected)) return null;
+      const synchronizedValues = [
+        [selected.distance_km, attrs.selected_core_distance_km],
+        [selected.threshold_dbz, attrs.selected_core_threshold_dbz],
+        [selected.max_dbz, attrs.selected_core_max_dbz],
+      ];
+      if (synchronizedValues.some(([overlayValue, attrsValue]) => {
+        const left = this.number(overlayValue);
+        const right = this.number(attrsValue);
+        return left == null || right == null || Math.abs(left - right) > 0.001;
+      })) return null;
+    } else if (selectedCores.length) {
+      return null;
+    }
+
+    return {
+      ...overlay,
+      frame: {
+        ...frame,
+        display_zoom: Math.min(Math.floor(displayZoom), Math.floor(maxNativeZoom), 7),
+        tile_size: Math.floor(tileSize),
+      },
+      viewport: {
+        ...viewport,
+        center_latitude: centerLatitude,
+        center_longitude: centerLongitude,
+        radius_km: radiusKm,
+      },
+      cores,
+    };
+  }
+
+  validTileTemplate(template) {
+    if (typeof template !== 'string' || !template || /[\u0000-\u001f\u007f\s]/i.test(template)) return false;
+    const placeholders = template.match(/\{[^{}]+\}/g) || [];
+    if (placeholders.length !== 3 || new Set(placeholders).size !== 3) return false;
+    if (!['{z}', '{x}', '{y}'].every((placeholder) => placeholders.includes(placeholder))) return false;
+    const candidate = template.replaceAll('{z}', '7').replaceAll('{x}', '64').replaceAll('{y}', '64');
+    if (/[{}]/.test(candidate)) return false;
+    try {
+      const url = new URL(candidate);
+      return url.protocol === 'https:' && !url.username && !url.password;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  validLatLon(latitude, longitude) {
+    return Number.isFinite(latitude) && Number.isFinite(longitude)
+      && latitude >= -85.05112878 && latitude <= 85.05112878
+      && longitude >= -180 && longitude <= 180;
+  }
+
+  corePosition(core) {
+    const candidates = [
+      [core?.render_latitude, core?.render_longitude],
+      [core?.centroid_latitude, core?.centroid_longitude],
+      [core?.latitude, core?.longitude],
+    ];
+    for (const [latitudeValue, longitudeValue] of candidates) {
+      const latitude = this.number(latitudeValue);
+      const longitude = this.number(longitudeValue);
+      if (this.validLatLon(latitude, longitude)) return { latitude, longitude };
+    }
+    return null;
+  }
+
+  projectWebMercator(latitude, longitude, zoom, tileSize) {
+    const boundedLatitude = Math.min(85.05112878, Math.max(-85.05112878, latitude));
+    const worldSize = (2 ** zoom) * tileSize;
+    const latitudeRadians = boundedLatitude * Math.PI / 180;
+    return {
+      x: ((longitude + 180) / 360) * worldSize,
+      y: ((1 - Math.asinh(Math.tan(latitudeRadians)) / Math.PI) / 2) * worldSize,
+    };
+  }
+
+  radiusPixels(radiusKm, centerLatitude, zoom, tileSize) {
+    const earthCircumferenceM = 2 * Math.PI * 6378137;
+    const metersPerPixel = (
+      Math.cos(centerLatitude * Math.PI / 180) * earthCircumferenceM
+    ) / ((2 ** zoom) * tileSize);
+    return radiusKm * 1000 / metersPerPixel;
+  }
+
+  tileGrid(overlay) {
+    const { frame, viewport } = overlay;
+    const zoom = frame.display_zoom;
+    const tileSize = frame.tile_size;
+    const center = this.projectWebMercator(
+      viewport.center_latitude,
+      viewport.center_longitude,
+      zoom,
+      tileSize,
+    );
+    const radius = this.radiusPixels(viewport.radius_km, viewport.center_latitude, zoom, tileSize);
+    if (!Number.isFinite(radius) || radius <= 0) return null;
+    const minX = Math.floor((center.x - radius) / tileSize);
+    const maxX = Math.floor((center.x + radius) / tileSize);
+    const worldTiles = 2 ** zoom;
+    const minY = Math.max(0, Math.floor((center.y - radius) / tileSize));
+    const maxY = Math.min(worldTiles - 1, Math.floor((center.y + radius) / tileSize));
+    const count = (maxX - minX + 1) * (maxY - minY + 1);
+    if (count <= 0 || count > 25 || (viewport.radius_km <= 80 && count > 9)) return null;
+    return {
+      zoom,
+      tileSize,
+      minX,
+      maxX,
+      minY,
+      maxY,
+      worldTiles,
+      width: (maxX - minX + 1) * tileSize,
+      height: (maxY - minY + 1) * tileSize,
+      originX: minX * tileSize,
+      originY: minY * tileSize,
+      center,
+      radius,
+    };
+  }
+
+  liveRadar(overlay) {
+    if (this._radarTileErrorFrameTime === overlay.frame.time) return null;
+    const grid = this.tileGrid(overlay);
+    if (!grid) return null;
+
+    const tiles = [];
+    for (let y = grid.minY; y <= grid.maxY; y += 1) {
+      for (let x = grid.minX; x <= grid.maxX; x += 1) {
+        const tileX = ((x % grid.worldTiles) + grid.worldTiles) % grid.worldTiles;
+        const src = overlay.frame.tile_url_template
+          .replaceAll('{z}', String(grid.zoom))
+          .replaceAll('{x}', String(tileX))
+          .replaceAll('{y}', String(y));
+        tiles.push(`<img class="radar-tile" src="${this.escape(src)}" alt="" aria-hidden="true" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="left:${((x - grid.minX) * grid.tileSize / grid.width) * 100}%;top:${((y - grid.minY) * grid.tileSize / grid.height) * 100}%;width:${(grid.tileSize / grid.width) * 100}%;height:${(grid.tileSize / grid.height) * 100}%" />`);
+      }
+    }
+
+    const offsetX = grid.originX;
+    const offsetY = grid.originY;
+    const centerX = grid.center.x - offsetX;
+    const centerY = grid.center.y - offsetY;
+    const rings = [
+      ['monitoring', overlay.viewport.radius_km],
+      ['warning', this.number(overlay.viewport.warning_radius_km)],
+      ['urgent', this.number(overlay.viewport.urgent_radius_km)],
+    ].filter(([, radiusKm]) => radiusKm != null && radiusKm > 0)
+      .map(([kind, radiusKm]) => `<circle class="live-ring ${kind}" cx="${centerX}" cy="${centerY}" r="${this.radiusPixels(radiusKm, overlay.viewport.center_latitude, grid.zoom, grid.tileSize)}" />`)
+      .join('');
+    const orderedCores = [...overlay.cores].sort(
+      (left, right) => Number(left.id === overlay.selected_core_id) - Number(right.id === overlay.selected_core_id),
+    );
+    let selectedRendered = overlay.selected_core_id == null;
+    const marks = orderedCores.flatMap((core) => {
+      const position = this.corePosition(core);
+      if (!position) return [];
+      const point = this.projectWebMercator(position.latitude, position.longitude, grid.zoom, grid.tileSize);
+      const worldSize = grid.worldTiles * grid.tileSize;
+      let unwrappedX = point.x;
+      if (unwrappedX - grid.center.x > worldSize / 2) unwrappedX -= worldSize;
+      if (unwrappedX - grid.center.x < -worldSize / 2) unwrappedX += worldSize;
+      const x = unwrappedX - offsetX;
+      const y = point.y - offsetY;
+      if (x < -12 || y < -12 || x > grid.width + 12 || y > grid.height + 12) return [];
+      const id = this.escape(core.id ?? '');
+      const positionStyle = `left:${(x / grid.width) * 100}%;top:${(y / grid.height) * 100}%`;
+      if (core.id === overlay.selected_core_id) {
+        selectedRendered = true;
+        return [`<span class="live-core-halo" style="${positionStyle}"></span>
+          <span class="live-core selected" data-core-id="${id}" data-projected-x="${x}" data-projected-y="${y}" style="${positionStyle}"></span>`];
+      }
+      return [`<span class="live-core secondary" data-core-id="${id}" data-projected-x="${x}" data-projected-y="${y}" style="${positionStyle}"></span>`];
+    });
+    if (!selectedRendered) return null;
+    const selected = overlay.cores.find((core) => core.id === overlay.selected_core_id);
+    const selectedDistance = this.number(selected?.distance_km);
+    const selectedSummary = selectedDistance == null
+      ? ''
+      : `<strong>Hlavní jádro ${selectedDistance.toFixed(1)} km od ${this.escape(this.homeDistanceLabel())}</strong>`;
+    const frameLabel = overlay.frame.time_iso || String(overlay.frame.time);
+    const ageSeconds = this.number(overlay.frame.age_seconds);
+    const ageLabel = ageSeconds == null ? '' : ` · stáří ${Math.max(0, Math.round(ageSeconds / 60))} min`;
+
+    return {
+      frameTime: overlay.frame.time,
+      html: `
+        <section class="radar-live" role="img" aria-label="Radarový snímek RainViewer s bouřkovými jádry v okolí domova">
+          <div class="radar-live-stage" style="aspect-ratio:${grid.width}/${grid.height}">
+            <div class="radar-tiles">${tiles.join('')}</div>
+            <svg class="radar-live-overlay" viewBox="0 0 ${grid.width} ${grid.height}" preserveAspectRatio="none" aria-hidden="true">
+              ${rings}
+            </svg>
+            <div class="radar-markers" aria-hidden="true">
+              <span class="live-home-halo" style="left:${(centerX / grid.width) * 100}%;top:${(centerY / grid.height) * 100}%"></span>
+              <span class="live-home" style="left:${(centerX / grid.width) * 100}%;top:${(centerY / grid.height) * 100}%"></span>
+              ${marks.join('')}
+            </div>
+            <span class="live-home-label" style="left:${(centerX / grid.width) * 100}%;top:${(centerY / grid.height) * 100}%">${this.escape(this.config.home_label)}</span>
+          </div>
+          <div class="radar-live-meta">
+            <span>Radarový snímek ${this.escape(frameLabel)}${this.escape(ageLabel)}</span>
+            <a href="https://www.rainviewer.com/" target="_blank" rel="noopener noreferrer">Weather data by RainViewer</a>
+          </div>
+          ${selectedSummary ? `<div class="radar-live-selected">${selectedSummary}</div>` : ''}
+          <div class="radar-live-safety">Radarová aktivita není potvrzené krupobití · sledujte oficiální výstrahy.</div>
+        </section>
+      `,
+    };
+  }
+
+  bindRadarTileErrors(frameTime) {
+    const tiles = this.shadowRoot?.querySelectorAll?.('.radar-tile');
+    if (!tiles) return;
+    tiles.forEach((tile) => tile.addEventListener('error', () => {
+      if (this._radarTileErrorFrameTime === frameTime) return;
+      this._radarTileErrorFrameTime = frameTime;
+      this.render();
+    }, { once: true }));
+  }
+
+  homeDistanceLabel() {
+    return this.config.home_label === 'Domov' ? 'domova' : this.config.home_label;
   }
 
   radar(cores, selectedCore, distance, bearing, approaching) {
@@ -275,7 +567,7 @@ class RadarHailRiskCard extends HTMLElement {
         </svg>
         <div class="radar-copy">
           <strong>${distance.toFixed(1)} km</strong>
-          <span>hlavní jádro od ${this.escape(this.config.home_label)}</span>
+          <span>hlavní jádro od ${this.escape(this.homeDistanceLabel())}</span>
           ${approaching ? '<em>Přibližuje se</em>' : ''}
         </div>
       </section>
@@ -316,7 +608,7 @@ class RadarHailRiskCard extends HTMLElement {
 
   css(accent, glow) {
     return `
-      :host { display:block; }
+      :host { display:block; max-width:100%; overflow-x:hidden; }
       ha-card.risk-card {
         display:block;
         position:relative;
@@ -363,14 +655,44 @@ class RadarHailRiskCard extends HTMLElement {
       .radar-copy strong { display:block; color:${accent}; font-size:25px; }
       .radar-copy span { display:block; color:var(--secondary-text-color, #94a3b8); font-size:12px; }
       .radar-copy em { display:inline-block; margin-top:8px; padding:5px 8px; border-radius:999px; color:${accent}; background:${glow}; font-size:11px; font-style:normal; font-weight:750; }
+      .radar-live { min-width:0; max-width:100%; margin-top:12px; overflow:hidden; border-radius:18px; background:#07111f; border:1px solid var(--divider-color, rgba(148,163,184,.18)); }
+      .radar-live-stage { position:relative; width:100%; min-height:220px; max-height:320px; overflow:hidden; background:radial-gradient(circle at center, rgba(51,65,85,.48), #07111f 72%); }
+      .radar-tiles, .radar-live-overlay { position:absolute; inset:0; width:100%; height:100%; }
+      .radar-tile { position:absolute; display:block; object-fit:fill; opacity:.8; pointer-events:none; }
+      .radar-live-overlay { z-index:2; }
+      .live-ring { fill:none; stroke-width:2; vector-effect:non-scaling-stroke; }
+      .live-ring.monitoring { stroke:rgba(226,232,240,.72); stroke-dasharray:7 6; }
+      .live-ring.warning { stroke:rgba(249,115,22,.58); }
+      .live-ring.urgent { stroke:rgba(239,68,68,.65); }
+      .radar-markers { position:absolute; inset:0; z-index:3; pointer-events:none; }
+      .live-home-halo, .live-home, .live-core, .live-core-halo { position:absolute; box-sizing:border-box; border-radius:50%; transform:translate(-50%, -50%); }
+      .live-home-halo { width:18px; height:18px; background:rgba(15,23,42,.62); border:2px solid #fff; }
+      .live-home { width:10px; height:10px; background:#fff; border:2px solid #0f172a; }
+      .live-core { background:${accent}; border:2px solid #fff; filter:drop-shadow(0 0 7px ${accent}); }
+      .live-core.secondary { width:10px; height:10px; opacity:.72; border-width:1.5px; }
+      .live-core.selected { width:14px; height:14px; opacity:1; z-index:2; }
+      .live-core-halo { width:22px; height:22px; border:4px solid ${accent}; opacity:.75; animation:selected-core-pulse 1.8s ease-out infinite; }
+      .live-home-label { position:absolute; z-index:4; transform:translate(10px, 8px); color:#fff; font-size:11px; font-weight:800; text-shadow:0 1px 3px #000; }
+      .radar-live-meta { display:flex; justify-content:space-between; gap:10px; padding:8px 10px 0; color:var(--secondary-text-color, #94a3b8); font-size:10px; line-height:1.35; }
+      .radar-live-meta a { color:var(--primary-text-color, #e2e8f0); }
+      .radar-live-meta a:focus-visible { outline:2px solid ${accent}; outline-offset:2px; }
+      .radar-live-selected { padding:7px 10px 0; color:${accent}; font-size:13px; }
+      .radar-live-safety { padding:7px 10px 10px; color:var(--secondary-text-color, #cbd5e1); font-size:10px; line-height:1.35; }
+      .radar-error { margin-top:9px; color:var(--secondary-text-color, #94a3b8); font-size:10px; }
       .hail-note { margin-top:13px; padding:9px 11px; border-radius:12px; color:var(--secondary-text-color, #cbd5e1); background:var(--secondary-background-color, rgba(15,23,42,.45)); font-size:12px; }
       .safety-note { margin-top:13px; color:var(--secondary-text-color, #94a3b8); font-size:10px; }
+      @keyframes selected-core-pulse { from { opacity:.75; transform:translate(-50%, -50%) scale(1); } to { opacity:.08; transform:translate(-50%, -50%) scale(1.8); } }
       @media (max-width:600px) {
         ha-card.risk-card { padding:15px; border-radius:20px; }
         ha-card.compact { padding:12px 14px; }
         .status { font-size:23px; }
         .facts { grid-template-columns:1fr; }
         .radar-wrap { grid-template-columns:minmax(125px, 165px) 1fr; }
+        .radar-live-stage { min-height:220px; max-height:320px; aspect-ratio:1/1 !important; }
+        .radar-live-meta { flex-direction:column; gap:3px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .live-core-halo { animation:none; }
       }
     `;
   }
