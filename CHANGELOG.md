@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.7 - 2026-07-23
+
+### Fixed
+
+- Center the live radar viewport exactly on the monitored home location and crop the
+  surrounding RainViewer tile mosaic symmetrically around that point.
+- Preserve a square, north-up Web Mercator viewport on desktop and mobile so distance
+  rings remain circular and radar imagery is no longer stretched or apparently rotated.
+
 ## 0.0.6 - 2026-07-22
 
 ### Added
