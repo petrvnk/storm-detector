@@ -283,12 +283,12 @@ def _live_grid(overlay: dict[str, object]) -> dict[str, float]:
         "min_y": min_y,
         "max_y": max_y,
         "world_tiles": int(world_tiles),
-        "width": (max_x - min_x + 1) * tile_size,
-        "height": (max_y - min_y + 1) * tile_size,
+        "width": radius_pixels * 2,
+        "height": radius_pixels * 2,
         "center_x": center_x,
         "center_y": center_y,
-        "origin_x": min_x * tile_size,
-        "origin_y": min_y * tile_size,
+        "origin_x": center_x - radius_pixels,
+        "origin_y": center_y - radius_pixels,
     }
 
 
@@ -650,6 +650,77 @@ def test_live_overlay_raster_and_svg_share_explicit_pixel_viewport() -> None:
     assert tuple(float(value) for value in stage.groups()) == tuple(
         float(value) for value in overlay.groups()
     )
+    stage_width, stage_height = (float(value) for value in stage.groups())
+    assert stage_width == pytest.approx(stage_height)
+
+
+def test_live_overlay_home_is_exactly_centered_in_square_viewport() -> None:
+    frame_time = 1_710_000_000
+    html = _render(
+        _states(
+            "warning",
+            evidence_kind="radar_hail",
+            attributes={
+                "frame_time": frame_time,
+                "radar_overlay": _radar_overlay(frame_time=frame_time),
+            },
+        )
+    )
+
+    marker = re.search(
+        r'class="live-home" style="left:([^%]+)%;top:([^%]+)%"', html
+    )
+    ring = re.search(
+        r'class="live-ring monitoring" cx="([^"]+)" cy="([^"]+)" r="([^"]+)"',
+        html,
+    )
+    viewport = re.search(
+        r'class="radar-live-overlay" viewBox="0 0 ([^ ]+) ([^"]+)"', html
+    )
+    assert marker is not None and ring is not None and viewport is not None
+    assert tuple(float(value) for value in marker.groups()) == pytest.approx((50.0, 50.0))
+    cx, cy, radius = (float(value) for value in ring.groups())
+    width, height = (float(value) for value in viewport.groups())
+    assert width == pytest.approx(height)
+    assert cx == pytest.approx(width / 2)
+    assert cy == pytest.approx(height / 2)
+    assert radius == pytest.approx(width / 2)
+
+
+def test_live_overlay_keeps_north_up_and_east_right() -> None:
+    frame_time = 1_710_000_000
+
+    def rendered_selected_xy(latitude: float, longitude: float) -> tuple[float, float]:
+        overlay = _radar_overlay(frame_time=frame_time)
+        viewport = overlay["viewport"]
+        cores = overlay["cores"]
+        assert isinstance(viewport, dict) and isinstance(cores, list)
+        selected = next(core for core in cores if core["selected"] is True)
+        selected["render_latitude"] = latitude
+        selected["render_longitude"] = longitude
+        html = _render(
+            _states(
+                "warning",
+                evidence_kind="radar_hail",
+                attributes={
+                    "frame_time": frame_time,
+                    "selected_core_distance_km": 25.0,
+                    "radar_overlay": overlay,
+                },
+            )
+        )
+        return _selected_live_core_xy(html, str(overlay["selected_core_id"]))
+
+    north_x, north_y = rendered_selected_xy(50.1755, 14.4378)
+    east_x, east_y = rendered_selected_xy(50.0755, 14.5378)
+    grid = _live_grid(_radar_overlay(frame_time=frame_time))
+    center_x = grid["width"] / 2
+    center_y = grid["height"] / 2
+
+    assert north_x == pytest.approx(center_x, abs=0.2)
+    assert north_y < center_y
+    assert east_x > center_x
+    assert east_y == pytest.approx(center_y, abs=0.2)
 
 
 def test_live_markers_use_fixed_screen_space_geometry_at_320_px() -> None:
@@ -766,9 +837,12 @@ def test_live_overlay_css_is_mobile_safe_and_respects_reduced_motion() -> None:
 
     assert ":host { display:block; max-width:100%; overflow-x:hidden; }" in source
     assert ".radar-live-stage {" in source
-    assert "min-height:220px" in source
-    assert "max-height:320px" in source
+    assert "width:min(100%, 420px)" in source
+    assert "margin-inline:auto" in source
+    assert "min-height:220px" not in source
+    assert "max-height:320px" not in source
     assert "@media (max-width:600px)" in source
+    assert ".radar-live-stage { width:100%; }" in source
     assert ".facts { grid-template-columns:1fr; }" in source
     assert ".radar-live-meta { flex-direction:column" in source
     assert "@media (prefers-reduced-motion: reduce)" in source

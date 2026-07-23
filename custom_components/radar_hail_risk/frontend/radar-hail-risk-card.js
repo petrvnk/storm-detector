@@ -422,10 +422,10 @@ class RadarHailRiskCard extends HTMLElement {
       minY,
       maxY,
       worldTiles,
-      width: (maxX - minX + 1) * tileSize,
-      height: (maxY - minY + 1) * tileSize,
-      originX: minX * tileSize,
-      originY: minY * tileSize,
+      width: radius * 2,
+      height: radius * 2,
+      originX: center.x - radius,
+      originY: center.y - radius,
       center,
       radius,
     };
@@ -444,7 +444,9 @@ class RadarHailRiskCard extends HTMLElement {
           .replaceAll('{z}', String(grid.zoom))
           .replaceAll('{x}', String(tileX))
           .replaceAll('{y}', String(y));
-        tiles.push(`<img class="radar-tile" src="${this.escape(src)}" alt="" aria-hidden="true" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="left:${((x - grid.minX) * grid.tileSize / grid.width) * 100}%;top:${((y - grid.minY) * grid.tileSize / grid.height) * 100}%;width:${(grid.tileSize / grid.width) * 100}%;height:${(grid.tileSize / grid.height) * 100}%" />`);
+        const tileOriginX = x * grid.tileSize;
+        const tileOriginY = y * grid.tileSize;
+        tiles.push(`<img class="radar-tile" src="${this.escape(src)}" alt="" aria-hidden="true" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="left:${((tileOriginX - grid.originX) / grid.width) * 100}%;top:${((tileOriginY - grid.originY) / grid.height) * 100}%;width:${(grid.tileSize / grid.width) * 100}%;height:${(grid.tileSize / grid.height) * 100}%" />`);
       }
     }
 
@@ -656,7 +658,7 @@ class RadarHailRiskCard extends HTMLElement {
       .radar-copy span { display:block; color:var(--secondary-text-color, #94a3b8); font-size:12px; }
       .radar-copy em { display:inline-block; margin-top:8px; padding:5px 8px; border-radius:999px; color:${accent}; background:${glow}; font-size:11px; font-style:normal; font-weight:750; }
       .radar-live { min-width:0; max-width:100%; margin-top:12px; overflow:hidden; border-radius:18px; background:#07111f; border:1px solid var(--divider-color, rgba(148,163,184,.18)); }
-      .radar-live-stage { position:relative; width:100%; min-height:220px; max-height:320px; overflow:hidden; background:radial-gradient(circle at center, rgba(51,65,85,.48), #07111f 72%); }
+      .radar-live-stage { position:relative; width:min(100%, 420px); margin-inline:auto; overflow:hidden; background:radial-gradient(circle at center, rgba(51,65,85,.48), #07111f 72%); }
       .radar-tiles, .radar-live-overlay { position:absolute; inset:0; width:100%; height:100%; }
       .radar-tile { position:absolute; display:block; object-fit:fill; opacity:.8; pointer-events:none; }
       .radar-live-overlay { z-index:2; }
@@ -688,7 +690,7 @@ class RadarHailRiskCard extends HTMLElement {
         .status { font-size:23px; }
         .facts { grid-template-columns:1fr; }
         .radar-wrap { grid-template-columns:minmax(125px, 165px) 1fr; }
-        .radar-live-stage { min-height:220px; max-height:320px; aspect-ratio:1/1 !important; }
+        .radar-live-stage { width:100%; }
         .radar-live-meta { flex-direction:column; gap:3px; }
       }
       @media (prefers-reduced-motion: reduce) {
