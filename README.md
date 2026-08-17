@@ -1,5 +1,8 @@
 # Radar Hail Risk
 
+> [!IMPORTANT]
+> This repository is being refactored into **Storm Detector**. The imported baseline still uses the legacy `radar_hail_risk` domain and is **not yet ready to install as Storm Detector**. Use the existing Radar Hail Risk repository until a reviewed Storm Detector release is published.
+
 A Home Assistant integration that monitors **nearby thunderstorms and possible hail**.
 
 It combines RainViewer radar with optional Home Assistant lightning sensors. The integration only reports possible hail when current radar data supports that conclusion; lightning alone is shown as a nearby thunderstorm, never as hail.
