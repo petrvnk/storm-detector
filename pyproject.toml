@@ -3,9 +3,9 @@ requires = ["setuptools>=65.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "radar-hail-risk"
-version = "0.0.7"
-description = "Home Assistant custom integration skeleton for radar-based hail-risk estimation."
+name = "storm-detector"
+version = "0.1.0"
+description = "Home Assistant custom integration for storm detection."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6.0,<7"]

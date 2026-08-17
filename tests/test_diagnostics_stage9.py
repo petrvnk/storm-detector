@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from custom_components.radar_hail_risk.const import (
+from custom_components.storm_detector.const import (
     ATTR_DEGRADATION_REASONS,
     ATTR_SOURCE_STATUS,
     CONF_LIGHTNING_COUNTER_ENTITY_ID,
@@ -14,7 +14,7 @@ from custom_components.radar_hail_risk.const import (
     COORDINATOR_KEY,
     DOMAIN,
 )
-from custom_components.radar_hail_risk.diagnostics import async_get_config_entry_diagnostics
+from custom_components.storm_detector.diagnostics import async_get_config_entry_diagnostics
 
 
 class FakeEntry:

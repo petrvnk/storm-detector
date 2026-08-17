@@ -8,21 +8,21 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
-from custom_components.radar_hail_risk.const import (
+from custom_components.storm_detector.const import (
     ATTR_RADAR_OVERLAY,
     ATTR_STORM_CORES,
     DEFAULT_STALE_CLEAR_SECONDS,
 )
-from custom_components.radar_hail_risk.coordinator import (
+from custom_components.storm_detector.coordinator import (
     RadarHailRiskCoordinator,
     _build_radar_overlay,
 )
-from custom_components.radar_hail_risk.rainviewer import (
+from custom_components.storm_detector.rainviewer import (
     _analyse_dbz_grid,
     analyze_recent_frames,
     build_rainviewer_tile_url_template,
 )
-from custom_components.radar_hail_risk.sensor import (
+from custom_components.storm_detector.sensor import (
     RadarHailRiskLevelSensor,
     RadarHailRiskSummarySensor,
 )
@@ -134,18 +134,18 @@ async def _coordinator_payload(
         return {(255, 0, 0, 255): 57} if has_color_lookup else {}
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata", _fake_meta
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata", _fake_meta
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: analysis,
     ):
         coordinator = RadarHailRiskCoordinator(
             _FakeHass(),
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             _FakeEntry(),
             session_factory=_FakeSessionContext,
         )
@@ -162,7 +162,7 @@ async def _aggregate_frame(frame: Any) -> Any:
         },
     }
     with patch(
-        "custom_components.radar_hail_risk.rainviewer.analyze_single_radar_frame",
+        "custom_components.storm_detector.rainviewer.analyze_single_radar_frame",
         AsyncMock(return_value=frame),
     ):
         analysis = await analyze_recent_frames(
@@ -571,7 +571,7 @@ def test_oversized_radar_overlay_payload_fails_closed() -> None:
     long_template = "https://tilecache.rainviewer.com/" + "x" * 25000
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.build_rainviewer_tile_url_template",
+        "custom_components.storm_detector.coordinator.build_rainviewer_tile_url_template",
         return_value=long_template,
     ):
         overlay = _build_radar_overlay(

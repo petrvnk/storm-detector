@@ -1,11 +1,11 @@
-"""Constants for the Radar Hail Risk integration."""
+"""Constants for the Storm Detector integration."""
 
 from __future__ import annotations
 
 from typing import Final
 
-DOMAIN: Final = "radar_hail_risk"
-INTEGRATION_NAME: Final = "Radar Hail Risk"
+DOMAIN: Final = "storm_detector"
+INTEGRATION_NAME: Final = "Storm Detector"
 
 PLATFORMS: Final = ["sensor", "binary_sensor", "device_tracker"]
 
@@ -155,8 +155,6 @@ RISK_LEVELS = [
     RISK_LEVEL_URGENT,
     RISK_LEVEL_UNAVAILABLE,
 ]
-
-SERVICE_FORCE_UPDATE: Final = "force_update"
 
 COORDINATOR_KEY: Final = "coordinator"
 DATA_KEY_RESULT: Final = "hail_risk_result"

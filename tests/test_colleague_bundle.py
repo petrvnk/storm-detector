@@ -84,7 +84,7 @@ def test_bundle_allowlist_has_no_forbidden_local_or_secret_paths() -> None:
     module = _load_bundle_module()
 
     assert not [path for path in module.ALLOWLIST if module.is_forbidden_path(Path(path))]
-    assert "custom_components/radar_hail_risk/manifest.json" in module.ALLOWLIST
+    assert "custom_components/storm_detector/manifest.json" in module.ALLOWLIST
     assert "blueprints/automation/radar_hail_risk/hail_risk_notification.yaml" in module.ALLOWLIST
     assert "examples/lovelace/native-card.yaml" in module.ALLOWLIST
     assert "docs/colleague-test-checklist.md" in module.ALLOWLIST
@@ -102,7 +102,7 @@ def test_bundle_allowlist_has_no_forbidden_local_or_secret_paths() -> None:
         "configuration.yaml",
         "secrets.yaml",
         "dist/old.zip",
-        "custom_components/radar_hail_risk/__pycache__/const.pyc",
+        "custom_components/storm_detector/__pycache__/const.pyc",
         "observations/events.json",
         "research/dataset.csv",
         "private-token.txt",
@@ -170,8 +170,8 @@ def test_clean_room_verification_checks_layout_and_parses_assets(tmp_path: Path)
     assert report["integration_modules_compiled"] >= 10
     assert report["javascript_syntax_checked"] is True
     assert report["yaml_assets_parsed"] == 5
-    assert report["clean_room_layout"] == "config/custom_components/radar_hail_risk"
-    assert report["manifest_domain"] == "radar_hail_risk"
+    assert report["clean_room_layout"] == "config/custom_components/storm_detector"
+    assert report["manifest_domain"] == "storm_detector"
     assert report["hacs_minimum_home_assistant"] == "2024.10.0"
 
 
@@ -206,8 +206,8 @@ def test_clean_room_rejects_invalid_javascript_with_registration_marker(tmp_path
     archive_path = _archive_with_replacement(
         module,
         tmp_path,
-        "custom_components/radar_hail_risk/frontend/radar-hail-risk-card.js",
-        b"customElements.define('radar-hail-risk-card', RadarHailRiskCard);\nconst broken = {;\n",
+        "custom_components/storm_detector/frontend/storm-detector-card.js",
+        b"customElements.define('storm-detector-card', RadarHailRiskCard);\nconst broken = {;\n",
     )
 
     with pytest.raises(ValueError, match="invalid JavaScript syntax"):
@@ -257,13 +257,13 @@ def test_colleague_checklist_covers_required_handoff_paths() -> None:
     assert not missing, f"Missing colleague checklist topics: {missing}"
 
     manifest = json.loads(
-        (ROOT / "custom_components" / "radar_hail_risk" / "manifest.json").read_text(
+        (ROOT / "custom_components" / "storm_detector" / "manifest.json").read_text(
             encoding="utf-8"
         )
     )
     hacs = json.loads((ROOT / "hacs.json").read_text(encoding="utf-8"))
     assert hacs["homeassistant"] == "2024.10.0"
-    assert manifest["domain"] == "radar_hail_risk"
+    assert manifest["domain"] == "storm_detector"
 
 
 def test_public_readme_and_private_rc_checklist_describe_their_actual_install_routes() -> None:

@@ -1,4 +1,4 @@
-"""Behavior tests for the adaptive Radar Hail Risk Lovelace card."""
+"""Behavior tests for the adaptive Storm Detector Lovelace card."""
 
 from __future__ import annotations
 
@@ -11,7 +11,16 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-CARD = ROOT / "custom_components/radar_hail_risk/frontend/radar-hail-risk-card.js"
+CARD = ROOT / "custom_components/storm_detector/frontend/storm-detector-card.js"
+
+
+def test_frontend_registers_only_storm_detector_card() -> None:
+    source = CARD.read_text(encoding="utf-8")
+
+    assert "customElements.define('storm-detector-card'" in source
+    assert "customElements.define('radar-hail-risk-card'" not in source
+    assert "type: 'storm-detector-card'" in source
+    assert "type: 'radar-hail-risk-card'" not in source
 
 
 def _render(
@@ -21,9 +30,9 @@ def _render(
     trigger_tile_error: bool = False,
 ) -> str:
     source = CARD.read_text(encoding="utf-8").replace(
-        "customElements.define('radar-hail-risk-card', RadarHailRiskCard);",
+        "customElements.define('storm-detector-card', RadarHailRiskCard);",
         "globalThis.TestCard = RadarHailRiskCard;\n"
-        "customElements.define('radar-hail-risk-card', RadarHailRiskCard);",
+        "customElements.define('storm-detector-card', RadarHailRiskCard);",
     )
     script = f"""
 let triggerTileError = {json.dumps(trigger_tile_error)};
@@ -71,9 +80,9 @@ def _render_sequence(
     trigger_tile_error: bool = False,
 ) -> list[str]:
     source = CARD.read_text(encoding="utf-8").replace(
-        "customElements.define('radar-hail-risk-card', RadarHailRiskCard);",
+        "customElements.define('storm-detector-card', RadarHailRiskCard);",
         "globalThis.TestCard = RadarHailRiskCard;\n"
-        "customElements.define('radar-hail-risk-card', RadarHailRiskCard);",
+        "customElements.define('storm-detector-card', RadarHailRiskCard);",
     )
     script = f"""
 let triggerTileError = {json.dumps(trigger_tile_error)};
@@ -147,13 +156,13 @@ def _states(
                 attrs.setdefault("selected_core_threshold_dbz", selected.get("threshold_dbz"))
                 attrs.setdefault("selected_core_max_dbz", selected.get("max_dbz"))
     return {
-        "sensor.radar_hail_risk_level": {"state": level, "attributes": attrs},
-        "sensor.radar_hail_risk_summary": {"state": "Internal summary", "attributes": {}},
-        "binary_sensor.radar_hail_risk_active": {
+        "sensor.storm_detector_level": {"state": level, "attributes": attrs},
+        "sensor.storm_detector_summary": {"state": "Internal summary", "attributes": {}},
+        "binary_sensor.storm_detector_active": {
             "state": "off" if level in {"none", "unavailable"} else "on",
             "attributes": {},
         },
-        "binary_sensor.radar_hail_risk_data_stale": {
+        "binary_sensor.storm_detector_data_stale": {
             "state": "on" if stale else "off",
             "attributes": {},
         },

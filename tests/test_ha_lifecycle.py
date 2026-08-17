@@ -8,7 +8,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
-from custom_components.radar_hail_risk.const import (
+from custom_components.storm_detector.const import (
     CONF_ANALYSIS_RADIUS_KM,
     COORDINATOR_KEY,
     DOMAIN,
@@ -40,7 +40,7 @@ def _analysis_payload() -> SimpleNamespace:
 def test_coordinator_omits_config_entry_for_ha_2024_10_signature(monkeypatch) -> None:
     """Construct against the minimum-HA coordinator signature without config_entry."""
 
-    import custom_components.radar_hail_risk.coordinator as coordinator_module
+    import custom_components.storm_detector.coordinator as coordinator_module
 
     init_call: dict[str, Any] = {}
 
@@ -72,7 +72,7 @@ def test_coordinator_omits_config_entry_for_ha_2024_10_signature(monkeypatch) ->
     coordinator = coordinator_module.RadarHailRiskCoordinator(
         hass,
         logger,
-        "Radar Hail Risk",
+        "Storm Detector",
         entry,
     )
 
@@ -80,7 +80,7 @@ def test_coordinator_omits_config_entry_for_ha_2024_10_signature(monkeypatch) ->
     assert init_call == {
         "hass": hass,
         "logger": logger,
-        "name": "Radar Hail Risk",
+        "name": "Storm Detector",
         "update_interval": timedelta(seconds=60),
     }
 
@@ -88,8 +88,8 @@ def test_coordinator_omits_config_entry_for_ha_2024_10_signature(monkeypatch) ->
 async def test_real_ha_setup_reload_and_unload_lifecycle(hass, monkeypatch) -> None:
     """Exercise setup, options reload, failed unload, and successful cleanup."""
 
-    import custom_components.radar_hail_risk as integration
-    import custom_components.radar_hail_risk.coordinator as coordinator_module
+    import custom_components.storm_detector as integration
+    import custom_components.storm_detector.coordinator as coordinator_module
 
     shared_session = async_get_clientsession(hass)
     sessions_seen: list[object] = []
@@ -120,7 +120,7 @@ async def test_real_ha_setup_reload_and_unload_lifecycle(hass, monkeypatch) -> N
     forward_setups = AsyncMock()
     monkeypatch.setattr(hass.config_entries, "async_forward_entry_setups", forward_setups)
 
-    entry = MockConfigEntry(domain=DOMAIN, title="Radar Hail Risk", data={}, options={})
+    entry = MockConfigEntry(domain=DOMAIN, title="Storm Detector", data={}, options={})
     entry.add_to_hass(hass)
 
     assert await hass.config_entries.async_setup(entry.entry_id) is True

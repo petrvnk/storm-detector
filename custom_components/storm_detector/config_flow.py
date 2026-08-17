@@ -1,4 +1,4 @@
-"""Config and options flow for radar_hail_risk."""
+"""Config and options flow for storm_detector."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(title="Radar Hail Risk", data=user_input)
+            return self.async_create_entry(title="Storm Detector", data=user_input)
 
         return self.async_show_form(
             step_id="user",
@@ -162,7 +162,7 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
             ):
                 if key in current_options:
                     user_input.setdefault(key, current_options[key])
-            return self.async_create_entry(title="Radar Hail Risk", data=user_input)
+            return self.async_create_entry(title="Storm Detector", data=user_input)
 
         current_options = self._current_options()
         schema = self._options_schema(current_options)

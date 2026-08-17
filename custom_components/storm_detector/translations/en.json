@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Setup Radar Hail Risk",
+        "title": "Setup Storm Detector",
         "description": "Choose the location and optional lightning sensors. Leave location blank to use the Home Assistant core location. Leave both lightning fields empty for radar-only mode. Technical tuning is available later in options.",
         "data": {
           "location_entity_id": "Location source",
@@ -16,7 +16,7 @@
         }
       },
       "options": {
-        "title": "Radar Hail Risk options",
+        "title": "Storm Detector options",
         "description": "Adjust thresholds and analysis behavior."
       }
     },
@@ -36,7 +36,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Radar Hail Risk options",
+        "title": "Storm Detector options",
         "description": "Advanced technical tuning for lightning correlation, risk thresholds, radar analysis, and stale-data behavior.",
         "data": {
           "lightning_azimuth_entity_id": "Lightning azimuth sensor",
@@ -80,27 +80,21 @@
       "version": "Current integration version"
     }
   },
-  "services": {
-    "force_update": {
-      "name": "Force risk update",
-      "description": "Manually trigger the coordinator to re-evaluate hail risk."
-    }
-  },
   "entity": {
     "sensor": {
-      "radar_hail_risk_level": {"name": "Radar Hail Risk Level"},
-      "radar_hail_risk_summary": {"name": "Radar Hail Risk Summary"},
-      "radar_hail_max_dbz": {"name": "Radar Hail Risk Max dBZ"},
-      "radar_hail_core_distance": {"name": "Radar Hail Core Distance"},
+      "storm_detector_level": {"name": "Storm Detector Level"},
+      "storm_detector_summary": {"name": "Storm Detector Summary"},
+      "radar_hail_max_dbz": {"name": "Storm Detector Max dBZ"},
+      "radar_hail_core_distance": {"name": "Storm Detector Core Distance"},
       "radar_hail_lightning_distance": {"name": "Lightning Distance"},
       "radar_hail_frame_age": {"name": "Radar Frame Age"},
-      "radar_hail_last_error": {"name": "Radar Hail Last Error"}
+      "radar_hail_last_error": {"name": "Storm Detector Last Error"}
     },
     "binary_sensor": {
-      "radar_hail_data_stale": {"name": "Radar Hail Data Stale"}
+      "radar_hail_data_stale": {"name": "Storm Detector Data Stale"}
     },
     "device_tracker": {
-      "radar_hail_storm_core": {"name": "Radar Hail Storm Core"}
+      "radar_hail_storm_core": {"name": "Storm Detector Storm Core"}
     }
   }
 }

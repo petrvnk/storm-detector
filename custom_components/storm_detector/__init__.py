@@ -1,4 +1,4 @@
-"""Radar Hail Risk integration bootstrap.
+"""Storm Detector integration bootstrap.
 
 This file intentionally contains a minimal, Stage-2-safe skeleton for:
 - config entry setup/unload hooks
@@ -45,7 +45,7 @@ async def _async_register_frontend_static_path(hass: HomeAssistant) -> None:
     if domain_data.get(_STATIC_REGISTERED):
         return
     if not _FRONTEND_PATH.exists():
-        _LOGGER.debug("Radar Hail Risk frontend path does not exist: %s", _FRONTEND_PATH)
+        _LOGGER.debug("Storm Detector frontend path does not exist: %s", _FRONTEND_PATH)
         return
     await hass.http.async_register_static_paths(
         [StaticPathConfig(_FRONTEND_URL, str(_FRONTEND_PATH), True)]

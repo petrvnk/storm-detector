@@ -1,4 +1,4 @@
-# Detailed weather/storm view example for Radar Hail Risk.
+# Detailed weather/storm view example for Storm Detector.
 # Native Lovelace only. The storm-core map is shown only when coordinates exist.
 title: Weather
 path: weather
@@ -7,41 +7,41 @@ cards:
   - type: markdown
     content: |
       # Weather risk
-      {{ states('sensor.radar_hail_risk_summary') }}
+      {{ states('sensor.storm_detector_summary') }}
   - type: entities
     title: Hail risk
     show_header_toggle: false
     entities:
-      - entity: sensor.radar_hail_risk_level
+      - entity: sensor.storm_detector_level
         name: Risk level
-      - entity: sensor.radar_hail_risk_max_dbz
+      - entity: sensor.storm_detector_max_dbz
         name: Max dBZ
-      - entity: sensor.radar_hail_risk_core_distance
+      - entity: sensor.storm_detector_core_distance
         name: Core distance
-      - entity: sensor.radar_hail_risk_lightning_distance
+      - entity: sensor.storm_detector_lightning_distance
         name: Lightning distance
-      - entity: sensor.radar_hail_risk_frame_age
+      - entity: sensor.storm_detector_frame_age
         name: Radar frame age
-      - entity: binary_sensor.radar_hail_risk_data_stale
+      - entity: binary_sensor.storm_detector_data_stale
         name: Data stale
   - type: conditional
     conditions:
-      - entity: device_tracker.radar_hail_risk_storm_core
+      - entity: device_tracker.storm_detector_storm_core
         state_not: unknown
-      - entity: device_tracker.radar_hail_risk_storm_core
+      - entity: device_tracker.storm_detector_storm_core
         state_not: unavailable
     card:
       type: map
       title: Selected storm core
       entities:
-        - entity: device_tracker.radar_hail_risk_storm_core
+        - entity: device_tracker.storm_detector_storm_core
       hours_to_show: 1
       default_zoom: 9
   - type: entities
     title: Diagnostics
     show_header_toggle: false
     entities:
-      - entity: sensor.radar_hail_risk_last_error
+      - entity: sensor.storm_detector_last_error
         name: Last error
-      - entity: binary_sensor.radar_hail_risk_active
+      - entity: binary_sensor.storm_detector_active
         name: Active risk

@@ -1,15 +1,15 @@
 class RadarHailRiskCard extends HTMLElement {
   static getStubConfig() {
     return {
-      type: 'custom:radar-hail-risk-card',
+      type: 'custom:storm-detector-card',
       title: 'Bouřky v okolí',
-      level_entity: 'sensor.radar_hail_risk_level',
-      summary_entity: 'sensor.radar_hail_risk_summary',
-      max_dbz_entity: 'sensor.radar_hail_risk_max_dbz',
-      core_distance_entity: 'sensor.radar_hail_risk_core_distance',
-      lightning_distance_entity: 'sensor.radar_hail_risk_lightning_distance',
-      active_entity: 'binary_sensor.radar_hail_risk_active',
-      stale_entity: 'binary_sensor.radar_hail_risk_data_stale',
+      level_entity: 'sensor.storm_detector_level',
+      summary_entity: 'sensor.storm_detector_summary',
+      max_dbz_entity: 'sensor.storm_detector_max_dbz',
+      core_distance_entity: 'sensor.storm_detector_core_distance',
+      lightning_distance_entity: 'sensor.storm_detector_lightning_distance',
+      active_entity: 'binary_sensor.storm_detector_active',
+      stale_entity: 'binary_sensor.storm_detector_data_stale',
     };
   }
 
@@ -20,13 +20,13 @@ class RadarHailRiskCard extends HTMLElement {
       : 'auto';
     this.config = {
       title: 'Bouřky v okolí',
-      level_entity: 'sensor.radar_hail_risk_level',
-      summary_entity: 'sensor.radar_hail_risk_summary',
-      max_dbz_entity: 'sensor.radar_hail_risk_max_dbz',
-      core_distance_entity: 'sensor.radar_hail_risk_core_distance',
-      lightning_distance_entity: 'sensor.radar_hail_risk_lightning_distance',
-      active_entity: 'binary_sensor.radar_hail_risk_active',
-      stale_entity: 'binary_sensor.radar_hail_risk_data_stale',
+      level_entity: 'sensor.storm_detector_level',
+      summary_entity: 'sensor.storm_detector_summary',
+      max_dbz_entity: 'sensor.storm_detector_max_dbz',
+      core_distance_entity: 'sensor.storm_detector_core_distance',
+      lightning_distance_entity: 'sensor.storm_detector_lightning_distance',
+      active_entity: 'binary_sensor.storm_detector_active',
+      stale_entity: 'binary_sensor.storm_detector_data_stale',
       home_label: 'Domov',
       radar_overlay: 'auto',
       ...config,
@@ -709,10 +709,10 @@ class RadarHailRiskCard extends HTMLElement {
   }
 }
 
-customElements.define('radar-hail-risk-card', RadarHailRiskCard);
+customElements.define('storm-detector-card', RadarHailRiskCard);
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: 'radar-hail-risk-card',
+  type: 'storm-detector-card',
   name: 'Bouřky a možné kroupy',
   description: 'Adaptivní karta zobrazující jen aktuální a prakticky relevantní údaje.',
 });

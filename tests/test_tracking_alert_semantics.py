@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from custom_components.radar_hail_risk.binary_sensor import RadarHailRiskActiveBinarySensor
-from custom_components.radar_hail_risk.const import (
+from custom_components.storm_detector.binary_sensor import RadarHailRiskActiveBinarySensor
+from custom_components.storm_detector.const import (
     EVIDENCE_KIND_LIGHTNING_ONLY,
     EVIDENCE_KIND_NONE,
     EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING,
     RISK_LEVEL_URGENT,
     RISK_LEVEL_WARNING,
 )
-from custom_components.radar_hail_risk.rainviewer import AnalyzedFrame, _motion_from_frame_results
-from custom_components.radar_hail_risk.risk import (
+from custom_components.storm_detector.rainviewer import AnalyzedFrame, _motion_from_frame_results
+from custom_components.storm_detector.risk import (
     RiskLevelHysteresis,
     classify_from_thresholds,
     evidence_kind_for_levels,

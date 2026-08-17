@@ -119,15 +119,15 @@ class RadarHailRiskSensorBase(CoordinatorEntity[Any], SensorEntity):
         if isinstance(DeviceInfo, type):
             return DeviceInfo(
                 identifiers={(DOMAIN, self._entry_id)},
-                name="Radar Hail Risk",
-                manufacturer="Radar Hail Risk Integration",
-                model="Risk Monitor",
+                name="Storm Detector",
+                manufacturer="Storm Detector",
+                model="Storm Detector",
             )
         return {
             "identifiers": {(DOMAIN, self._entry_id)},
-            "name": "Radar Hail Risk",
-            "manufacturer": "Radar Hail Risk Integration",
-            "model": "Risk Monitor",
+            "name": "Storm Detector",
+            "manufacturer": "Storm Detector",
+            "model": "Storm Detector",
         }
 
     @property

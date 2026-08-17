@@ -7,10 +7,10 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import custom_components.radar_hail_risk.rainviewer as rainviewer_module
+import custom_components.storm_detector.rainviewer as rainviewer_module
 import pytest
-from custom_components.radar_hail_risk import async_unload_entry
-from custom_components.radar_hail_risk.const import (
+from custom_components.storm_detector import async_unload_entry
+from custom_components.storm_detector.const import (
     CONF_ANALYSIS_RADIUS_KM,
     CONF_RAINVIEWER_FRAMES,
     CONF_RAINVIEWER_ZOOM,
@@ -20,7 +20,7 @@ from custom_components.radar_hail_risk.const import (
     DOMAIN,
     PARAMETER_SPECS,
 )
-from custom_components.radar_hail_risk.rainviewer import (
+from custom_components.storm_detector.rainviewer import (
     MAX_PARALLEL_TILE_FETCHES,
     analyze_recent_frames,
     analyze_single_radar_frame,
@@ -148,7 +148,7 @@ async def test_default_and_max_configured_workloads_are_bounded_and_responsive(
         },
     }
     with patch(
-        "custom_components.radar_hail_risk.rainviewer._fetch_tile_bytes",
+        "custom_components.storm_detector.rainviewer._fetch_tile_bytes",
         empty_tile,
     ):
         analysis_task = asyncio.create_task(
@@ -208,13 +208,13 @@ async def test_image_decode_and_core_analysis_run_off_the_event_loop() -> None:
     zoom = 7
     center_lat, center_lon = global_px_to_latlon(20 * 512, 20 * 512, zoom)
     with patch(
-        "custom_components.radar_hail_risk.rainviewer._fetch_tile_bytes",
+        "custom_components.storm_detector.rainviewer._fetch_tile_bytes",
         fake_fetch,
     ), patch(
-        "custom_components.radar_hail_risk.rainviewer._decode_dbz_grid",
+        "custom_components.storm_detector.rainviewer._decode_dbz_grid",
         fake_decode,
     ), patch(
-        "custom_components.radar_hail_risk.rainviewer._analyse_dbz_grid",
+        "custom_components.storm_detector.rainviewer._analyse_dbz_grid",
         fake_analyze,
     ):
         analysis_task = asyncio.create_task(

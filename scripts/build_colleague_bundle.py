@@ -27,29 +27,29 @@ ALLOWLIST = tuple(
             "LICENSE",
             "README.md",
             "blueprints/automation/radar_hail_risk/hail_risk_notification.yaml",
-            "custom_components/radar_hail_risk/__init__.py",
-            "custom_components/radar_hail_risk/async_utils.py",
-            "custom_components/radar_hail_risk/binary_sensor.py",
-            "custom_components/radar_hail_risk/brand/icon.png",
-            "custom_components/radar_hail_risk/config_flow.py",
-            "custom_components/radar_hail_risk/const.py",
-            "custom_components/radar_hail_risk/coordinator.py",
-            "custom_components/radar_hail_risk/device_tracker.py",
-            "custom_components/radar_hail_risk/diagnostics.py",
-            "custom_components/radar_hail_risk/frontend/radar-hail-risk-card.js",
-            "custom_components/radar_hail_risk/ha_fallback.py",
-            "custom_components/radar_hail_risk/lightning.py",
-            "custom_components/radar_hail_risk/manifest.json",
-            "custom_components/radar_hail_risk/rainviewer.py",
-            "custom_components/radar_hail_risk/risk.py",
-            "custom_components/radar_hail_risk/sensor.py",
-            "custom_components/radar_hail_risk/translations/en.json",
+            "custom_components/storm_detector/__init__.py",
+            "custom_components/storm_detector/async_utils.py",
+            "custom_components/storm_detector/binary_sensor.py",
+            "custom_components/storm_detector/brand/icon.png",
+            "custom_components/storm_detector/config_flow.py",
+            "custom_components/storm_detector/const.py",
+            "custom_components/storm_detector/coordinator.py",
+            "custom_components/storm_detector/device_tracker.py",
+            "custom_components/storm_detector/diagnostics.py",
+            "custom_components/storm_detector/frontend/storm-detector-card.js",
+            "custom_components/storm_detector/ha_fallback.py",
+            "custom_components/storm_detector/lightning.py",
+            "custom_components/storm_detector/manifest.json",
+            "custom_components/storm_detector/rainviewer.py",
+            "custom_components/storm_detector/risk.py",
+            "custom_components/storm_detector/sensor.py",
+            "custom_components/storm_detector/translations/en.json",
             "docs/colleague-test-checklist.md",
             "docs/release-checklist.md",
             "examples/lovelace/mushroom-card.yaml",
             "examples/lovelace/native-card.yaml",
             "examples/lovelace/weather-tab.yaml",
-            "examples/radar-hail-risk-card.yaml",
+            "examples/storm-detector-card.yaml",
             "hacs.json",
         )
     )
@@ -222,7 +222,7 @@ def _validate_javascript_asset(path: Path) -> None:
 
 def verify_bundle(archive_path: Path) -> dict[str, object]:
     """Verify extraction, HACS metadata, assets, and a clean temporary HA layout."""
-    with tempfile.TemporaryDirectory(prefix="radar-hail-risk-clean-room-") as temp_name:
+    with tempfile.TemporaryDirectory(prefix="storm-detector-clean-room-") as temp_name:
         temp = Path(temp_name)
         extracted = temp / "extracted"
         extracted.mkdir()
@@ -240,12 +240,12 @@ def verify_bundle(archive_path: Path) -> dict[str, object]:
             raise ValueError("clean-room extracted tree does not match the allowlist")
 
         manifest = json.loads(
-            (extracted / "custom_components/radar_hail_risk/manifest.json").read_text(
+            (extracted / "custom_components/storm_detector/manifest.json").read_text(
                 encoding="utf-8"
             )
         )
         hacs = json.loads((extracted / "hacs.json").read_text(encoding="utf-8"))
-        if manifest.get("domain") != "radar_hail_risk" or manifest.get("config_flow") is not True:
+        if manifest.get("domain") != "storm_detector" or manifest.get("config_flow") is not True:
             raise ValueError("integration manifest domain/config_flow is invalid")
         if manifest.get("iot_class") != "cloud_polling":
             raise ValueError("integration manifest must declare cloud_polling")
@@ -262,12 +262,12 @@ def verify_bundle(archive_path: Path) -> dict[str, object]:
             "examples/lovelace/mushroom-card.yaml",
             "examples/lovelace/native-card.yaml",
             "examples/lovelace/weather-tab.yaml",
-            "examples/radar-hail-risk-card.yaml",
+            "examples/storm-detector-card.yaml",
         ):
             _validate_yaml_asset(extracted / relative, ("type:",))
 
-        source_integration = extracted / "custom_components/radar_hail_risk"
-        clean_integration = temp / "config/custom_components/radar_hail_risk"
+        source_integration = extracted / "custom_components/storm_detector"
+        clean_integration = temp / "config/custom_components/storm_detector"
         shutil.copytree(source_integration, clean_integration)
         required_modules = {"__init__.py", "config_flow.py", "coordinator.py", "sensor.py"}
         present_modules = {path.name for path in clean_integration.glob("*.py")}
@@ -280,7 +280,7 @@ def verify_bundle(archive_path: Path) -> dict[str, object]:
             compiled += 1
         json.loads((clean_integration / "translations/en.json").read_text(encoding="utf-8"))
         json.loads((clean_integration / "manifest.json").read_text(encoding="utf-8"))
-        card_asset = clean_integration / "frontend/radar-hail-risk-card.js"
+        card_asset = clean_integration / "frontend/storm-detector-card.js"
         if not card_asset.is_file():
             raise ValueError("clean-room integration is missing its bundled card asset")
         _validate_javascript_asset(card_asset)
@@ -290,7 +290,7 @@ def verify_bundle(archive_path: Path) -> dict[str, object]:
             "integration_modules_compiled": compiled,
             "javascript_syntax_checked": True,
             "yaml_assets_parsed": 5,
-            "clean_room_layout": "config/custom_components/radar_hail_risk",
+            "clean_room_layout": "config/custom_components/storm_detector",
             "manifest_domain": manifest["domain"],
             "hacs_minimum_home_assistant": hacs["homeassistant"],
         }

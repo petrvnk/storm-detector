@@ -7,11 +7,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-from custom_components.radar_hail_risk.binary_sensor import (
+from custom_components.storm_detector.binary_sensor import (
     RadarHailDataStaleBinarySensor,
     RadarHailRiskActiveBinarySensor,
 )
-from custom_components.radar_hail_risk.const import (
+from custom_components.storm_detector.const import (
     ATTR_CONFIDENCE_LEVEL,
     ATTR_CONFIDENCE_SCORE,
     ATTR_CORE50_DISTANCE_KM,
@@ -57,9 +57,9 @@ from custom_components.radar_hail_risk.const import (
     RISK_LEVEL_WARNING,
     RISK_LEVEL_WATCH,
 )
-from custom_components.radar_hail_risk.coordinator import RadarHailRiskCoordinator
-from custom_components.radar_hail_risk.device_tracker import RadarHailStormCoreTracker
-from custom_components.radar_hail_risk.sensor import (
+from custom_components.storm_detector.coordinator import RadarHailRiskCoordinator
+from custom_components.storm_detector.device_tracker import RadarHailStormCoreTracker
+from custom_components.storm_detector.sensor import (
     RadarHailRiskCoreDistanceSensor,
     RadarHailRiskFrameAgeSensor,
     RadarHailRiskLastErrorSensor,
@@ -163,6 +163,55 @@ def test_entity_unique_ids_and_new_registry_defaults_preserve_minimal_contract()
     assert "battery_level" not in RadarHailStormCoreTracker.__dict__
 
 
+def test_level_sensor_attribute_contract_is_exactly_42_keys() -> None:
+    sensor = RadarHailRiskLevelSensor(SimpleNamespace(data={}), FakeEntry())
+
+    assert set(sensor.extra_state_attributes) == {
+        "summary",
+        "evidence_kind",
+        "is_stale",
+        "has_current_signal",
+        "source_status",
+        "degradation_reasons",
+        "core50_distance_km",
+        "core55_distance_km",
+        "core60_distance_km",
+        "core_watch_distance_km",
+        "core_warning_distance_km",
+        "core_urgent_distance_km",
+        "selected_core_threshold_dbz",
+        "selected_core_distance_km",
+        "selected_core_latitude",
+        "selected_core_longitude",
+        "selected_core_area_km2",
+        "selected_core_pixel_count",
+        "selected_core_max_dbz",
+        "storm_cores",
+        "core_count",
+        "storm_motion_bearing",
+        "storm_motion_speed_kmh",
+        "storm_approaching",
+        "storm_eta_minutes",
+        "dbz_trend",
+        "distance_trend",
+        "confidence_score",
+        "confidence_level",
+        "lightning_distance_km",
+        "lightning_azimuth_degrees",
+        "lightning_latitude",
+        "lightning_longitude",
+        "lightning_core_distance_km",
+        "lightning_triggered",
+        "lightning_new_strike",
+        "lightning_counter_delta",
+        "frame_age_seconds",
+        "frame_time",
+        "frames_analyzed",
+        "location_source",
+        "radar_overlay",
+    }
+
+
 def _analysis_payload():
     return SimpleNamespace(
         max_dbz=56,
@@ -190,19 +239,19 @@ async def test_coordinator_payload_includes_risk_summary_and_entities() -> None:
         return {}
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: _analysis_payload(),
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )
@@ -266,19 +315,19 @@ async def test_lightning_counter_delta_is_not_exposed_as_user_facing_diagnostic(
         return {"#ffffff": 0}
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: _analysis_payload(),
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )
@@ -319,18 +368,18 @@ async def test_coordinator_confirms_level_changes_and_active_tracks_current_sign
         return {"#ffffff": 0}
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata", _fake_meta
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata", _fake_meta
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: current_analysis["value"],
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )
@@ -384,7 +433,7 @@ async def test_coordinator_confirms_level_changes_and_active_tracks_current_sign
 
 
 def test_build_summary_filters_internal_event_diagnostics() -> None:
-    from custom_components.radar_hail_risk.risk import build_summary
+    from custom_components.storm_detector.risk import build_summary
 
     assert build_summary(
         level="warning",
@@ -399,7 +448,7 @@ def test_build_summary_filters_internal_event_diagnostics() -> None:
 
 
 def test_near_watch_radar_core_is_not_green_ok() -> None:
-    from custom_components.radar_hail_risk.risk import classify_from_thresholds
+    from custom_components.storm_detector.risk import classify_from_thresholds
 
     assert (
         classify_from_thresholds(
@@ -419,7 +468,7 @@ def test_near_watch_radar_core_is_not_green_ok() -> None:
 
 
 def test_threshold_aware_core_classifier_does_not_over_escalate_lower_thresholds() -> None:
-    from custom_components.radar_hail_risk.risk import classify_from_thresholds
+    from custom_components.storm_detector.risk import classify_from_thresholds
 
     base = dict(
         max_dbz=60,
@@ -470,19 +519,19 @@ async def test_coordinator_ignores_raw_max_dbz_when_filtered_noise_is_not_a_vali
         )
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         _fake_analysis,
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )
@@ -531,19 +580,19 @@ async def test_coordinator_surfaces_connected_near_watch_storm() -> None:
         )
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         _fake_analysis,
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )
@@ -567,19 +616,19 @@ async def test_radar_only_outage_is_unavailable_without_analysis() -> None:
         return {"#ffffff": 0}
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: None,
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )
@@ -606,17 +655,17 @@ async def test_unusable_radar_with_far_current_lightning_fails_closed() -> None:
         return {"#ffffff": 0}
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: None,
     ):
         coordinator = RadarHailRiskCoordinator(
-            hass, None, "Radar Hail Risk", FakeEntry(), session_factory=FakeSessionContext
+            hass, None, "Storm Detector", FakeEntry(), session_factory=FakeSessionContext
         )
         payload = await coordinator._async_update_data()
 
@@ -639,17 +688,17 @@ async def test_new_nearby_lightning_forces_immediate_warning_when_radar_unusable
         return {"#ffffff": 0}
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: None,
     ):
         coordinator = RadarHailRiskCoordinator(
-            hass, None, "Radar Hail Risk", FakeEntry(), session_factory=FakeSessionContext
+            hass, None, "Storm Detector", FakeEntry(), session_factory=FakeSessionContext
         )
         assert (await coordinator._async_update_data())["level"] == RISK_LEVEL_UNAVAILABLE
 
@@ -732,19 +781,19 @@ async def test_coordinator_classifies_with_non_default_authoritative_core_thresh
         return analysis
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         _fake_analysis,
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             entry,
             session_factory=FakeSessionContext,
         )
@@ -782,19 +831,19 @@ async def test_stale_radar_is_gated_out_of_classification_and_active_sensor() ->
     )
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: stale_urgent_radar,
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )
@@ -850,19 +899,19 @@ async def test_stale_radar_sets_data_stale_without_suppressing_valid_lightning_a
     )
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: stale_radar,
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )
@@ -911,19 +960,19 @@ async def test_coordinator_exposes_threshold_specific_core_distances() -> None:
     )
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: analysis,
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )
@@ -986,19 +1035,19 @@ async def test_coordinator_projects_lightning_azimuth_and_correlates_with_core()
     )
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: analysis,
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             entry,
             session_factory=FakeSessionContext,
         )
@@ -1041,19 +1090,19 @@ async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:
     )
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: urgent_radar,
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )
@@ -1077,7 +1126,7 @@ async def test_coordinator_without_coordinates_is_unavailable() -> None:
     hass = FakeHass()
     hass.config = SimpleNamespace(latitude=None, longitude=None)
 
-    coordinator = RadarHailRiskCoordinator(hass, None, "Radar Hail Risk", FakeEntry())
+    coordinator = RadarHailRiskCoordinator(hass, None, "Storm Detector", FakeEntry())
     payload = await coordinator._async_update_data()
 
     assert payload["level"] == RISK_LEVEL_UNAVAILABLE
@@ -1099,19 +1148,19 @@ async def test_coordinator_autodetects_blitzortung_like_lightning_entities() -> 
         return {}
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: _analysis_payload(),
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )
@@ -1132,19 +1181,19 @@ async def test_radar_only_mode_does_not_surface_lightning_not_configured_as_erro
         return {}
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: _analysis_payload(),
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )
@@ -1180,19 +1229,19 @@ async def test_none_level_classifies_stable_none() -> None:
     )
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: analysis,
     ):
         coordinator = RadarHailRiskCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeRadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )

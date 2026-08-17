@@ -1,4 +1,4 @@
-"""Diagnostics support for Radar Hail Risk."""
+"""Diagnostics support for Storm Detector."""
 
 from __future__ import annotations
 

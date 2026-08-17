@@ -27,19 +27,19 @@ def test_release_readiness_files_exist() -> None:
 
 def test_manifest_and_hacs_metadata_are_release_ready() -> None:
     manifest = json.loads(
-        (ROOT / "custom_components" / "radar_hail_risk" / "manifest.json").read_text(
+        (ROOT / "custom_components" / "storm_detector" / "manifest.json").read_text(
             encoding="utf-8"
         )
     )
     hacs = json.loads((ROOT / "hacs.json").read_text(encoding="utf-8"))
 
-    assert manifest["domain"] == "radar_hail_risk"
-    assert manifest["version"] == "0.0.7"
+    assert manifest["domain"] == "storm_detector"
+    assert manifest["version"] == "0.1.0"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].endswith("/issues")
     assert manifest["config_flow"] is True
     assert manifest["iot_class"] == "cloud_polling"
-    assert hacs["name"] == "Radar Hail Risk"
+    assert hacs["name"] == "Storm Detector"
     assert hacs["homeassistant"] >= "2024.10.0"
     assert hacs["render_readme"] is True
 
@@ -65,10 +65,10 @@ def test_lovelace_examples_use_clean_entity_ids() -> None:
     combined = "\n".join(path.read_text(encoding="utf-8") for path in examples_dir.glob("*.yaml"))
 
     assert "radar_hail_risk_radar_hail" not in combined
-    assert "sensor.radar_hail_risk_level" in combined
-    assert "sensor.radar_hail_risk_summary" in combined
-    assert "binary_sensor.radar_hail_risk_data_stale" in combined
-    assert "device_tracker.radar_hail_risk_storm_core" in combined
+    assert "sensor.storm_detector_level" in combined
+    assert "sensor.storm_detector_summary" in combined
+    assert "binary_sensor.storm_detector_data_stale" in combined
+    assert "device_tracker.storm_detector_storm_core" in combined
 
 
 def test_notification_blueprint_includes_minimal_entities_and_cooldown() -> None:
