@@ -91,10 +91,11 @@ Urgent radar-supported possible hail may use:
 ## Safety and stale/degraded behavior
 
 - Clear states normally do not notify; if a user builds a clear notification, it must not imply all weather is safe.
-- Stale/unavailable states hide old attention, distance, dBZ, and ETA details.
+- Stale/unavailable states hide old attention, distance, dBZ, and ETA details when no trusted current evidence remains.
+- If one source is stale/degraded while another source provides current trusted evidence, notification branching follows the current evidence, adds degraded-source caution when notifying, and suppresses facts from only the stale/degraded source.
 - Degraded source states can notify only about degraded detection unless there is separate current trusted evidence.
-- Notification text must never say confirmed hail, observed hail, official warning, calibrated probability, or guaranteed arrival.
-- The notification is advisory and must leave official weather warnings and local safety procedures as the authority.
+- Notification text must never say confirmed hail, observed hail, calibrated probability, guaranteed arrival, or present Storm Detector as an official warning or equivalent to one.
+- The notification is advisory and must leave official weather warnings and local safety procedures as the authority; advice to follow official weather warnings is explicitly allowed.
 
 ## Rename guardrails
 

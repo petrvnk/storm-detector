@@ -33,17 +33,15 @@ No old `v0.0.x` tags are part of the new repository release contract.
 
 The old `custom:radar-hail-risk-card` tag must not be registered as an alias in Storm Detector.
 
-## Blueprint and service identifiers
+## Blueprint identifiers and service policy
 
 | Surface | Frozen identifier |
 |---|---|
 | Notification blueprint path | `blueprints/automation/storm_detector/storm_notification.yaml` |
 | Blueprint name | `Storm Detector notification` |
 | Notification tag | `storm_detector` |
-| Service namespace | `storm_detector` |
-| Force update service | `storm_detector.force_update` |
 
-The service keeps the existing behavior: request an immediate coordinator re-evaluation. The rename must not change what force update evaluates.
+Storm Detector `v0.1.0` exposes no custom Home Assistant service. Do not publish, document, translate, register, or test `storm_detector.force_update` as part of the rename; the current baseline does not register a force-update service. Cleanup of any dead runtime force-update constant belongs to a separate backend refactor, not to the public contract.
 
 ## Main entity contract
 
@@ -73,7 +71,7 @@ Diagnostic entities use the same `storm_detector` prefix and are disabled by def
 
 ## Attribute contract for automations and card UX
 
-The level sensor attributes remain the stable integration surface for evidence-aware automations and the adaptive card:
+The level sensor attributes below are the minimum stable integration surface for evidence-aware automations and the adaptive card:
 
 - `summary`
 - `evidence_kind`
@@ -82,8 +80,16 @@ The level sensor attributes remain the stable integration surface for evidence-a
 - `source_status`
 - `degradation_reasons`
 - `max_dbz`
+- `core50_distance_km`
+- `core55_distance_km`
+- `core60_distance_km`
+- `core_watch_distance_km`
+- `core_warning_distance_km`
+- `core_urgent_distance_km`
 - `selected_core_threshold_dbz`
 - `selected_core_distance_km`
+- `selected_core_latitude`
+- `selected_core_longitude`
 - `selected_core_area_km2`
 - `selected_core_pixel_count`
 - `selected_core_max_dbz`
@@ -112,6 +118,8 @@ The level sensor attributes remain the stable integration surface for evidence-a
 - `radar_diagnostics`
 - `lightning_diagnostics`
 - `radar_overlay`
+
+The rename implementation must preserve every attribute currently emitted by the baseline level sensor, not only the minimum subset above. Regression tests must assert the full baseline attribute-key set survives the rename, including threshold-distance attributes (`core50_distance_km`, `core55_distance_km`, `core60_distance_km`, `core_watch_distance_km`, `core_warning_distance_km`, `core_urgent_distance_km`), selected-core coordinates (`selected_core_latitude`, `selected_core_longitude`), lightning trigger/delta fields (`lightning_triggered`, `lightning_new_strike`, `lightning_counter_delta`), and `radar_overlay`. Intentional attribute removals or semantic changes require separate Petr approval before implementation.
 
 Automations must branch on `evidence_kind`, not parse localized summary text.
 
@@ -142,9 +150,8 @@ Reject these old public identifiers outside historical attribution, migration no
 - `sensor.radar_hail_risk_summary`
 - `binary_sensor.radar_hail_risk_active`
 - `binary_sensor.radar_hail_risk_data_stale`
-- `radar_hail_risk.force_update`
 
-Do not provide compatibility aliases, migration shims, duplicate services, duplicate card tags, duplicate blueprint paths, or old-domain config-entry support unless Petr approves a separate compatibility project.
+Do not provide compatibility aliases, migration shims, custom services, duplicate card tags, duplicate blueprint paths, or old-domain config-entry support unless Petr approves a separate compatibility project.
 
 ## Implementation notes for the rename phase
 

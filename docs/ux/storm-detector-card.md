@@ -14,7 +14,7 @@ Scope: card behavior, copy, accessibility, and RainViewer attribution. This docu
 | Default title, Czech | `Bouřky v okolí` |
 | Default overlay mode | `auto` |
 
-The card chooses its default title from `hass.language`: Czech (`Bouřky v okolí`) for `cs`, English (`Storms nearby`) otherwise. A configured explicit `title` always overrides the localized default.
+The card uses one card-wide locale from `hass.language`: Czech (`cs`) when `hass.language` is `cs`, English otherwise. This applies to the default title, status/body copy, fact labels, errors, fallbacks, tile notices, RainViewer attribution context, safety copy, and ARIA labels. A configured explicit `title` overrides only the displayed title; all other card-owned copy still follows the `hass.language` locale.
 
 Default entities:
 
@@ -44,9 +44,13 @@ Default entities:
 | Storm | `evidence_kind: radar_storm` | Expanded when current radar facts exist | Show nearby storm core, distance, dBZ/area if current, movement/ETA if reliable. |
 | Lightning-only | `evidence_kind: lightning_only` | Expanded lightning state | Show current lightning context with storm/lightning wording only; hide radar-specific facts unless current radar evidence is also shown. |
 | Possible hail | `evidence_kind: radar_hail` or `radar_hail_with_lightning` | Expanded attention state | Show possible radar-supported hail, selected core distance, dBZ, area, motion/ETA, and lightning context when current. |
-| Stale | stale flag or stale source gating | Compact unavailable-style | Hide previous attention details; show stale/current-data warning. |
-| Degraded | source degraded but still safe to render partial state | Compact or expanded with caution | Show the current valid state plus degraded-source caution; never invent missing source values. |
+| Stale | no trusted current evidence remains after stale/unusable source gating | Compact unavailable-style | Hide previous attention details; show stale/current-data warning. |
+| Degraded | one source is stale/degraded while another source still provides current trusted evidence | Compact or expanded with caution | Show the current valid state plus degraded-source caution; suppress only facts from the stale/degraded source and never invent missing source values. |
 | Unavailable | `level: unavailable` or invalid state | Compact unavailable | Show detection unavailable; no previous event details. |
+
+Stale/degraded precedence must not be keyed only from `binary_sensor.storm_detector_data_stale` or a generic stale flag. `unavailable` or no trusted current evidence uses compact stale/unavailable rendering. Partial-source staleness with current trusted evidence renders the current evidence in Degraded mode with stale-source caution.
+
+Frontend regression tests must mirror both partial-source precedence cases: stale/degraded radar with current lightning keeps `lightning_only` attention visible and hides radar facts/overlay, while stale/degraded lightning with current radar evidence keeps the radar-driven branch visible and hides lightning facts. Both tests must assert that old attention details from the stale source are not rendered.
 
 ## Canonical card copy
 
@@ -103,7 +107,7 @@ The attribution must not be hidden behind hover, collapsed diagnostics, or an ic
 
 ## Accessibility
 
-- The live radar module uses `role="img"` with a localized aria label that describes RainViewer radar and storm cores near home.
+- The live radar module uses `role="img"` with an aria label in the card-wide locale that describes RainViewer radar and storm cores near home.
 - Decorative tile images use `alt=""` and `aria-hidden="true"`.
 - Marker layers that duplicate textual facts are `aria-hidden="true"`.
 - Interactive links, including RainViewer attribution, must expose visible focus states.
