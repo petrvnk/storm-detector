@@ -16,7 +16,7 @@ It combines RainViewer radar with optional Home Assistant lightning sensors. The
 |---|---|
 | `none` | No significant current activity |
 | `radar_storm` | Storm core nearby |
-| `lightning_only` | Lightning nearby; hail is not radar-confirmed |
+| `lightning_only` | Thunderstorm / lightning nearby; follow official weather warnings |
 | `radar_hail` | Radar indicates possible hail |
 | `radar_hail_with_lightning` | Possible hail with nearby lightning |
 | `unavailable` | Current detection data is unavailable |
@@ -129,7 +129,7 @@ Import it into Home Assistant, create an automation, and select:
 The blueprint uses `evidence_kind`, so its Czech wording distinguishes:
 
 - **Sledování bouřky**;
-- **Bouřka / blesky poblíž**;
+- **Blízká bouřka / blesky poblíž**;
 - **Možné kroupy poblíž**;
 - **Vysoká možnost krup**.
 

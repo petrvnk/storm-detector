@@ -75,8 +75,8 @@ def test_notification_blueprint_includes_minimal_entities_and_cooldown() -> None
         ROOT / "blueprints" / "automation" / "storm_detector" / "storm_notification.yaml"
     ).read_text(encoding="utf-8")
 
-    assert "level_entity" in blueprint
-    assert "summary_entity" in blueprint
+    assert "storm_level_sensor" in blueprint
+    assert "storm_summary_sensor" in blueprint
     assert "cooldown_minutes" in blueprint
     assert "message_text" in blueprint
 
@@ -89,3 +89,15 @@ def test_release_checklist_covers_runtime_and_migration_verification() -> None:
     assert "Compare the previous risk level" in checklist
     assert "HACS validation" in checklist
     assert "not an official warning source" in checklist
+
+
+def test_release_checklist_tag_matches_manifest_version() -> None:
+    manifest = json.loads(
+        (ROOT / "custom_components" / "storm_detector" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    checklist = (ROOT / "docs" / "release-checklist.md").read_text(encoding="utf-8")
+
+    assert f"`v{manifest['version']}`" in checklist
+    assert "`v0.0.1`" not in checklist

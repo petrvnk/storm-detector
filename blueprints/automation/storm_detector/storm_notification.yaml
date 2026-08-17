@@ -7,7 +7,7 @@ blueprint:
   domain: automation
   source_url: https://github.com/petrvnk/storm-detector/blob/main/blueprints/automation/storm_detector/storm_notification.yaml
   input:
-    level_entity:
+    storm_level_sensor:
       name: Storm Detector level entity
       description: >
         Entity that exposes the Storm Detector level: none, watch, warning, urgent,
@@ -16,7 +16,7 @@ blueprint:
       selector:
         entity:
           domain: sensor
-    summary_entity:
+    storm_summary_sensor:
       name: Storm Detector summary entity
       description: Optional summary sensor used in the notification body.
       default: sensor.storm_detector_summary
@@ -63,27 +63,40 @@ max_exceeded: silent
 
 trigger:
   - platform: state
-    entity_id: !input level_entity
+    entity_id: !input storm_level_sensor
 
 variables:
-  level_entity_id: !input level_entity
-  summary_entity_id: !input summary_entity
+  storm_level_sensor_id: !input storm_level_sensor
+  storm_summary_sensor_id: !input storm_summary_sensor
   minimum_level: !input minimum_level
   title_language: !input title_language
   cooldown_minutes: !input cooldown_minutes
-  current_level: "{{ states(level_entity_id) }}"
-  evidence_kind: "{{ state_attr(level_entity_id, 'evidence_kind') or 'unknown' }}"
+  current_level: "{{ states(storm_level_sensor_id) }}"
+  evidence_kind: "{{ state_attr(storm_level_sensor_id, 'evidence_kind') or 'unknown' }}"
+  source_status: "{{ state_attr(storm_level_sensor_id, 'source_status') or {} }}"
+  aggregate_stale: "{{ state_attr(storm_level_sensor_id, 'is_stale') == true }}"
   summary_text: >-
-    {% if summary_entity_id %}
-      {{ states(summary_entity_id) }}
+    {% if storm_summary_sensor_id %}
+      {{ states(storm_summary_sensor_id) }}
     {% else %}
-      {{ state_attr(level_entity_id, 'summary') or current_level }}
+      {{ state_attr(storm_level_sensor_id, 'summary') or current_level }}
     {% endif %}
+  effective_evidence: >-
+    {% set radar_current = source_status.get('radar') == 'ok' %}
+    {% set lightning_current = source_status.get('lightning') == 'ok' %}
+    {% if not radar_current %}
+      {% if lightning_current and evidence_kind in ['lightning_only', 'radar_hail_with_lightning'] %}lightning_only{% elif evidence_kind == 'none' and not (aggregate_stale | bool) %}none{% else %}unavailable{% endif %}
+    {% elif evidence_kind == 'radar_hail_with_lightning' and not lightning_current %}radar_hail
+    {% elif evidence_kind == 'lightning_only' and not lightning_current %}unavailable
+    {% else %}{{ evidence_kind }}{% endif %}
+  degraded_sources: >-
+    {% set failed = ['stale', 'degraded', 'unavailable', 'error'] %}
+    {{ (source_status.get('radar') == 'ok' and source_status.get('lightning') in failed) or (source_status.get('lightning') == 'ok' and source_status.get('radar') in failed) }}
   message_text: >-
     {% if title_language == 'cs' %}
-      {% if evidence_kind == 'lightning_only' %}Bouřka / blesky poblíž; kroupy nejsou radarově potvrzené. Sledujte oficiální výstrahy.{% elif evidence_kind == 'radar_hail' and current_level == 'urgent' %}Radar ukazuje vysokou možnost krup poblíž. Sledujte oficiální výstrahy.{% elif evidence_kind == 'radar_hail' %}Radar ukazuje možné kroupy poblíž. Sledujte oficiální výstrahy.{% elif evidence_kind == 'radar_hail_with_lightning' and current_level == 'urgent' %}Radar ukazuje vysokou možnost krup poblíž; blesky jsou také poblíž. Sledujte oficiální výstrahy.{% elif evidence_kind == 'radar_hail_with_lightning' %}Radar ukazuje možné kroupy poblíž; blesky jsou také poblíž. Sledujte oficiální výstrahy.{% elif evidence_kind == 'radar_storm' %}Bouřka v okolí. Sledujte oficiální výstrahy.{% else %}Změna stavu počasí; aktuální podklady jsou omezené. Sledujte oficiální výstrahy.{% endif %}
+      {% if effective_evidence == 'lightning_only' %}Blízká bouřka / blesky poblíž. Sledujte oficiální výstrahy.{% elif effective_evidence == 'radar_hail' and current_level == 'urgent' %}Radar ukazuje vysokou možnost krup poblíž. Radarová aktivita není potvrzené krupobití; sledujte oficiální výstrahy.{% elif effective_evidence == 'radar_hail' %}Radar ukazuje možné kroupy poblíž. Radarová aktivita není potvrzené krupobití; sledujte oficiální výstrahy.{% elif effective_evidence == 'radar_hail_with_lightning' and current_level == 'urgent' %}Radar ukazuje vysokou možnost krup poblíž. Blesky jsou také poblíž. Radarová aktivita není potvrzené krupobití; sledujte oficiální výstrahy.{% elif effective_evidence == 'radar_hail_with_lightning' %}Radar ukazuje možné kroupy poblíž. Blesky jsou také poblíž. Radarová aktivita není potvrzené krupobití; sledujte oficiální výstrahy.{% elif effective_evidence == 'radar_storm' %}V okolí byla detekována bouřková aktivita. Sledujte oficiální výstrahy.{% else %}Aktuální data pro detekci bouřek nejsou dostupná. Sledujte oficiální výstrahy.{% endif %}{% if degraded_sources | bool %} Některé zdroje dat nejsou dostupné; používejte jen aktuální důvěryhodné údaje.{% endif %}
     {% else %}
-      {% if evidence_kind == 'lightning_only' %}Storm / lightning nearby; hail is not radar-confirmed. Follow official weather warnings.{% elif evidence_kind == 'radar_hail' and current_level == 'urgent' %}Radar indicates a high possibility of hail nearby. Follow official weather warnings.{% elif evidence_kind == 'radar_hail' %}Radar indicates possible hail nearby. Follow official weather warnings.{% elif evidence_kind == 'radar_hail_with_lightning' and current_level == 'urgent' %}Radar indicates a high possibility of hail nearby; lightning is also nearby. Follow official weather warnings.{% elif evidence_kind == 'radar_hail_with_lightning' %}Radar indicates possible hail nearby; lightning is also nearby. Follow official weather warnings.{% elif evidence_kind == 'radar_storm' %}Storm detected nearby. Follow official weather warnings.{% else %}Weather state changed; current evidence is limited. Follow official weather warnings.{% endif %}
+      {% if effective_evidence == 'lightning_only' %}Thunderstorm / lightning nearby. Follow official weather warnings.{% elif effective_evidence == 'radar_hail' and current_level == 'urgent' %}Radar indicates high possible hail risk nearby. Radar activity is not confirmed hail; follow official warnings.{% elif effective_evidence == 'radar_hail' %}Radar indicates possible hail nearby. Radar activity is not confirmed hail; follow official warnings.{% elif effective_evidence == 'radar_hail_with_lightning' and current_level == 'urgent' %}Radar indicates high possible hail risk nearby. Lightning is also nearby. Radar activity is not confirmed hail; follow official warnings.{% elif effective_evidence == 'radar_hail_with_lightning' %}Radar indicates possible hail nearby. Lightning is also nearby. Radar activity is not confirmed hail; follow official warnings.{% elif effective_evidence == 'radar_storm' %}Storm activity detected nearby. Follow official weather warnings.{% else %}Current storm detection data is unavailable. Follow official weather warnings.{% endif %}{% if degraded_sources | bool %} Some data sources are unavailable; use only current trusted evidence.{% endif %}
     {% endif %}
   level_rank: >-
     {{ {'none': 0, 'unavailable': 0, 'watch': 1, 'warning': 2, 'urgent': 3}.get(current_level, 0) }}
@@ -91,12 +104,12 @@ variables:
     {{ {'watch': 1, 'warning': 2, 'urgent': 3}.get(minimum_level, 2) }}
   title_text: >-
     {% if title_language == 'cs' %}
-      {% if evidence_kind == 'lightning_only' %}Bouřka / blesky poblíž{% elif current_level == 'urgent' and evidence_kind in ['radar_hail', 'radar_hail_with_lightning'] %}Vysoká možnost krup poblíž{% elif evidence_kind in ['radar_hail', 'radar_hail_with_lightning'] %}Možné kroupy poblíž{% elif evidence_kind == 'radar_storm' %}Sledování bouřky{% else %}Upozornění na počasí{% endif %}
+      {% if effective_evidence == 'lightning_only' %}Blízká bouřka / blesky poblíž{% elif current_level == 'urgent' and effective_evidence in ['radar_hail', 'radar_hail_with_lightning'] %}Vysoká možnost krup{% elif effective_evidence in ['radar_hail', 'radar_hail_with_lightning'] %}Možné kroupy poblíž{% elif effective_evidence == 'radar_storm' %}Sledování bouřky{% elif degraded_sources | bool %}Detekce je omezená{% else %}Detekce není dostupná{% endif %}
     {% else %}
-      {% if evidence_kind == 'lightning_only' %}Storm / lightning nearby{% elif current_level == 'urgent' and evidence_kind in ['radar_hail', 'radar_hail_with_lightning'] %}High possibility of hail nearby{% elif evidence_kind in ['radar_hail', 'radar_hail_with_lightning'] %}Possible hail nearby{% elif evidence_kind == 'radar_storm' %}Storm watch{% else %}Weather update{% endif %}
+      {% if effective_evidence == 'lightning_only' %}Thunderstorm / lightning nearby{% elif current_level == 'urgent' and effective_evidence in ['radar_hail', 'radar_hail_with_lightning'] %}High possible hail risk nearby{% elif effective_evidence in ['radar_hail', 'radar_hail_with_lightning'] %}Possible hail nearby{% elif effective_evidence == 'radar_storm' %}Storm watch{% elif degraded_sources | bool %}Detection degraded{% else %}Detection unavailable{% endif %}
     {% endif %}
   notification_icon: >-
-    {% if evidence_kind == 'lightning_only' %}mdi:weather-lightning{% elif evidence_kind in ['radar_hail', 'radar_hail_with_lightning'] %}mdi:weather-hail{% else %}mdi:weather-cloudy-alert{% endif %}
+    {% if effective_evidence == 'lightning_only' %}mdi:weather-lightning{% elif effective_evidence in ['radar_hail', 'radar_hail_with_lightning'] %}mdi:weather-hail{% else %}mdi:weather-cloudy-alert{% endif %}
 
 action:
   - condition: template

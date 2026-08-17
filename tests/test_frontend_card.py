@@ -349,11 +349,11 @@ def test_lightning_only_warning_never_claims_hail() -> None:
     )
 
     assert "Blesky poblíž" in html
-    assert html.count('class="hail-note"') == 1
-    assert html.count("Kroupy nejsou radarově potvrzené") == 1
-    assert 'class="safety-note"' not in html
+    assert 'class="hail-note"' not in html
+    assert "Kroupy nejsou radarově potvrzené" not in html
+    assert html.count('class="safety-note"') == 1
     assert "Radarová aktivita není potvrzené krupobití" not in html
-    assert "sledujte oficiální výstrahy" not in html
+    assert html.count("Sledujte oficiální výstrahy") == 1
     assert "Možné kroupy" not in html
     assert "14.2 km" in html
 
@@ -404,6 +404,7 @@ def test_stale_state_hides_previous_event_values() -> None:
                 "selected_core_distance_km": 3.2,
                 "storm_approaching": True,
                 "storm_eta_minutes": 5,
+                "source_status": {"radar": "stale", "lightning": "not_configured"},
             },
         )
     )
@@ -502,8 +503,8 @@ def test_schematic_renders_all_detected_cores_and_highlights_selected() -> None:
     assert "Detekovaná jádra" in html
     assert ">3</strong>" in html
     assert "hlavní jádro od domova" in html
-    assert "Radarová aktivita není potvrzené krupobití" in html
-    assert html.count("sledujte oficiální výstrahy") == 1
+    assert "Radarová aktivita není potvrzené krupobití" not in html
+    assert html.count("Sledujte oficiální výstrahy") == 1
 
 
 def test_valid_overlay_renders_backend_tiles_and_backend_selected_core() -> None:
@@ -1408,6 +1409,7 @@ def test_stale_state_never_renders_overlay_tiles_cores_or_eta() -> None:
                 "selected_core_distance_km": 25.0,
                 "storm_approaching": True,
                 "storm_eta_minutes": 10,
+                "source_status": {"radar": "stale", "lightning": "not_configured"},
                 "radar_overlay": _radar_overlay(frame_time=frame_time),
             },
         )
@@ -1470,7 +1472,11 @@ def test_stale_state_update_clears_previous_live_overlay_dom() -> None:
                 "warning",
                 evidence_kind="radar_hail",
                 stale=True,
-                attributes={"frame_time": frame_time, "radar_overlay": old_overlay},
+                attributes={
+                    "frame_time": frame_time,
+                    "source_status": {"radar": "stale", "lightning": "not_configured"},
+                    "radar_overlay": old_overlay,
+                },
             ),
         ]
     )
@@ -1541,7 +1547,7 @@ def test_non_czech_languages_use_complete_english_fallback(language: str) -> Non
         language=language,
     )
 
-    assert "Storm Detector" in html
+    assert "Storms nearby" in html
     assert "Possible hail" in html
     assert "Nearest lightning" in html
     assert 'aria-label="RainViewer radar image with storm cores near home"' in html
@@ -1566,7 +1572,7 @@ def test_czech_localizes_visible_aria_and_rainviewer_attribution() -> None:
         language="cs",
     )
 
-    assert "Detektor bouřek" in html
+    assert "Bouřky v okolí" in html
     assert 'aria-label="Radarový snímek RainViewer s bouřkovými jádry v okolí domova"' in html
     assert ">Data o počasí od RainViewer</a>" in html
     assert "Weather data by RainViewer" not in html
@@ -1586,8 +1592,10 @@ def test_noncurrent_radar_keeps_current_lightning_and_suppresses_radar_facts(
     html = _render(
         _states(
             "warning",
-            evidence_kind="radar_hail_with_lightning",
+            evidence_kind="lightning_only",
+            stale=True,
             attributes={
+                "frame_time": 1_710_000_000,
                 "selected_core_distance_km": 4.2,
                 "selected_core_max_dbz": 61,
                 "selected_core_area_km2": 18.0,
@@ -1595,21 +1603,27 @@ def test_noncurrent_radar_keeps_current_lightning_and_suppresses_radar_facts(
                 "storm_eta_minutes": 6,
                 "lightning_distance_km": 9.4,
                 "source_status": {"radar": radar_status, "lightning": "ok"},
+                "radar_overlay": _radar_overlay(frame_time=1_710_000_000),
             },
         ),
-        language="en",
+        language="cs",
     )
 
-    assert "Lightning nearby" in html
+    assert "Blesky poblíž" in html
     assert "9.4 km" in html
-    assert "Possible hail" not in html
-    assert "High possible hail" not in html
-    assert "Nearest core" not in html
-    assert "Core intensity" not in html
-    assert "Core area" not in html
-    assert "Approaching" not in html
-    assert "Arrival" not in html
+    assert "Detekce je omezená" in html
+    assert "Některé zdroje dat nejsou dostupné; zobrazují se jen aktuální důvěryhodné údaje." in html
+    assert "Možné kroupy" not in html
+    assert "Hail is not radar-confirmed" not in html
+    assert "Radarová aktivita není potvrzené krupobití" not in html
+    assert "Vysoká možnost krup" not in html
+    assert "Nejbližší jádro" not in html
+    assert "Intenzita jádra" not in html
+    assert "Plocha jádra" not in html
+    assert "Přibližuje se" not in html
+    assert "Příchod" not in html
     assert "<svg" not in html
+    assert 'class="radar-live"' not in html
 
 
 @pytest.mark.parametrize("lightning_status", ["stale", "degraded", "unavailable", "error"])
@@ -1619,22 +1633,26 @@ def test_noncurrent_lightning_keeps_current_radar_and_suppresses_lightning_facts
     html = _render(
         _states(
             "warning",
-            evidence_kind="radar_hail_with_lightning",
+            evidence_kind="radar_hail",
+            stale=True,
             attributes={
-                "selected_core_distance_km": 12.4,
-                "selected_core_max_dbz": 58,
-                "storm_cores": [{"distance_km": 12.4, "bearing_degrees": 180.0}],
+                "frame_time": 1_710_000_000,
+                "selected_core_distance_km": 25.0,
+                "selected_core_max_dbz": 57,
                 "lightning_distance_km": 3.1,
                 "source_status": {"radar": "ok", "lightning": lightning_status},
+                "radar_overlay": _radar_overlay(frame_time=1_710_000_000),
             },
         ),
         language="en",
     )
 
     assert "Possible hail" in html
-    assert "12.4 km" in html
+    assert "25.0 km" in html
     assert "Core intensity" in html
-    assert 'aria-label="Storm core positions relative to home"' in html
+    assert "Detection degraded" in html
+    assert "Some data sources are unavailable; only current trusted evidence is shown." in html
+    assert 'aria-label="RainViewer radar image with storm cores near home"' in html
     assert "Nearest lightning" not in html
     assert "3.1 km" not in html
     assert "Lightning also detected" not in html

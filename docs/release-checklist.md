@@ -33,7 +33,7 @@ Avoid duplicate notifications when replacing an existing hail-risk setup:
 
 ## Release
 
-- [ ] Create a git tag matching the manifest version, e.g. `v0.0.1`.
+- [ ] Create a git tag matching the manifest version, e.g. `v0.1.0`.
 - [ ] Push tag and confirm GitHub Actions pass, including HACS validation.
 - [ ] Attach screenshots if available.
 - [ ] Include limitations: heuristic only, not an official warning source.

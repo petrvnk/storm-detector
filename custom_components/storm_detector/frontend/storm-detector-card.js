@@ -50,22 +50,27 @@ class RadarHailRiskCard extends HTMLElement {
     const source = attrs.source_status || {};
     const stale = this.state(this.config.stale_entity)?.state === 'on' || attrs.is_stale === true;
     const rawEvidence = String(attrs.evidence_kind || 'none').toLowerCase();
-    const radarCurrent = source.radar === 'ok' && !stale;
-    const lightningCurrent = source.lightning === 'ok' && !stale;
+    const partialSource = (
+      (source.radar === 'ok' && this.sourceUnavailable(source.lightning))
+      || (source.lightning === 'ok' && this.sourceUnavailable(source.radar))
+    );
+    const radarCurrent = source.radar === 'ok';
+    const lightningCurrent = source.lightning === 'ok';
     const evidence = this.currentEvidence(rawEvidence, radarCurrent, lightningCurrent);
-    const mode = this.displayMode(level, evidence, stale);
+    const degraded = partialSource && (radarCurrent || lightningCurrent);
+    const mode = this.displayMode(level, evidence, stale && !radarCurrent && !lightningCurrent);
     const presentation = this.presentation(mode);
-    const overlay = this.validRadarOverlay(attrs, stale, source);
+    const overlay = this.validRadarOverlay(attrs, radarCurrent);
     const liveOverlayEligible = this.liveOverlayEligible(evidence, overlay);
     const tileError = liveOverlayEligible
       && this._radarTileErrorFrameTime === overlay.frame.time;
     const liveRadar = liveOverlayEligible
-      ? this.liveRadar(overlay)
+      ? this.liveRadar(overlay, evidence)
       : null;
 
     if (mode === 'unavailable' || (mode === 'clear' && !liveRadar)) {
       this._cardSize = 1;
-      this.shadowRoot.innerHTML = this.compactCard(presentation, mode);
+      this.shadowRoot.innerHTML = this.compactCard(presentation, mode, degraded);
       return;
     }
 
@@ -162,14 +167,14 @@ class RadarHailRiskCard extends HTMLElement {
         ${radarModule}
         ${tileError ? `<div class="radar-error">${this.escape(this.t('radarError'))}</div>` : ''}
         ${facts.length ? `<section class="facts">${facts.join('')}</section>` : ''}
-        ${mode === 'lightning' ? `<div class="hail-note">${this.escape(this.t('hailNotConfirmed'))}</div>` : ''}
-        ${liveRadar || mode === 'lightning' ? '' : `<div class="safety-note">${this.escape(this.t('radarSafety'))}</div>`}
+        ${degraded ? this.degradedCaution() : ''}
+        ${liveRadar ? '' : `<div class="safety-note">${this.escape(this.t(this.hailEvidence(evidence) ? 'hailSafety' : 'genericSafety'))}</div>`}
       </ha-card>
     `;
     if (liveRadar) this.bindRadarTileErrors(liveRadar.frameTime);
   }
 
-  compactCard(presentation, mode) {
+  compactCard(presentation, mode, degraded = false) {
     const detail = mode === 'clear'
       ? this.t('clearDetail')
       : this.t('unavailableDetail');
@@ -181,6 +186,7 @@ class RadarHailRiskCard extends HTMLElement {
           <div class="eyebrow">${this.escape(this.cardTitle())}</div>
           <strong>${detail}</strong>
         </div>
+        ${degraded ? this.degradedCaution() : ''}
       </ha-card>
     `;
   }
@@ -275,11 +281,11 @@ class RadarHailRiskCard extends HTMLElement {
     return ['radar_storm', 'radar_hail', 'radar_hail_with_lightning'].includes(evidence);
   }
 
-  validRadarOverlay(attrs, stale, source) {
+  validRadarOverlay(attrs, radarCurrent) {
     const overlay = attrs.radar_overlay;
     if (!overlay || typeof overlay !== 'object' || Array.isArray(overlay)) return null;
     if (overlay.schema_version !== 1 || overlay.status !== 'ok') return null;
-    if (source.radar !== 'ok' || stale || attrs.is_stale === true) return null;
+    if (!radarCurrent) return null;
 
     const frame = overlay.frame;
     if (!frame || typeof frame !== 'object' || Array.isArray(frame)) return null;
@@ -430,7 +436,7 @@ class RadarHailRiskCard extends HTMLElement {
     };
   }
 
-  liveRadar(overlay) {
+  liveRadar(overlay, evidence) {
     if (this._radarTileErrorFrameTime === overlay.frame.time) return null;
     const grid = this.tileGrid(overlay);
     if (!grid) return null;
@@ -515,7 +521,7 @@ class RadarHailRiskCard extends HTMLElement {
             <a href="https://www.rainviewer.com/" target="_blank" rel="noopener noreferrer">${this.escape(this.t('rainViewerAttribution'))}</a>
           </div>
           ${selectedSummary ? `<div class="radar-live-selected">${selectedSummary}</div>` : ''}
-          <div class="radar-live-safety">${this.escape(this.t('radarSafety'))}</div>
+          <div class="radar-live-safety">${this.escape(this.t(this.hailEvidence(evidence) ? 'hailSafety' : 'genericSafety'))}</div>
         </section>
       `,
     };
@@ -609,6 +615,18 @@ class RadarHailRiskCard extends HTMLElement {
     return evidence;
   }
 
+  sourceUnavailable(status) {
+    return ['stale', 'degraded', 'unavailable', 'error'].includes(status);
+  }
+
+  hailEvidence(evidence) {
+    return ['radar_hail', 'radar_hail_with_lightning'].includes(evidence);
+  }
+
+  degradedCaution() {
+    return `<div class="degraded-note"><strong>${this.escape(this.t('degradedTitle'))}</strong><span>${this.escape(this.t('degradedDetail'))}</span></div>`;
+  }
+
   cardTitle() {
     return this.config.title || this.t('cardTitle');
   }
@@ -616,7 +634,7 @@ class RadarHailRiskCard extends HTMLElement {
   t(key, values = {}) {
     const strings = {
       en: {
-        cardTitle: 'Storm Detector',
+        cardTitle: 'Storms nearby',
         home: 'Home',
         homeDistance: 'home',
         statusClear: 'Clear',
@@ -651,8 +669,10 @@ class RadarHailRiskCard extends HTMLElement {
         lightning: 'Lightning',
         alsoDetected: 'Also detected',
         radarError: 'The radar layer could not be loaded; showing the schematic view.',
-        hailNotConfirmed: 'Hail is not radar-confirmed',
-        radarSafety: 'Radar activity is not confirmed hail · follow official weather warnings.',
+        genericSafety: 'Follow official weather warnings.',
+        hailSafety: 'Radar activity is not confirmed hail; follow official warnings.',
+        degradedTitle: 'Detection degraded',
+        degradedDetail: 'Some data sources are unavailable; only current trusted evidence is shown.',
         liveRadarAria: 'RainViewer radar image with storm cores near home',
         schematicAria: 'Storm core positions relative to home',
         radarImage: 'Radar image',
@@ -666,7 +686,7 @@ class RadarHailRiskCard extends HTMLElement {
         etaRange: 'about {lower}–{upper} min',
       },
       cs: {
-        cardTitle: 'Detektor bouřek',
+        cardTitle: 'Bouřky v okolí',
         home: 'Domov',
         homeDistance: 'domova',
         statusClear: 'Klid',
@@ -701,8 +721,10 @@ class RadarHailRiskCard extends HTMLElement {
         lightning: 'Blesky',
         alsoDetected: 'Také detekovány',
         radarError: 'Radarová vrstva se nepodařila načíst, zobrazuji schematický náhled.',
-        hailNotConfirmed: 'Kroupy nejsou radarově potvrzené',
-        radarSafety: 'Radarová aktivita není potvrzené krupobití · sledujte oficiální výstrahy.',
+        genericSafety: 'Sledujte oficiální výstrahy.',
+        hailSafety: 'Radarová aktivita není potvrzené krupobití; sledujte oficiální výstrahy.',
+        degradedTitle: 'Detekce je omezená',
+        degradedDetail: 'Některé zdroje dat nejsou dostupné; zobrazují se jen aktuální důvěryhodné údaje.',
         liveRadarAria: 'Radarový snímek RainViewer s bouřkovými jádry v okolí domova',
         schematicAria: 'Polohy bouřkových jader vůči domovu',
         radarImage: 'Radarový snímek',
@@ -813,7 +835,8 @@ class RadarHailRiskCard extends HTMLElement {
       .radar-live-selected { padding:7px 10px 0; color:${accent}; font-size:13px; }
       .radar-live-safety { padding:7px 10px 10px; color:var(--secondary-text-color, #cbd5e1); font-size:10px; line-height:1.35; }
       .radar-error { margin-top:9px; color:var(--secondary-text-color, #94a3b8); font-size:10px; }
-      .hail-note { margin-top:13px; padding:9px 11px; border-radius:12px; color:var(--secondary-text-color, #cbd5e1); background:var(--secondary-background-color, rgba(15,23,42,.45)); font-size:12px; }
+      .degraded-note { display:grid; gap:2px; margin-top:13px; padding:9px 11px; border-radius:12px; color:var(--secondary-text-color, #cbd5e1); background:var(--secondary-background-color, rgba(15,23,42,.45)); font-size:12px; }
+      .degraded-note strong { color:var(--primary-text-color, #f8fafc); }
       .safety-note { margin-top:13px; color:var(--secondary-text-color, #94a3b8); font-size:10px; }
       @keyframes selected-core-pulse { from { opacity:.75; transform:translate(-50%, -50%) scale(1); } to { opacity:.08; transform:translate(-50%, -50%) scale(1.8); } }
       @media (max-width:600px) {
