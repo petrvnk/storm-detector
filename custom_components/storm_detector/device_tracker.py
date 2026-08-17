@@ -56,6 +56,10 @@ class StormDetectorStormCoreTracker(CoordinatorEntity[Any], TrackerEntity):
         return f"{DOMAIN}_{self._entry_id}_storm_core"
 
     @property
+    def suggested_object_id(self) -> str:
+        return "storm_core"
+
+    @property
     def source_type(self) -> str:
         return SOURCE_TYPE_GPS
 

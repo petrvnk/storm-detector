@@ -55,16 +55,18 @@ async def test_static_card_url_is_registered_once_with_real_ha_router(
     assert "storm-detector-card" in await response.text()
 
 
-async def test_clean_install_registers_every_frozen_entity_id(
-    hass, hass_client, monkeypatch
+@pytest.mark.parametrize(("language", "level_name"), [("en", "Level"), ("cs", "Úroveň")])
+async def test_clean_install_registers_exact_locale_stable_entity_ids(
+    hass, hass_client, monkeypatch, language: str, level_name: str
 ) -> None:
-    """Create all default and diagnostic entities through HA's entity platforms."""
+    """Keep registry IDs stable while resolving localized entity display names."""
 
     import custom_components.storm_detector.coordinator as coordinator_module
     from homeassistant.setup import async_setup_component
 
     assert await async_setup_component(hass, "http", {"http": {}})
     await hass_client()
+    hass.config.language = language
 
     async def fake_metadata(_session: object) -> dict[str, object]:
         return {
@@ -100,12 +102,21 @@ async def test_clean_install_registers_every_frozen_entity_id(
         "sensor.storm_detector_last_error",
         "device_tracker.storm_detector_storm_core",
     }
-    assert frozen <= set(registry.entities)
+    registered = {
+        entity_id
+        for entity_id, registry_entry in registry.entities.items()
+        if registry_entry.platform == DOMAIN
+    }
+    assert registered == frozen
 
     for entity_id in frozen:
         entry = registry.async_get(entity_id)
         assert entry is not None
         assert entry.platform == DOMAIN
+
+    level_entry = registry.async_get("sensor.storm_detector_level")
+    assert level_entry is not None
+    assert level_entry.original_name == level_name
 
 
 def _analysis_payload() -> SimpleNamespace:

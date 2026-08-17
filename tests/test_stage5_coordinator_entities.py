@@ -1113,7 +1113,7 @@ async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:
     assert payload[ATTR_LIGHTNING_DISTANCE_KM] is None
     assert payload[ATTR_LIGHTNING_TRIGGERED] is False
     assert payload[ATTR_LAST_ERROR] is None
-    assert payload[ATTR_SUMMARY] == "High hail risk nearby"
+    assert payload[ATTR_SUMMARY] == "High possible hail risk nearby"
     assert payload[ATTR_STALE] is True
     assert payload["source_status"]["lightning"] == "stale"
     assert "stale_distance_entity" in payload[ATTR_LIGHTNING_DIAGNOSTICS]

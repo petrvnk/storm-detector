@@ -246,7 +246,7 @@ def build_summary(
 
     if evidence_kind in {EVIDENCE_KIND_RADAR_HAIL, EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING}:
         if level == RISK_LEVEL_URGENT:
-            summary = "High hail risk nearby"
+            summary = "High possible hail risk nearby"
         else:
             summary = "Possible hail nearby"
         if evidence_kind == EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING:

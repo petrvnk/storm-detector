@@ -51,6 +51,34 @@ def test_radar_storm_summary_never_uses_hail_wording() -> None:
     assert "hail" not in summary.lower()
 
 
+def test_urgent_radar_hail_summaries_use_possible_risk_wording() -> None:
+    for evidence_kind, expected in (
+        ("radar_hail", "High possible hail risk nearby"),
+        (
+            "radar_hail_with_lightning",
+            "High possible hail risk nearby; lightning also detected",
+        ),
+    ):
+        summary = build_summary(
+            level="urgent",
+            evidence_kind=evidence_kind,
+            max_dbz=60,
+            core_distance_km=10.0,
+            lightning_distance_km=(4.0 if "lightning" in evidence_kind else None),
+            frame_age_seconds=20,
+            selected_core_threshold_dbz=60,
+        )
+
+        assert summary == expected
+
+
+def test_active_binary_sensor_uses_neutral_storm_icon() -> None:
+    coordinator = SimpleNamespace(data={})
+    sensor = StormDetectorActiveBinarySensor(coordinator, SimpleNamespace(entry_id="test"))
+
+    assert sensor.icon == "mdi:weather-lightning"
+
+
 def _frame(
     *,
     frame_time: int,

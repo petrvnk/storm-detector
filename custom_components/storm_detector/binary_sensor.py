@@ -57,6 +57,10 @@ class StormDetectorDataStaleBinarySensor(CoordinatorEntity[Any], BinarySensorEnt
         return f"{DOMAIN}_{self._entry_id}_data_stale"
 
     @property
+    def suggested_object_id(self) -> str:
+        return "data_stale"
+
+    @property
     def is_on(self) -> bool:
         data = self._coordinator.data if getattr(self, "coordinator", None) else {}
         if isinstance(data, dict):
@@ -85,7 +89,7 @@ class StormDetectorActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity
 
     _attr_has_entity_name = True
     _attr_translation_key = "active"
-    _attr_icon = "mdi:weather-hail"
+    _attr_icon = "mdi:weather-lightning"
     _attr_entity_registry_enabled_default = True
 
     def __init__(self, coordinator: Any | None = None, config_entry: Any | None = None) -> None:
@@ -96,6 +100,10 @@ class StormDetectorActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity
     @property
     def unique_id(self) -> str:
         return f"{DOMAIN}_{self._entry_id}_risk_active"
+
+    @property
+    def suggested_object_id(self) -> str:
+        return "active"
 
     @property
     def is_on(self) -> bool:

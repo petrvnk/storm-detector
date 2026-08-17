@@ -116,6 +116,10 @@ class StormDetectorSensorBase(CoordinatorEntity[Any], SensorEntity):
         return f"{DOMAIN}_{self._entry_id}_{self._key}"
 
     @property
+    def suggested_object_id(self) -> str:
+        return self._attr_translation_key
+
+    @property
     def device_info(self) -> DeviceInfo:
         if isinstance(DeviceInfo, type):
             return DeviceInfo(
