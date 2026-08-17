@@ -76,7 +76,7 @@ def test_active_binary_sensor_uses_neutral_storm_icon() -> None:
     coordinator = SimpleNamespace(data={})
     sensor = StormDetectorActiveBinarySensor(coordinator, SimpleNamespace(entry_id="test"))
 
-    assert sensor.icon == "mdi:weather-lightning"
+    assert sensor._attr_icon == "mdi:weather-lightning"
 
 
 def _frame(
