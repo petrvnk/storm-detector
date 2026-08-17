@@ -6,14 +6,14 @@ icon: mdi:weather-lightning-rainy
 cards:
   - type: markdown
     content: |
-      # Weather risk
+      # Storm Detector
       {{ states('sensor.storm_detector_summary') }}
   - type: entities
-    title: Hail risk
+    title: Storm status
     show_header_toggle: false
     entities:
       - entity: sensor.storm_detector_level
-        name: Risk level
+        name: Storm level
       - entity: sensor.storm_detector_max_dbz
         name: Max dBZ
       - entity: sensor.storm_detector_core_distance
@@ -44,4 +44,4 @@ cards:
       - entity: sensor.storm_detector_last_error
         name: Last error
       - entity: binary_sensor.storm_detector_active
-        name: Active risk
+        name: Active storm signal

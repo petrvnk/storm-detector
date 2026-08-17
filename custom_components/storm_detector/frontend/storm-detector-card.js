@@ -2,7 +2,6 @@ class RadarHailRiskCard extends HTMLElement {
   static getStubConfig() {
     return {
       type: 'custom:storm-detector-card',
-      title: 'Bouřky v okolí',
       level_entity: 'sensor.storm_detector_level',
       summary_entity: 'sensor.storm_detector_summary',
       max_dbz_entity: 'sensor.storm_detector_max_dbz',
@@ -19,7 +18,6 @@ class RadarHailRiskCard extends HTMLElement {
       ? config.radar_overlay
       : 'auto';
     this.config = {
-      title: 'Bouřky v okolí',
       level_entity: 'sensor.storm_detector_level',
       summary_entity: 'sensor.storm_detector_summary',
       max_dbz_entity: 'sensor.storm_detector_max_dbz',
@@ -27,7 +25,6 @@ class RadarHailRiskCard extends HTMLElement {
       lightning_distance_entity: 'sensor.storm_detector_lightning_distance',
       active_entity: 'binary_sensor.storm_detector_active',
       stale_entity: 'binary_sensor.storm_detector_data_stale',
-      home_label: 'Domov',
       radar_overlay: 'auto',
       ...config,
       radar_overlay: radarOverlay,
@@ -52,7 +49,10 @@ class RadarHailRiskCard extends HTMLElement {
     const attrs = state?.attributes || {};
     const source = attrs.source_status || {};
     const stale = this.state(this.config.stale_entity)?.state === 'on' || attrs.is_stale === true;
-    const evidence = String(attrs.evidence_kind || 'none').toLowerCase();
+    const rawEvidence = String(attrs.evidence_kind || 'none').toLowerCase();
+    const radarCurrent = source.radar === 'ok' && !stale;
+    const lightningCurrent = source.lightning === 'ok' && !stale;
+    const evidence = this.currentEvidence(rawEvidence, radarCurrent, lightningCurrent);
     const mode = this.displayMode(level, evidence, stale);
     const presentation = this.presentation(mode);
     const overlay = this.validRadarOverlay(attrs, stale, source);
@@ -69,8 +69,6 @@ class RadarHailRiskCard extends HTMLElement {
       return;
     }
 
-    const radarCurrent = source.radar === 'ok' && !stale;
-    const lightningCurrent = source.lightning === 'ok' && !stale;
     const coreDistance = radarCurrent
       ? this.number(
           this.state(this.config.core_distance_entity)?.state ??
@@ -97,8 +95,8 @@ class RadarHailRiskCard extends HTMLElement {
           this.state(this.config.lightning_distance_entity)?.state ?? attrs.lightning_distance_km,
         )
       : null;
-    const approaching = attrs.storm_approaching === true;
-    const receding = attrs.distance_trend === 'receding';
+    const approaching = radarCurrent && attrs.storm_approaching === true;
+    const receding = radarCurrent && attrs.distance_trend === 'receding';
     const eta = approaching ? this.number(attrs.storm_eta_minutes) : null;
     const coreMaxDbz = radarCurrent
       ? this.number(
@@ -115,33 +113,33 @@ class RadarHailRiskCard extends HTMLElement {
     const facts = [];
 
     if (coreDistance != null && mode !== 'lightning') {
-      facts.push(this.fact('mdi:map-marker-distance', 'Nejbližší jádro', `${coreDistance.toFixed(1)} km`));
+      facts.push(this.fact('mdi:map-marker-distance', this.t('nearestCore'), `${coreDistance.toFixed(1)} km`));
     }
     if (coreMaxDbz != null && mode !== 'lightning') {
-      facts.push(this.fact('mdi:radar', 'Intenzita jádra', `${Math.round(coreMaxDbz)} dBZ`));
+      facts.push(this.fact('mdi:radar', this.t('coreIntensity'), `${Math.round(coreMaxDbz)} dBZ`));
     }
     if (coreArea != null && mode !== 'lightning') {
-      facts.push(this.fact('mdi:selection-ellipse', 'Plocha jádra', `${coreArea.toFixed(1)} km²`));
+      facts.push(this.fact('mdi:selection-ellipse', this.t('coreArea'), `${coreArea.toFixed(1)} km²`));
     }
     if (liveCoreCount != null && liveCoreTotal > liveCoreCount && mode !== 'lightning') {
-      facts.push(this.fact('mdi:dots-circle', 'Zobrazeno', `${liveCoreCount} z ${liveCoreTotal} jader`));
+      facts.push(this.fact('mdi:dots-circle', this.t('shown'), this.t('shownCores', { shown: liveCoreCount, total: liveCoreTotal })));
     } else if (liveCoreCount > 1 && mode !== 'lightning') {
-      facts.push(this.fact('mdi:dots-circle', 'Detekovaná jádra', String(liveCoreCount)));
+      facts.push(this.fact('mdi:dots-circle', this.t('detectedCores'), String(liveCoreCount)));
     } else if (!liveRadar && renderableCores.length > 1 && mode !== 'lightning') {
-      facts.push(this.fact('mdi:dots-circle', 'Detekovaná jádra', String(renderableCores.length)));
+      facts.push(this.fact('mdi:dots-circle', this.t('detectedCores'), String(renderableCores.length)));
     }
     if (approaching) {
-      facts.push(this.fact('mdi:arrow-collapse', 'Pohyb', 'Přibližuje se'));
+      facts.push(this.fact('mdi:arrow-collapse', this.t('movement'), this.t('approaching')));
     } else if (receding) {
-      facts.push(this.fact('mdi:arrow-expand', 'Pohyb', 'Vzdaluje se'));
+      facts.push(this.fact('mdi:arrow-expand', this.t('movement'), this.t('receding')));
     }
     if (eta != null) {
-      facts.push(this.fact('mdi:clock-outline', 'Příchod', this.formatEta(eta)));
+      facts.push(this.fact('mdi:clock-outline', this.t('arrival'), this.formatEta(eta)));
     }
     if (lightningDistance != null) {
-      facts.push(this.fact('mdi:flash', 'Nejbližší blesk', `${lightningDistance.toFixed(1)} km`));
+      facts.push(this.fact('mdi:flash', this.t('nearestLightning'), `${lightningDistance.toFixed(1)} km`));
     } else if (evidence === 'radar_hail_with_lightning') {
-      facts.push(this.fact('mdi:flash', 'Blesky', 'Také detekovány'));
+      facts.push(this.fact('mdi:flash', this.t('lightning'), this.t('alsoDetected')));
     }
 
     const showSchematic = radarCurrent && coreDistance != null && mode !== 'lightning';
@@ -156,16 +154,16 @@ class RadarHailRiskCard extends HTMLElement {
         <section class="hero">
           <div class="icon"><ha-icon icon="${presentation.icon}"></ha-icon></div>
           <div class="headline">
-            <div class="eyebrow">${this.escape(this.config.title)}</div>
+            <div class="eyebrow">${this.escape(this.cardTitle())}</div>
             <div class="status">${this.escape(presentation.title)}</div>
             <div class="message">${this.escape(this.message(mode, { coreDistance, approaching, receding }))}</div>
           </div>
         </section>
         ${radarModule}
-        ${tileError ? '<div class="radar-error">Radarová vrstva se nepodařila načíst, zobrazuji schematický náhled.</div>' : ''}
+        ${tileError ? `<div class="radar-error">${this.escape(this.t('radarError'))}</div>` : ''}
         ${facts.length ? `<section class="facts">${facts.join('')}</section>` : ''}
-        ${mode === 'lightning' ? '<div class="hail-note">Kroupy nejsou radarově potvrzené</div>' : ''}
-        ${liveRadar || mode === 'lightning' ? '' : '<div class="safety-note">Radarová aktivita není potvrzené krupobití · sledujte oficiální výstrahy.</div>'}
+        ${mode === 'lightning' ? `<div class="hail-note">${this.escape(this.t('hailNotConfirmed'))}</div>` : ''}
+        ${liveRadar || mode === 'lightning' ? '' : `<div class="safety-note">${this.escape(this.t('radarSafety'))}</div>`}
       </ha-card>
     `;
     if (liveRadar) this.bindRadarTileErrors(liveRadar.frameTime);
@@ -173,14 +171,14 @@ class RadarHailRiskCard extends HTMLElement {
 
   compactCard(presentation, mode) {
     const detail = mode === 'clear'
-      ? 'Silné radarové jádro v okolí nezjištěno'
-      : 'Detekce dočasně není dostupná';
+      ? this.t('clearDetail')
+      : this.t('unavailableDetail');
     return `
       <style>${this.css(presentation.accent, presentation.glow)}</style>
       <ha-card class="risk-card compact ${mode}">
         <div class="compact-icon"><ha-icon icon="${presentation.icon}"></ha-icon></div>
         <div class="compact-copy">
-          <div class="eyebrow">${this.escape(this.config.title)}</div>
+          <div class="eyebrow">${this.escape(this.cardTitle())}</div>
           <strong>${detail}</strong>
         </div>
       </ha-card>
@@ -189,6 +187,7 @@ class RadarHailRiskCard extends HTMLElement {
 
   displayMode(level, evidence, stale) {
     if (stale || level === 'unavailable') return 'unavailable';
+    if (evidence === 'unavailable') return 'unavailable';
     if (level === 'none') return 'clear';
     if (evidence === 'lightning_only') return 'lightning';
     if (evidence === 'radar_hail_with_lightning' || evidence === 'radar_hail') {
@@ -201,43 +200,43 @@ class RadarHailRiskCard extends HTMLElement {
   presentation(mode) {
     const modes = {
       clear: {
-        title: 'Klid',
+        title: this.t('statusClear'),
         icon: 'mdi:weather-partly-cloudy',
         accent: '#65a30d',
         glow: 'rgba(101,163,13,.12)',
       },
       unavailable: {
-        title: 'Bez aktuálních dat',
+        title: this.t('statusUnavailable'),
         icon: 'mdi:cloud-alert-outline',
         accent: '#94a3b8',
         glow: 'rgba(148,163,184,.12)',
       },
       storm: {
-        title: 'Bouřka v okolí',
+        title: this.t('statusStorm'),
         icon: 'mdi:weather-lightning-rainy',
         accent: '#eab308',
         glow: 'rgba(234,179,8,.22)',
       },
       lightning: {
-        title: 'Blesky poblíž',
+        title: this.t('statusLightning'),
         icon: 'mdi:weather-lightning',
         accent: '#f59e0b',
         glow: 'rgba(245,158,11,.24)',
       },
       'hail-possible': {
-        title: 'Možné kroupy',
+        title: this.t('statusHailPossible'),
         icon: 'mdi:weather-hail',
         accent: '#f97316',
         glow: 'rgba(249,115,22,.28)',
       },
       'hail-high': {
-        title: 'Vysoká možnost krup',
+        title: this.t('statusHailHigh'),
         icon: 'mdi:alert-decagram',
         accent: '#ef4444',
         glow: 'rgba(239,68,68,.30)',
       },
       'weather-attention': {
-        title: 'Počasí vyžaduje pozornost',
+        title: this.t('statusAttention'),
         icon: 'mdi:weather-cloudy-alert',
         accent: '#eab308',
         glow: 'rgba(234,179,8,.20)',
@@ -248,17 +247,17 @@ class RadarHailRiskCard extends HTMLElement {
 
   message(mode, context) {
     const { coreDistance, approaching, receding } = context;
-    if (mode === 'clear') return 'Silné radarové jádro v okolí nezjištěno.';
-    if (mode === 'lightning') return 'V okolí byla zaznamenána aktuální blesková aktivita.';
-    if (mode === 'hail-possible') return 'Radar ukazuje silné jádro s možností krup.';
-    if (mode === 'hail-high') return 'Silné radarové jádro je blízko domova.';
+    if (mode === 'clear') return this.t('messageClear');
+    if (mode === 'lightning') return this.t('messageLightning');
+    if (mode === 'hail-possible') return this.t('messageHailPossible');
+    if (mode === 'hail-high') return this.t('messageHailHigh');
     if (mode === 'storm') {
-      if (approaching) return 'Radarové jádro se přibližuje k domovu.';
-      if (receding) return 'Radarové jádro se vzdaluje od domova.';
-      if (coreDistance != null) return 'Radar zachytil bouřkové jádro v širším okolí.';
-      return 'Radar zachytil bouřkovou aktivitu v okolí.';
+      if (approaching) return this.t('messageStormApproaching');
+      if (receding) return this.t('messageStormReceding');
+      if (coreDistance != null) return this.t('messageStormCore');
+      return this.t('messageStorm');
     }
-    return 'Byla zjištěna aktuální změna počasí.';
+    return this.t('messageAttention');
   }
 
   fact(icon, label, value) {
@@ -490,15 +489,15 @@ class RadarHailRiskCard extends HTMLElement {
     const selectedDistance = this.number(selected?.distance_km);
     const selectedSummary = selectedDistance == null
       ? ''
-      : `<strong>Hlavní jádro ${selectedDistance.toFixed(1)} km od ${this.escape(this.homeDistanceLabel())}</strong>`;
+      : `<strong>${this.escape(this.t('selectedCore', { distance: selectedDistance.toFixed(1), home: this.homeDistanceLabel() }))}</strong>`;
     const frameLabel = overlay.frame.time_iso || String(overlay.frame.time);
     const ageSeconds = this.number(overlay.frame.age_seconds);
-    const ageLabel = ageSeconds == null ? '' : ` · stáří ${Math.max(0, Math.round(ageSeconds / 60))} min`;
+    const ageLabel = ageSeconds == null ? '' : this.t('frameAge', { minutes: Math.max(0, Math.round(ageSeconds / 60)) });
 
     return {
       frameTime: overlay.frame.time,
       html: `
-        <section class="radar-live" role="img" aria-label="Radarový snímek RainViewer s bouřkovými jádry v okolí domova">
+        <section class="radar-live" role="img" aria-label="${this.escape(this.t('liveRadarAria'))}">
           <div class="radar-live-stage" style="aspect-ratio:${grid.width}/${grid.height}">
             <div class="radar-tiles">${tiles.join('')}</div>
             <svg class="radar-live-overlay" viewBox="0 0 ${grid.width} ${grid.height}" preserveAspectRatio="none" aria-hidden="true">
@@ -509,14 +508,14 @@ class RadarHailRiskCard extends HTMLElement {
               <span class="live-home" style="left:${(centerX / grid.width) * 100}%;top:${(centerY / grid.height) * 100}%"></span>
               ${marks.join('')}
             </div>
-            <span class="live-home-label" style="left:${(centerX / grid.width) * 100}%;top:${(centerY / grid.height) * 100}%">${this.escape(this.config.home_label)}</span>
+            <span class="live-home-label" style="left:${(centerX / grid.width) * 100}%;top:${(centerY / grid.height) * 100}%">${this.escape(this.homeLabel())}</span>
           </div>
           <div class="radar-live-meta">
-            <span>Radarový snímek ${this.escape(frameLabel)}${this.escape(ageLabel)}</span>
-            <a href="https://www.rainviewer.com/" target="_blank" rel="noopener noreferrer">Weather data by RainViewer</a>
+            <span>${this.escape(this.t('radarImage'))} ${this.escape(frameLabel)}${this.escape(ageLabel)}</span>
+            <a href="https://www.rainviewer.com/" target="_blank" rel="noopener noreferrer">${this.escape(this.t('rainViewerAttribution'))}</a>
           </div>
           ${selectedSummary ? `<div class="radar-live-selected">${selectedSummary}</div>` : ''}
-          <div class="radar-live-safety">Radarová aktivita není potvrzené krupobití · sledujte oficiální výstrahy.</div>
+          <div class="radar-live-safety">${this.escape(this.t('radarSafety'))}</div>
         </section>
       `,
     };
@@ -533,7 +532,12 @@ class RadarHailRiskCard extends HTMLElement {
   }
 
   homeDistanceLabel() {
-    return this.config.home_label === 'Domov' ? 'domova' : this.config.home_label;
+    if (this.config.home_label) return this.config.home_label;
+    return this.t('homeDistance');
+  }
+
+  homeLabel() {
+    return this.config.home_label || this.t('home');
   }
 
   radar(cores, selectedCore, distance, bearing, approaching) {
@@ -557,7 +561,7 @@ class RadarHailRiskCard extends HTMLElement {
     }).join('');
     return `
       <section class="radar-wrap">
-        <svg class="radar" viewBox="0 0 180 180" role="img" aria-label="Polohy bouřkových jader vůči domovu">
+        <svg class="radar" viewBox="0 0 180 180" role="img" aria-label="${this.escape(this.t('schematicAria'))}">
           <circle class="radar-bg" cx="90" cy="90" r="72" />
           <circle class="ring" cx="90" cy="90" r="36" />
           <circle class="ring" cx="90" cy="90" r="70" />
@@ -565,12 +569,12 @@ class RadarHailRiskCard extends HTMLElement {
           <line class="axis" x1="20" y1="90" x2="160" y2="90" />
           <circle class="home-node" cx="90" cy="90" r="6" />
           ${coreMarks}
-          <text class="north" x="90" y="14" text-anchor="middle">S</text>
+          <text class="north" x="90" y="14" text-anchor="middle">${this.escape(this.t('north'))}</text>
         </svg>
         <div class="radar-copy">
           <strong>${distance.toFixed(1)} km</strong>
-          <span>hlavní jádro od ${this.escape(this.homeDistanceLabel())}</span>
-          ${approaching ? '<em>Přibližuje se</em>' : ''}
+          <span>${this.escape(this.t('mainCoreFrom', { home: this.homeDistanceLabel() }))}</span>
+          ${approaching ? `<em>${this.escape(this.t('approaching'))}</em>` : ''}
         </div>
       </section>
     `;
@@ -585,10 +589,138 @@ class RadarHailRiskCard extends HTMLElement {
 
   formatEta(minutes) {
     const value = Math.max(1, Math.round(minutes));
-    if (value < 10) return 'méně než 10 min';
+    if (value < 10) return this.t('etaUnderTen');
     const lower = Math.floor(value / 5) * 5;
     const upper = Math.ceil(value / 5) * 5;
-    return lower === upper ? `přibližně ${lower} min` : `přibližně ${lower}–${upper} min`;
+    return lower === upper
+      ? this.t('etaApprox', { minutes: lower })
+      : this.t('etaRange', { lower, upper });
+  }
+
+  currentEvidence(evidence, radarCurrent, lightningCurrent) {
+    if (!radarCurrent) {
+      if (lightningCurrent && ['lightning_only', 'radar_hail_with_lightning'].includes(evidence)) {
+        return 'lightning_only';
+      }
+      return evidence === 'none' ? 'none' : 'unavailable';
+    }
+    if (evidence === 'radar_hail_with_lightning' && !lightningCurrent) return 'radar_hail';
+    if (evidence === 'lightning_only' && !lightningCurrent) return 'unavailable';
+    return evidence;
+  }
+
+  cardTitle() {
+    return this.config.title || this.t('cardTitle');
+  }
+
+  t(key, values = {}) {
+    const strings = {
+      en: {
+        cardTitle: 'Storm Detector',
+        home: 'Home',
+        homeDistance: 'home',
+        statusClear: 'Clear',
+        statusUnavailable: 'No current data',
+        statusStorm: 'Storm nearby',
+        statusLightning: 'Lightning nearby',
+        statusHailPossible: 'Possible hail',
+        statusHailHigh: 'High possible hail risk',
+        statusAttention: 'Weather needs attention',
+        clearDetail: 'No strong radar core detected nearby',
+        unavailableDetail: 'Detection is temporarily unavailable',
+        messageClear: 'No strong radar core was detected nearby.',
+        messageLightning: 'Current lightning activity was detected nearby.',
+        messageHailPossible: 'Radar shows a strong core with possible hail.',
+        messageHailHigh: 'A strong radar core is close to home.',
+        messageStormApproaching: 'The radar core is approaching home.',
+        messageStormReceding: 'The radar core is moving away from home.',
+        messageStormCore: 'Radar detected a storm core in the wider area.',
+        messageStorm: 'Radar detected storm activity nearby.',
+        messageAttention: 'A current weather change was detected.',
+        nearestCore: 'Nearest core',
+        coreIntensity: 'Core intensity',
+        coreArea: 'Core area',
+        shown: 'Shown',
+        shownCores: '{shown} of {total} cores',
+        detectedCores: 'Detected cores',
+        movement: 'Movement',
+        approaching: 'Approaching',
+        receding: 'Moving away',
+        arrival: 'Arrival',
+        nearestLightning: 'Nearest lightning',
+        lightning: 'Lightning',
+        alsoDetected: 'Also detected',
+        radarError: 'The radar layer could not be loaded; showing the schematic view.',
+        hailNotConfirmed: 'Hail is not radar-confirmed',
+        radarSafety: 'Radar activity is not confirmed hail · follow official weather warnings.',
+        liveRadarAria: 'RainViewer radar image with storm cores near home',
+        schematicAria: 'Storm core positions relative to home',
+        radarImage: 'Radar image',
+        rainViewerAttribution: 'Weather data by RainViewer',
+        selectedCore: 'Main core {distance} km from {home}',
+        frameAge: ' · age {minutes} min',
+        north: 'N',
+        mainCoreFrom: 'main core from {home}',
+        etaUnderTen: 'less than 10 min',
+        etaApprox: 'about {minutes} min',
+        etaRange: 'about {lower}–{upper} min',
+      },
+      cs: {
+        cardTitle: 'Detektor bouřek',
+        home: 'Domov',
+        homeDistance: 'domova',
+        statusClear: 'Klid',
+        statusUnavailable: 'Bez aktuálních dat',
+        statusStorm: 'Bouřka v okolí',
+        statusLightning: 'Blesky poblíž',
+        statusHailPossible: 'Možné kroupy',
+        statusHailHigh: 'Vysoká možnost krup',
+        statusAttention: 'Počasí vyžaduje pozornost',
+        clearDetail: 'Silné radarové jádro v okolí nezjištěno',
+        unavailableDetail: 'Detekce dočasně není dostupná',
+        messageClear: 'Silné radarové jádro v okolí nezjištěno.',
+        messageLightning: 'V okolí byla zaznamenána aktuální blesková aktivita.',
+        messageHailPossible: 'Radar ukazuje silné jádro s možností krup.',
+        messageHailHigh: 'Silné radarové jádro je blízko domova.',
+        messageStormApproaching: 'Radarové jádro se přibližuje k domovu.',
+        messageStormReceding: 'Radarové jádro se vzdaluje od domova.',
+        messageStormCore: 'Radar zachytil bouřkové jádro v širším okolí.',
+        messageStorm: 'Radar zachytil bouřkovou aktivitu v okolí.',
+        messageAttention: 'Byla zjištěna aktuální změna počasí.',
+        nearestCore: 'Nejbližší jádro',
+        coreIntensity: 'Intenzita jádra',
+        coreArea: 'Plocha jádra',
+        shown: 'Zobrazeno',
+        shownCores: '{shown} z {total} jader',
+        detectedCores: 'Detekovaná jádra',
+        movement: 'Pohyb',
+        approaching: 'Přibližuje se',
+        receding: 'Vzdaluje se',
+        arrival: 'Příchod',
+        nearestLightning: 'Nejbližší blesk',
+        lightning: 'Blesky',
+        alsoDetected: 'Také detekovány',
+        radarError: 'Radarová vrstva se nepodařila načíst, zobrazuji schematický náhled.',
+        hailNotConfirmed: 'Kroupy nejsou radarově potvrzené',
+        radarSafety: 'Radarová aktivita není potvrzené krupobití · sledujte oficiální výstrahy.',
+        liveRadarAria: 'Radarový snímek RainViewer s bouřkovými jádry v okolí domova',
+        schematicAria: 'Polohy bouřkových jader vůči domovu',
+        radarImage: 'Radarový snímek',
+        rainViewerAttribution: 'Data o počasí od RainViewer',
+        selectedCore: 'Hlavní jádro {distance} km od {home}',
+        frameAge: ' · stáří {minutes} min',
+        north: 'S',
+        mainCoreFrom: 'hlavní jádro od {home}',
+        etaUnderTen: 'méně než 10 min',
+        etaApprox: 'přibližně {minutes} min',
+        etaRange: 'přibližně {lower}–{upper} min',
+      },
+    };
+    const language = this._hass?.language === 'cs' ? 'cs' : 'en';
+    return Object.entries(values).reduce(
+      (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+      strings[language][key],
+    );
   }
 
   state(entityId) {
@@ -713,6 +845,6 @@ customElements.define('storm-detector-card', RadarHailRiskCard);
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'storm-detector-card',
-  name: 'Bouřky a možné kroupy',
-  description: 'Adaptivní karta zobrazující jen aktuální a prakticky relevantní údaje.',
+  name: 'Storm Detector',
+  description: 'Adaptive card showing only current, relevant storm information.',
 });

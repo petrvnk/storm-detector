@@ -2,12 +2,12 @@
 
 ## Kanban board
 
-Project work is tracked on the Hermes Kanban board `radar-hail-risk`.
+Project work is tracked on the Hermes Kanban board `storm-detector`.
 
 ```bash
-hermes kanban --board radar-hail-risk list
-hermes kanban --board radar-hail-risk stats
-hermes kanban --board radar-hail-risk assignees
+hermes kanban --board storm-detector list
+hermes kanban --board storm-detector stats
+hermes kanban --board storm-detector assignees
 ```
 
 ## Agent routing

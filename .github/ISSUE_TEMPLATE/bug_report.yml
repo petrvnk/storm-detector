@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a problem with Radar Hail Risk
+description: Report a problem with Storm Detector
 title: "[Bug]: "
 labels: [bug]
 body:
@@ -17,8 +17,8 @@ body:
   - type: input
     id: integration_version
     attributes:
-      label: Radar Hail Risk version
-      placeholder: "0.0.1"
+      label: Storm Detector version
+      placeholder: "0.1.0"
     validations:
       required: true
   - type: textarea

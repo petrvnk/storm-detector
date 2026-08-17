@@ -1,7 +1,4 @@
-# Radar Hail Risk
-
-> [!IMPORTANT]
-> This repository is being refactored into **Storm Detector**. The imported baseline still uses the legacy `radar_hail_risk` domain and is **not yet ready to install as Storm Detector**. Use the existing Radar Hail Risk repository until a reviewed Storm Detector release is published.
+# Storm Detector
 
 A Home Assistant integration that monitors **nearby thunderstorms and possible hail**.
 
@@ -24,7 +21,7 @@ It combines RainViewer radar with optional Home Assistant lightning sensors. The
 | `radar_hail_with_lightning` | Possible hail with nearby lightning |
 | `unavailable` | Current detection data is unavailable |
 
-Radar Hail Risk is heuristic only. It does not detect hail on the ground and does not provide a calibrated hail probability.
+Storm Detector is heuristic only. It does not detect hail on the ground and does not provide a calibrated hail probability.
 
 ## Install with HACS
 
@@ -32,16 +29,16 @@ Minimum Home Assistant version: **2024.10.0**.
 
 1. In HACS, open **Integrations**.
 2. Open the menu and select **Custom repositories**.
-3. Add `https://github.com/petrvnk/radar-hail-risk` as category **Integration**.
-4. Install **Radar Hail Risk**.
+3. Add `https://github.com/petrvnk/storm-detector` as category **Integration**.
+4. Install **Storm Detector**.
 5. Restart Home Assistant.
-6. Go to **Settings → Devices & services → Add integration** and select **Radar Hail Risk**.
+6. Go to **Settings → Devices & services → Add integration** and select **Storm Detector**.
 
 ### Manual installation
 
-1. Copy `custom_components/radar_hail_risk/` into `<HA config>/custom_components/`.
+1. Copy `custom_components/storm_detector/` into `<HA config>/custom_components/`.
 2. Restart Home Assistant.
-3. Add **Radar Hail Risk** from **Settings → Devices & services**.
+3. Add **Storm Detector** from **Settings → Devices & services**.
 
 ## Setup
 
@@ -61,10 +58,10 @@ Open-Meteo is intentionally **not** part of the detection path.
 
 | Entity | Purpose |
 |---|---|
-| `sensor.radar_hail_risk_level` | `none`, `watch`, `warning`, `urgent`, or `unavailable` |
-| `sensor.radar_hail_risk_summary` | Short human-readable status |
-| `binary_sensor.radar_hail_risk_active` | Current storm or warning is active |
-| `binary_sensor.radar_hail_risk_data_stale` | Source data is no longer current |
+| `sensor.storm_detector_level` | `none`, `watch`, `warning`, `urgent`, or `unavailable` |
+| `sensor.storm_detector_summary` | Short human-readable status |
+| `binary_sensor.storm_detector_active` | Current storm or warning is active |
+| `binary_sensor.storm_detector_data_stale` | Source data is no longer current |
 
 These four entities are enabled by default. Detailed radar, lightning, frame-age, and storm-core entities are disabled by default and can be enabled for diagnostics.
 
@@ -87,15 +84,14 @@ Additional examples are available in `examples/lovelace/`.
 Add this JavaScript resource in **Settings → Dashboards → Resources**:
 
 ```text
-URL: /radar_hail_risk/radar-hail-risk-card.js
+URL: /storm_detector/storm-detector-card.js
 Type: JavaScript module
 ```
 
 Then add a manual card:
 
 ```yaml
-type: custom:radar-hail-risk-card
-title: Bouřky v okolí
+type: custom:storm-detector-card
 radar_overlay: auto
 ```
 
@@ -111,14 +107,14 @@ The card is non-interactive: it has no pan, zoom, playback, or hover-only detail
 
 The live overlay loads image tiles directly from RainViewer in the browser for the displayed area. This adds browser-side requests to RainViewer's tile host; the frontend does not request RainViewer metadata or load external JavaScript.
 
-The repository's MIT license covers the integration code, not RainViewer radar data. RainViewer data, terms, attribution, and availability are separate, and availability is not guaranteed. The live radar module therefore keeps a visible **Weather data by RainViewer** link and retains the schematic fallback when tile images cannot be loaded.
+The repository's MIT license covers the integration code, not RainViewer radar data. RainViewer data, terms, attribution, and availability are separate, and availability is not guaranteed. The live radar module therefore keeps a visible localized RainViewer attribution link and retains the schematic fallback when tile images cannot be loaded.
 
 ## Notification blueprint
 
 The optional blueprint is located at:
 
 ```text
-blueprints/automation/radar_hail_risk/hail_risk_notification.yaml
+blueprints/automation/storm_detector/storm_notification.yaml
 ```
 
 Import it into Home Assistant, create an automation, and select:
@@ -133,15 +129,15 @@ Import it into Home Assistant, create an automation, and select:
 The blueprint uses `evidence_kind`, so its Czech wording distinguishes:
 
 - **Sledování bouřky**;
-- **Blízká bouřka / blesky poblíž**;
+- **Bouřka / blesky poblíž**;
 - **Možné kroupy poblíž**;
-- **Vysoké riziko krup**.
+- **Vysoká možnost krup**.
 
 It is opt-in and does not create automations by itself.
 
 ## Limitations
 
-- Radar Hail Risk is **not an official warning source**.
+- Storm Detector is **not an official warning source**.
 - Radar and lightning feeds can be delayed, unavailable, or inaccurate.
 - Radar reflectivity can overestimate or miss local hail conditions.
 - Do not use it as the only input for safety-critical automation.

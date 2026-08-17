@@ -11,7 +11,7 @@ homeassistant_template = pytest.importorskip("homeassistant.helpers.template")
 Template = homeassistant_template.Template
 
 ROOT = Path(__file__).resolve().parents[1]
-BLUEPRINT = ROOT / "blueprints" / "automation" / "radar_hail_risk" / "hail_risk_notification.yaml"
+BLUEPRINT = ROOT / "blueprints" / "automation" / "storm_detector" / "storm_notification.yaml"
 ENGLISH_SUMMARY = "English coordinator summary: hail warning"
 
 
@@ -33,21 +33,23 @@ def _blueprint_variable_template(name: str) -> str:
 @pytest.mark.parametrize(
     ("language", "current_level", "evidence_kind", "expected"),
     [
-        ("en", "warning", "lightning_only", "Thunderstorm / lightning nearby; hail not confirmed"),
-        ("en", "warning", "radar_hail", ENGLISH_SUMMARY),
-        ("en", "urgent", "radar_hail_with_lightning", ENGLISH_SUMMARY),
-        ("cs", "warning", "lightning_only", "Blízká bouřka / blesky poblíž; kroupy nejsou potvrzené"),
-        ("cs", "warning", "radar_hail", "Radar ukazuje možné kroupy poblíž"),
+        ("en", "warning", "lightning_only", "Storm / lightning nearby; hail is not radar-confirmed. Follow official weather warnings."),
+        ("en", "warning", "radar_hail", "Radar indicates possible hail nearby. Follow official weather warnings."),
+        ("en", "urgent", "radar_hail_with_lightning", "Radar indicates a high possibility of hail nearby; lightning is also nearby. Follow official weather warnings."),
+        ("cs", "warning", "lightning_only", "Bouřka / blesky poblíž; kroupy nejsou radarově potvrzené. Sledujte oficiální výstrahy."),
+        ("cs", "warning", "radar_hail", "Radar ukazuje možné kroupy poblíž. Sledujte oficiální výstrahy."),
         (
             "cs",
             "urgent",
             "radar_hail_with_lightning",
-            "Radar ukazuje vysoké riziko krup poblíž; blesky jsou také poblíž",
+            "Radar ukazuje vysokou možnost krup poblíž; blesky jsou také poblíž. Sledujte oficiální výstrahy.",
         ),
-        ("en", "warning", "unknown", "Weather risk state changed; radar confirmation unavailable"),
-        ("en", "warning", None, "Weather risk state changed; radar confirmation unavailable"),
-        ("cs", "warning", "unknown", "Změna stavu počasí; radarové potvrzení není k dispozici"),
-        ("cs", "warning", None, "Změna stavu počasí; radarové potvrzení není k dispozici"),
+        ("en", "warning", "radar_storm", "Storm detected nearby. Follow official weather warnings."),
+        ("cs", "warning", "radar_storm", "Bouřka v okolí. Sledujte oficiální výstrahy."),
+        ("en", "warning", "unknown", "Weather state changed; current evidence is limited. Follow official weather warnings."),
+        ("en", "warning", None, "Weather state changed; current evidence is limited. Follow official weather warnings."),
+        ("cs", "warning", "unknown", "Změna stavu počasí; aktuální podklady jsou omezené. Sledujte oficiální výstrahy."),
+        ("cs", "warning", None, "Změna stavu počasí; aktuální podklady jsou omezené. Sledujte oficiální výstrahy."),
     ],
 )
 def test_blueprint_message_renders_by_language_and_evidence(

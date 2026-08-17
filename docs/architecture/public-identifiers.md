@@ -31,7 +31,7 @@ No old `v0.0.x` tags are part of the new repository release contract.
 | Frontend source path | `custom_components/storm_detector/frontend/storm-detector-card.js` |
 | Recommended example path | `examples/storm-detector-card.yaml` |
 
-The old `custom:radar-hail-risk-card` tag must not be registered as an alias in Storm Detector.
+No predecessor card tag is registered as an alias in Storm Detector.
 
 ## Blueprint identifiers and service policy
 
@@ -135,18 +135,9 @@ Allowed evidence identifiers:
 
 ## Legacy identifier policy
 
-Reject these old public identifiers outside historical attribution, migration notes, or explicit legacy-audit tests:
-
-- `Radar Hail Risk`
-- `radar-hail-risk`
-- `radar_hail_risk`
-- `custom:radar-hail-risk-card`
-- `/radar_hail_risk/radar-hail-risk-card.js`
-- `blueprints/automation/radar_hail_risk/hail_risk_notification.yaml`
-- `sensor.radar_hail_risk_level`
-- `sensor.radar_hail_risk_summary`
-- `binary_sensor.radar_hail_risk_active`
-- `binary_sensor.radar_hail_risk_data_stale`
+Reject predecessor product, repository, domain, card, resource, blueprint, service,
+and default-entity identifiers outside genuinely historical records and the explicit
+repository audit test.
 
 Do not provide compatibility aliases, migration shims, custom services, duplicate card tags, duplicate blueprint paths, or old-domain config-entry support unless Petr approves a separate compatibility project.
 

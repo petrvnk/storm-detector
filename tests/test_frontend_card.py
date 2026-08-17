@@ -18,9 +18,7 @@ def test_frontend_registers_only_storm_detector_card() -> None:
     source = CARD.read_text(encoding="utf-8")
 
     assert "customElements.define('storm-detector-card'" in source
-    assert "customElements.define('radar-hail-risk-card'" not in source
     assert "type: 'storm-detector-card'" in source
-    assert "type: 'radar-hail-risk-card'" not in source
 
 
 def _render(
@@ -28,6 +26,7 @@ def _render(
     *,
     config: dict[str, object] | None = None,
     trigger_tile_error: bool = False,
+    language: str = "cs",
 ) -> str:
     source = CARD.read_text(encoding="utf-8").replace(
         "customElements.define('storm-detector-card', RadarHailRiskCard);",
@@ -60,7 +59,7 @@ globalThis.window = {{ customCards: [] }};
 {source}
 const card = new globalThis.TestCard();
 card.setConfig({json.dumps(config or {})});
-card.hass = {{ states: {json.dumps(states)} }};
+card.hass = {{ language: {json.dumps(language)}, states: {json.dumps(states)} }};
 process.stdout.write(card.shadowRoot.innerHTML);
 """
     result = subprocess.run(
@@ -78,6 +77,7 @@ def _render_sequence(
     *,
     config: dict[str, object] | None = None,
     trigger_tile_error: bool = False,
+    language: str = "cs",
 ) -> list[str]:
     source = CARD.read_text(encoding="utf-8").replace(
         "customElements.define('storm-detector-card', RadarHailRiskCard);",
@@ -112,7 +112,7 @@ const card = new globalThis.TestCard();
 card.setConfig({json.dumps(config or {})});
 const rendered = [];
 for (const states of {json.dumps(states)}) {{
-  card.hass = {{ states }};
+  card.hass = {{ language: {json.dumps(language)}, states }};
   rendered.push(card.shadowRoot.innerHTML);
 }}
 process.stdout.write(JSON.stringify(rendered));
@@ -538,7 +538,7 @@ def test_valid_overlay_renders_backend_tiles_and_backend_selected_core() -> None
     assert f'data-core-id="{frame_time}:core:2"' in html
     assert (
         '<a href="https://www.rainviewer.com/" target="_blank" '
-        'rel="noopener noreferrer">Weather data by RainViewer</a>'
+        'rel="noopener noreferrer">Data o počasí od RainViewer</a>'
     ) in html
     assert html.count("Radarová aktivita není potvrzené krupobití") == 1
     assert html.count("sledujte oficiální výstrahy") == 1
@@ -1522,3 +1522,119 @@ def test_frontend_has_no_rainviewer_metadata_fetch_path() -> None:
     assert "weather-maps-api" not in source
     assert "weather-maps.json" not in source
     assert "fetch(" not in source
+
+
+@pytest.mark.parametrize("language", ["en", "de", ""])
+def test_non_czech_languages_use_complete_english_fallback(language: str) -> None:
+    frame_time = 1_710_000_000
+    html = _render(
+        _states(
+            "warning",
+            evidence_kind="radar_hail_with_lightning",
+            attributes={
+                "frame_time": frame_time,
+                "lightning_distance_km": 9.4,
+                "source_status": {"radar": "ok", "lightning": "ok"},
+                "radar_overlay": _radar_overlay(frame_time=frame_time),
+            },
+        ),
+        language=language,
+    )
+
+    assert "Storm Detector" in html
+    assert "Possible hail" in html
+    assert "Nearest lightning" in html
+    assert 'aria-label="RainViewer radar image with storm cores near home"' in html
+    assert ">Weather data by RainViewer</a>" in html
+    assert "Bouř" not in html
+    assert "Kroup" not in html
+    assert "Nejbližší" not in html
+    assert "Radarový snímek" not in html
+
+
+def test_czech_localizes_visible_aria_and_rainviewer_attribution() -> None:
+    frame_time = 1_710_000_000
+    html = _render(
+        _states(
+            "warning",
+            evidence_kind="radar_hail",
+            attributes={
+                "frame_time": frame_time,
+                "radar_overlay": _radar_overlay(frame_time=frame_time),
+            },
+        ),
+        language="cs",
+    )
+
+    assert "Detektor bouřek" in html
+    assert 'aria-label="Radarový snímek RainViewer s bouřkovými jádry v okolí domova"' in html
+    assert ">Data o počasí od RainViewer</a>" in html
+    assert "Weather data by RainViewer" not in html
+
+
+def test_explicit_title_override_is_preserved_for_every_language() -> None:
+    states = _states("none", evidence_kind="none")
+
+    assert "My local title" in _render(states, config={"title": "My local title"}, language="en")
+    assert "My local title" in _render(states, config={"title": "My local title"}, language="cs")
+
+
+@pytest.mark.parametrize("radar_status", ["stale", "degraded", "unavailable", "error"])
+def test_noncurrent_radar_keeps_current_lightning_and_suppresses_radar_facts(
+    radar_status: str,
+) -> None:
+    html = _render(
+        _states(
+            "warning",
+            evidence_kind="radar_hail_with_lightning",
+            attributes={
+                "selected_core_distance_km": 4.2,
+                "selected_core_max_dbz": 61,
+                "selected_core_area_km2": 18.0,
+                "storm_approaching": True,
+                "storm_eta_minutes": 6,
+                "lightning_distance_km": 9.4,
+                "source_status": {"radar": radar_status, "lightning": "ok"},
+            },
+        ),
+        language="en",
+    )
+
+    assert "Lightning nearby" in html
+    assert "9.4 km" in html
+    assert "Possible hail" not in html
+    assert "High possible hail" not in html
+    assert "Nearest core" not in html
+    assert "Core intensity" not in html
+    assert "Core area" not in html
+    assert "Approaching" not in html
+    assert "Arrival" not in html
+    assert "<svg" not in html
+
+
+@pytest.mark.parametrize("lightning_status", ["stale", "degraded", "unavailable", "error"])
+def test_noncurrent_lightning_keeps_current_radar_and_suppresses_lightning_facts(
+    lightning_status: str,
+) -> None:
+    html = _render(
+        _states(
+            "warning",
+            evidence_kind="radar_hail_with_lightning",
+            attributes={
+                "selected_core_distance_km": 12.4,
+                "selected_core_max_dbz": 58,
+                "storm_cores": [{"distance_km": 12.4, "bearing_degrees": 180.0}],
+                "lightning_distance_km": 3.1,
+                "source_status": {"radar": "ok", "lightning": lightning_status},
+            },
+        ),
+        language="en",
+    )
+
+    assert "Possible hail" in html
+    assert "12.4 km" in html
+    assert "Core intensity" in html
+    assert 'aria-label="Storm core positions relative to home"' in html
+    assert "Nearest lightning" not in html
+    assert "3.1 km" not in html
+    assert "Lightning also detected" not in html

@@ -2,22 +2,6 @@
 
 Use this checklist before publishing a HACS release tag.
 
-The private Simple RC colleague bundle is not a publication authorization. For that
-local handoff, also complete the bundle gate below and
-[`colleague-test-checklist.md`](colleague-test-checklist.md); do not tag, push, publish,
-deploy, or access a real Home Assistant configuration as part of bundle verification.
-
-## Private colleague bundle gate
-
-- [ ] Run `uv run python scripts/build_colleague_bundle.py --output dist/radar_hail_risk-simple-rc.zip`.
-- [ ] Record `sha256sum dist/radar_hail_risk-simple-rc.zip`.
-- [ ] Generate a second archive at a separate temporary path and confirm identical SHA-256 and member lists.
-- [ ] Confirm every member exactly matches the generator's explicit allowlist.
-- [ ] Confirm the exclusion scan rejects Git/GitHub metadata, caches, virtual environments, `dist/` inputs, coverage/build/log output, `.env*`, credentials/tokens/keys, `.storage`, `secrets.yaml`, `configuration.yaml`, local HA state/config, recorder/observation data, and research artifacts.
-- [ ] Confirm clean-room extraction and temporary `config/custom_components/radar_hail_risk/` installation verification pass without reading or mutating a real HA configuration.
-- [ ] Validate `hacs.json`, integration `manifest.json`, directory naming, blueprint path/content, and all referenced card/example paths.
-- [ ] Complete the Python 3.14/3.10 tests, Ruff, compileall, and `git diff --check` gates.
-
 ## Local verification
 
 - [ ] `python -m pytest -q`
@@ -36,6 +20,7 @@ deploy, or access a real Home Assistant configuration as part of bundle verifica
 - [ ] Verify `unknown`/`unavailable` lightning distance states do not appear as hard integration errors.
 - [ ] Verify entities update and survive Home Assistant restart.
 - [ ] Verify the notification blueprint can be imported and triggered manually.
+- [ ] Verify `/storm_detector/storm-detector-card.js` and `custom:storm-detector-card` render in Czech and English.
 
 ## Migration from another alerting setup
 

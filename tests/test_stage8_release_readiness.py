@@ -48,7 +48,7 @@ def test_readme_contains_release_limitations_credits_and_migration_notes() -> No
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert "Install with HACS" in readme
-    assert "https://github.com/petrvnk/radar-hail-risk" in readme
+    assert "https://github.com/petrvnk/storm-detector" in readme
     assert "Limitations" in readme
     assert "not an official warning source" in readme
     assert "Credits" in readme
@@ -64,7 +64,6 @@ def test_lovelace_examples_use_clean_entity_ids() -> None:
     examples_dir = ROOT / "examples" / "lovelace"
     combined = "\n".join(path.read_text(encoding="utf-8") for path in examples_dir.glob("*.yaml"))
 
-    assert "radar_hail_risk_radar_hail" not in combined
     assert "sensor.storm_detector_level" in combined
     assert "sensor.storm_detector_summary" in combined
     assert "binary_sensor.storm_detector_data_stale" in combined
@@ -73,11 +72,11 @@ def test_lovelace_examples_use_clean_entity_ids() -> None:
 
 def test_notification_blueprint_includes_minimal_entities_and_cooldown() -> None:
     blueprint = (
-        ROOT / "blueprints" / "automation" / "radar_hail_risk" / "hail_risk_notification.yaml"
+        ROOT / "blueprints" / "automation" / "storm_detector" / "storm_notification.yaml"
     ).read_text(encoding="utf-8")
 
-    assert "risk_level_sensor" in blueprint
-    assert "risk_summary_sensor" in blueprint
+    assert "level_entity" in blueprint
+    assert "summary_entity" in blueprint
     assert "cooldown_minutes" in blueprint
     assert "message_text" in blueprint
 
