@@ -87,6 +87,7 @@ During the Storm Detector rename refactor:
 - Do not change hysteresis, stale gates, confidence scoring, or alert escalation semantics except where a test must be renamed to the new public identifiers without behavior change.
 - Do not create compatibility aliases for old public identifiers.
 - Do not claim observed hail, guaranteed hail, or present Storm Detector as an official warning or equivalent to one.
+- Preserve the exact current 42-key level-sensor attribute surface; do not add coordinator-internal or separate diagnostic-entity data such as `max_dbz`, `radar_diagnostics`, or `lightning_diagnostics` as level-sensor attributes during the rename.
 
 All runtime behavior changes must be proposed as separate, explicitly approved feature work after the public contract is accepted.
 
@@ -97,8 +98,8 @@ All runtime behavior changes must be proposed as separate, explicitly approved f
 - Product framing: storm-first monitoring with possible radar-supported hail as one evidence type.
 - Minimum journey: install, choose location, optionally choose lightning sensors, receive state, optionally enable notifications.
 - User-facing copy must distinguish storm, lightning-only, possible hail, stale/degraded, and unavailable states.
-- RainViewer attribution remains visible wherever live radar imagery is shown.
+- RainViewer attribution remains visible wherever live radar imagery is shown, with a card-locale visible link label: English fallback `Weather data by RainViewer`, Czech `Data o počasí od RainViewer`, and `https://www.rainviewer.com/` for both.
 - Phase 4 will add Czech Home Assistant integration translations alongside English translations.
-- The card uses one card-wide locale from `hass.language`: Czech (`cs`) when `hass.language` is `cs`, English otherwise. This applies to all card-owned visible strings, status/body copy, fact labels, errors, fallbacks, attribution context, safety copy, and ARIA text. An explicit user-configured title overrides only the title, not the copy locale.
+- The card uses one card-wide locale from `hass.language`: Czech (`cs`) when `hass.language` is `cs`, English otherwise. This applies to all card-owned visible strings, status/body copy, fact labels, errors, fallbacks, attribution context and visible link label, safety copy, and ARIA text. An explicit user-configured title overrides only the title, not the copy locale.
 - Hail wording and hail-specific safety copy are reserved for current `radar_hail` or `radar_hail_with_lightning` evidence.
 - Generic `radar_storm` and `lightning_only` user-facing copy must use storm/lightning wording only.

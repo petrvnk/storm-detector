@@ -71,7 +71,7 @@ Diagnostic entities use the same `storm_detector` prefix and are disabled by def
 
 ## Attribute contract for automations and card UX
 
-The level sensor attributes below are the minimum stable integration surface for evidence-aware automations and the adaptive card:
+The level sensor attributes below are the exact 42-key baseline surface for evidence-aware automations and the adaptive card:
 
 - `summary`
 - `evidence_kind`
@@ -79,7 +79,6 @@ The level sensor attributes below are the minimum stable integration surface for
 - `has_current_signal`
 - `source_status`
 - `degradation_reasons`
-- `max_dbz`
 - `core50_distance_km`
 - `core55_distance_km`
 - `core60_distance_km`
@@ -115,11 +114,9 @@ The level sensor attributes below are the minimum stable integration surface for
 - `frame_time`
 - `frames_analyzed`
 - `location_source`
-- `radar_diagnostics`
-- `lightning_diagnostics`
 - `radar_overlay`
 
-The rename implementation must preserve every attribute currently emitted by the baseline level sensor, not only the minimum subset above. Regression tests must assert the full baseline attribute-key set survives the rename, including threshold-distance attributes (`core50_distance_km`, `core55_distance_km`, `core60_distance_km`, `core_watch_distance_km`, `core_warning_distance_km`, `core_urgent_distance_km`), selected-core coordinates (`selected_core_latitude`, `selected_core_longitude`), lightning trigger/delta fields (`lightning_triggered`, `lightning_new_strike`, `lightning_counter_delta`), and `radar_overlay`. Intentional attribute removals or semantic changes require separate Petr approval before implementation.
+The rename implementation must preserve this exact baseline key set without additions, removals, or semantic changes. Regression tests must assert the full 42-key level-sensor attribute set survives the rename, including threshold-distance attributes (`core50_distance_km`, `core55_distance_km`, `core60_distance_km`, `core_watch_distance_km`, `core_warning_distance_km`, `core_urgent_distance_km`), selected-core coordinates (`selected_core_latitude`, `selected_core_longitude`), lightning trigger/delta fields (`lightning_triggered`, `lightning_new_strike`, `lightning_counter_delta`), and `radar_overlay`. `max_dbz`, `radar_diagnostics`, and `lightning_diagnostics` are not level-sensor attributes in the baseline surface and must not be added to the level sensor during the rename; they remain outside this attribute contract unless Petr approves separate runtime work. Intentional attribute removals, additions, or semantic changes require separate Petr approval before implementation.
 
 Automations must branch on `evidence_kind`, not parse localized summary text.
 

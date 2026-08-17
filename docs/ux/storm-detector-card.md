@@ -14,7 +14,7 @@ Scope: card behavior, copy, accessibility, and RainViewer attribution. This docu
 | Default title, Czech | `Bouřky v okolí` |
 | Default overlay mode | `auto` |
 
-The card uses one card-wide locale from `hass.language`: Czech (`cs`) when `hass.language` is `cs`, English otherwise. This applies to the default title, status/body copy, fact labels, errors, fallbacks, tile notices, RainViewer attribution context, safety copy, and ARIA labels. A configured explicit `title` overrides only the displayed title; all other card-owned copy still follows the `hass.language` locale.
+The card uses one card-wide locale from `hass.language`: Czech (`cs`) when `hass.language` is `cs`, English otherwise. This applies to the default title, status/body copy, fact labels, errors, fallbacks, tile notices, RainViewer attribution context and visible link label, safety copy, and ARIA labels. A configured explicit `title` overrides only the displayed title; all other card-owned copy still follows the `hass.language` locale.
 
 Default entities:
 
@@ -99,9 +99,12 @@ Live overlay contract:
 
 ## RainViewer attribution
 
-Whenever RainViewer live radar imagery is visible, the card must show a visible link:
+Whenever RainViewer live radar imagery is visible, the card must show one visible attribution link selected by the card-wide locale:
 
-`Weather data by RainViewer` → `https://www.rainviewer.com/`
+| Card locale | Visible link label | URL |
+|---|---|---|
+| English fallback (`en`) | `Weather data by RainViewer` | `https://www.rainviewer.com/` |
+| Czech (`cs`) | `Data o počasí od RainViewer` | `https://www.rainviewer.com/` |
 
 The attribution must not be hidden behind hover, collapsed diagnostics, or an icon-only affordance. The card may use a schematic fallback without RainViewer tiles when live imagery is unavailable.
 
