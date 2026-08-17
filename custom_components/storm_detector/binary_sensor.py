@@ -1,4 +1,4 @@
-"""Binary sensors for radar hail risk."""
+"""Binary sensors for Storm Detector."""
 
 from __future__ import annotations
 
@@ -33,17 +33,17 @@ async def async_setup_entry(hass: Any, config_entry: Any, async_add_entities: An
     coordinator = hass.data[DOMAIN][config_entry.entry_id][DATA_KEY_RESULT]
     async_add_entities(
         [
-            RadarHailDataStaleBinarySensor(coordinator, config_entry),
-            RadarHailRiskActiveBinarySensor(coordinator, config_entry),
+            StormDetectorDataStaleBinarySensor(coordinator, config_entry),
+            StormDetectorActiveBinarySensor(coordinator, config_entry),
         ]
     )
 
 
-class RadarHailDataStaleBinarySensor(CoordinatorEntity[Any], BinarySensorEntity):
+class StormDetectorDataStaleBinarySensor(CoordinatorEntity[Any], BinarySensorEntity):
     """Reports whether source data is stale."""
 
     _attr_has_entity_name = True
-    _attr_name = "Data Stale"
+    _attr_translation_key = "data_stale"
     _attr_icon = "mdi:clock-alert-outline"
     _attr_entity_registry_enabled_default = True
 
@@ -57,6 +57,10 @@ class RadarHailDataStaleBinarySensor(CoordinatorEntity[Any], BinarySensorEntity)
         return f"{DOMAIN}_{self._entry_id}_data_stale"
 
     @property
+    def suggested_object_id(self) -> str:
+        return "data_stale"
+
+    @property
     def is_on(self) -> bool:
         data = self._coordinator.data if getattr(self, "coordinator", None) else {}
         if isinstance(data, dict):
@@ -68,24 +72,24 @@ class RadarHailDataStaleBinarySensor(CoordinatorEntity[Any], BinarySensorEntity)
         if isinstance(DeviceInfo, type):
             return DeviceInfo(
                 identifiers={(DOMAIN, self._entry_id)},
-                name="Radar Hail Risk",
-                manufacturer="Radar Hail Risk Integration",
-                model="Risk Monitor",
+                name="Storm Detector",
+                manufacturer="Storm Detector",
+                model="Storm Detector",
             )
         return {
             "identifiers": {(DOMAIN, self._entry_id)},
-            "name": "Radar Hail Risk",
-            "manufacturer": "Radar Hail Risk Integration",
-            "model": "Risk Monitor",
+            "name": "Storm Detector",
+            "manufacturer": "Storm Detector",
+            "model": "Storm Detector",
         }
 
 
-class RadarHailRiskActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity):
+class StormDetectorActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity):
     """True when risk is at least watch level and not stale/unavailable."""
 
     _attr_has_entity_name = True
-    _attr_name = "Active"
-    _attr_icon = "mdi:weather-hail"
+    _attr_translation_key = "active"
+    _attr_icon = "mdi:weather-lightning"
     _attr_entity_registry_enabled_default = True
 
     def __init__(self, coordinator: Any | None = None, config_entry: Any | None = None) -> None:
@@ -96,6 +100,10 @@ class RadarHailRiskActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity
     @property
     def unique_id(self) -> str:
         return f"{DOMAIN}_{self._entry_id}_risk_active"
+
+    @property
+    def suggested_object_id(self) -> str:
+        return "active"
 
     @property
     def is_on(self) -> bool:
@@ -113,15 +121,15 @@ class RadarHailRiskActiveBinarySensor(CoordinatorEntity[Any], BinarySensorEntity
         if isinstance(DeviceInfo, type):
             return DeviceInfo(
                 identifiers={(DOMAIN, self._entry_id)},
-                name="Radar Hail Risk",
-                manufacturer="Radar Hail Risk Integration",
-                model="Risk Monitor",
+                name="Storm Detector",
+                manufacturer="Storm Detector",
+                model="Storm Detector",
             )
         return {
             "identifiers": {(DOMAIN, self._entry_id)},
-            "name": "Radar Hail Risk",
-            "manufacturer": "Radar Hail Risk Integration",
-            "model": "Risk Monitor",
+            "name": "Storm Detector",
+            "manufacturer": "Storm Detector",
+            "model": "Storm Detector",
         }
 
     @property

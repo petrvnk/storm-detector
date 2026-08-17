@@ -1,0 +1,101 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Nastavení Storm Detector",
+        "description": "Vyberte polohu a volitelné senzory blesků. Ponecháte-li polohu prázdnou, použije se poloha z Home Assistantu. Pro režim pouze s radarem ponechte obě pole blesků prázdná. Technická nastavení lze později upravit v možnostech.",
+        "data": {
+          "location_entity_id": "Zdroj polohy",
+          "lightning_distance_entity_id": "Senzor vzdálenosti blesků",
+          "lightning_counter_entity_id": "Senzor počtu blesků"
+        },
+        "data_description": {
+          "location_entity_id": "Volitelná zóna, osoba nebo sledovač zařízení. Po výběru bude jediným zdrojem polohy středu radaru a výpočtu vzdáleností.",
+          "lightning_distance_entity_id": "Volitelný senzor vzdálenosti z integrace Blitzortung nebo jiné kompatibilní integrace blesků.",
+          "lightning_counter_entity_id": "Volitelný senzor počtu spárovaný se senzorem vzdálenosti blesků."
+        }
+      },
+      "options": {
+        "title": "Možnosti Storm Detector",
+        "description": "Upravte prahové hodnoty a způsob analýzy."
+      }
+    },
+    "error": {
+      "entity_not_found": "Vybraná entita nebyla v Home Assistantu nalezena.",
+      "invalid_value": "Jedna nebo více hodnot není platné číslo.",
+      "invalid_range": "Hodnota je mimo podporovaný rozsah.",
+      "invalid_threshold_order": "Prahy odrazivosti musí růst: sledování < výstraha < naléhavý stav.",
+      "invalid_distance_order": "Vzdálenost pro výstrahu musí být větší nebo rovna vzdálenosti pro naléhavý stav.",
+      "invalid_trigger_radius": "Poloměr aktivace bleskem musí být větší nebo roven výstražné vzdálenosti blesků.",
+      "lightning_pair_required": "Vyberte senzor vzdálenosti i počtu blesků, nebo ponechte oba prázdné pro režim pouze s radarem."
+    },
+    "abort": {
+      "already_configured": "Tato integrace je již nastavena."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Možnosti Storm Detector",
+        "description": "Pokročilé technické nastavení korelace blesků, prahů rizika, radarové analýzy a zacházení se zastaralými daty.",
+        "data": {
+          "lightning_azimuth_entity_id": "Senzor azimutu blesků",
+          "analysis_radius_km": "Poloměr radarové analýzy",
+          "lightning_trigger_radius_km": "Poloměr aktivace bleskem",
+          "warning_lightning_distance_km": "Výstražná vzdálenost blesků",
+          "urgent_lightning_distance_km": "Naléhavá vzdálenost blesků",
+          "core_watch_dbz": "Práh jádra pro sledování",
+          "core_warning_dbz": "Práh jádra pro výstrahu",
+          "core_urgent_dbz": "Práh jádra pro naléhavý stav",
+          "min_core_pixels": "Minimální velikost jádra (pixely)",
+          "min_analysis_interval_seconds": "Minimální interval analýzy",
+          "stale_clear_seconds": "Limit zastarání dat",
+          "rainviewer_zoom": "Přiblížení RainViewer",
+          "rainviewer_frames": "Počet snímků RainViewer k analýze",
+          "warning_core_distance_km": "Výstražná vzdálenost jádra",
+          "urgent_core_distance_km": "Naléhavá vzdálenost jádra"
+        },
+        "data_description": {
+          "lightning_azimuth_entity_id": "Volitelný senzor azimutu sloužící k odhadu polohy výboje a porovnání s radarovými jádry.",
+          "analysis_radius_km": "Poloměr kolem nastavené polohy pro analýzu radarových dlaždic.",
+          "lightning_trigger_radius_km": "Nový blesk v tomto poloměru může spustit nebo posílit vyhodnocení.",
+          "warning_lightning_distance_km": "Blesk v této nebo menší vzdálenosti může přispět k úrovni výstrahy.",
+          "urgent_lightning_distance_km": "Původní hranice blízkosti zachovaná kvůli kompatibilitě. Samotné blesky mohou vyvolat nejvýše úroveň výstrahy; naléhavý stav vyžaduje aktuální radarový důkaz naléhavé úrovně.",
+          "core_watch_dbz": "Práh radarové odrazivosti bouřkových jader pro úroveň sledování.",
+          "core_warning_dbz": "Práh radarové odrazivosti bouřkových jader pro úroveň výstrahy.",
+          "core_urgent_dbz": "Práh radarové odrazivosti bouřkových jader pro naléhavou úroveň.",
+          "min_core_pixels": "Izolované radarové pixely pod touto velikostí souvislého jádra budou odmítnuty.",
+          "min_analysis_interval_seconds": "Minimální doba mezi náročnými radarovými analýzami, pokud nedojde ke spouštěcí události.",
+          "stale_clear_seconds": "Starší radarová nebo blesková data se považují za zastaralá a nebudou použita v aktivní klasifikaci.",
+          "rainviewer_zoom": "Přiblížení radarových dlaždic RainViewer. Vyšší přiblížení nabízí více detailů, ale je náročnější.",
+          "rainviewer_frames": "Počet posledních radarových snímků použitých k určení aktuálního stavu a trendu.",
+          "warning_core_distance_km": "Jádro na úrovni výstrahy v této vzdálenosti může přispět k úrovni výstrahy.",
+          "urgent_core_distance_km": "Jádro na naléhavé úrovni v této vzdálenosti může přispět k naléhavé úrovni."
+        }
+      }
+    }
+  },
+  "system_health": {
+    "info": {
+      "version": "Aktuální verze integrace"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "level": {"name": "Úroveň"},
+      "summary": {"name": "Souhrn"},
+      "max_dbz": {"name": "Nejvyšší dBZ"},
+      "core_distance": {"name": "Vzdálenost bouřkového jádra"},
+      "lightning_distance": {"name": "Vzdálenost blesků"},
+      "frame_age": {"name": "Stáří snímku"},
+      "last_error": {"name": "Poslední chyba"}
+    },
+    "binary_sensor": {
+      "data_stale": {"name": "Zastaralá data"},
+      "active": {"name": "Aktivní"}
+    },
+    "device_tracker": {
+      "storm_core": {"name": "Bouřkové jádro"}
+    }
+  }
+}

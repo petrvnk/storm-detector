@@ -1,14 +1,14 @@
-# Native Home Assistant Lovelace card for Radar Hail Risk.
+# Native Home Assistant Lovelace card for Storm Detector.
 # Uses only default-enabled entities. Adjust entity IDs if Home Assistant generated different names.
 type: entities
-title: Radar Hail Risk
+title: Storm Detector
 show_header_toggle: false
 entities:
-  - entity: sensor.radar_hail_risk_level
+  - entity: sensor.storm_detector_level
     name: Risk level
-  - entity: sensor.radar_hail_risk_summary
+  - entity: sensor.storm_detector_summary
     name: Summary
-  - entity: binary_sensor.radar_hail_risk_active
+  - entity: binary_sensor.storm_detector_active
     name: Active risk
-  - entity: binary_sensor.radar_hail_risk_data_stale
+  - entity: binary_sensor.storm_detector_data_stale
     name: Data stale

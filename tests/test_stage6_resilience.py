@@ -7,14 +7,14 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-from custom_components.radar_hail_risk.config_flow import (
-    RadarHailRiskConfigFlow,
-    RadarHailRiskOptionsFlowHandler,
+from custom_components.storm_detector.config_flow import (
+    StormDetectorConfigFlow,
+    StormDetectorOptionsFlowHandler,
     _clean_optional_entity_ids,
     _has_partial_lightning_config,
     _validate_parameter_ranges,
 )
-from custom_components.radar_hail_risk.const import (
+from custom_components.storm_detector.const import (
     ATTR_DEGRADATION_REASONS,
     ATTR_EVIDENCE_KIND,
     ATTR_LIGHTNING_DIAGNOSTICS,
@@ -36,8 +36,8 @@ from custom_components.radar_hail_risk.const import (
     OPTIONAL_CONF_DEFAULTS,
     RISK_LEVEL_WARNING,
 )
-from custom_components.radar_hail_risk.coordinator import RadarHailRiskCoordinator
-from custom_components.radar_hail_risk.rainviewer import fetch_radar_metadata
+from custom_components.storm_detector.coordinator import StormDetectorCoordinator
+from custom_components.storm_detector.rainviewer import fetch_radar_metadata
 
 
 class FakeHass:
@@ -125,13 +125,13 @@ class FlakySession:
         )
 
 
-class ReadOnlyConfigEntryOptionsFlow(RadarHailRiskOptionsFlowHandler):
+class ReadOnlyConfigEntryOptionsFlow(StormDetectorOptionsFlowHandler):
     @property
     def config_entry(self) -> object:
         return object()
 
 
-class IsolatedConfigFlow(RadarHailRiskConfigFlow):
+class IsolatedConfigFlow(StormDetectorConfigFlow):
     """Exercise flow behavior without requiring a Home Assistant flow manager."""
 
     async def async_set_unique_id(self, *_args: object, **_kwargs: object) -> None:
@@ -170,7 +170,7 @@ def _schema_fields(schema: object) -> set[str]:
 def test_initial_config_schema_only_exposes_simple_location_and_lightning_fields() -> None:
     flow = SimpleNamespace(hass=FakeHass())
 
-    schema = RadarHailRiskConfigFlow._base_schema(flow)  # type: ignore[arg-type]
+    schema = StormDetectorConfigFlow._base_schema(flow)  # type: ignore[arg-type]
 
     assert _schema_fields(schema) == {
         CONF_LOCATION_ENTITY_ID,
@@ -211,16 +211,16 @@ async def test_explicit_radar_only_selection_survives_options_update_and_reload(
     assert setup["data"][CONF_LIGHTNING_COUNTER_ENTITY_ID] is None
 
     entry = SimpleNamespace(entry_id="entry-explicit-radar-only", data=setup["data"], options={})
-    options_flow = RadarHailRiskOptionsFlowHandler(entry)
+    options_flow = StormDetectorOptionsFlowHandler(entry)
     saved = await options_flow.async_step_init({CONF_ANALYSIS_RADIUS_KM: 60})
     assert saved["data"][CONF_LIGHTNING_DISTANCE_ENTITY_ID] is None
     assert saved["data"][CONF_LIGHTNING_COUNTER_ENTITY_ID] is None
 
     entry.options = saved["data"]
-    reloaded = RadarHailRiskCoordinator(
+    reloaded = StormDetectorCoordinator(
         hass,
         None,
-        "Radar Hail Risk",
+        "Storm Detector",
         entry,
         session_factory=FakeSessionContext,
     )
@@ -234,10 +234,10 @@ def test_legacy_entry_without_lightning_keys_retains_runtime_autodetection() -> 
     hass.set_state("sensor.blitzortung_lightning_count", "20", last_updated=now)
     legacy_entry = SimpleNamespace(entry_id="entry-legacy", data={}, options={})
 
-    coordinator = RadarHailRiskCoordinator(
+    coordinator = StormDetectorCoordinator(
         hass,
         None,
-        "Radar Hail Risk",
+        "Storm Detector",
         legacy_entry,
         session_factory=FakeSessionContext,
     )
@@ -255,10 +255,10 @@ def test_options_flow_does_not_assign_home_assistant_config_entry_property() -> 
 
 
 def test_coordinator_still_honors_existing_entry_data_and_options_keys() -> None:
-    coordinator = RadarHailRiskCoordinator(
+    coordinator = StormDetectorCoordinator(
         FakeHass(),
         None,
-        "Radar Hail Risk",
+        "Storm Detector",
         FakeEntry(),
         session_factory=FakeSessionContext,
     )
@@ -270,7 +270,7 @@ def test_coordinator_still_honors_existing_entry_data_and_options_keys() -> None
 
 @pytest.mark.asyncio
 async def test_options_flow_uses_existing_options_as_defaults() -> None:
-    flow = RadarHailRiskOptionsFlowHandler(FakeEntry())
+    flow = StormDetectorOptionsFlowHandler(FakeEntry())
 
     result = await flow.async_step_init()
 
@@ -282,7 +282,7 @@ async def test_options_flow_uses_existing_options_as_defaults() -> None:
 
 @pytest.mark.asyncio
 async def test_options_flow_only_exposes_advanced_fields_and_preserves_hidden_sources() -> None:
-    flow = RadarHailRiskOptionsFlowHandler(FakeEntry())
+    flow = StormDetectorOptionsFlowHandler(FakeEntry())
 
     result = await flow.async_step_init()
 
@@ -327,18 +327,18 @@ def test_parameter_validation_rejects_unsafe_ranges_and_bad_order() -> None:
 
 @pytest.mark.asyncio
 async def test_options_flow_sets_min_core_pixels_with_defaults_and_range() -> None:
-    flow = RadarHailRiskOptionsFlowHandler(FakeEntry())
+    flow = StormDetectorOptionsFlowHandler(FakeEntry())
 
     assert flow._current_options()[CONF_MIN_CORE_PIXELS] == DEFAULT_MIN_CORE_PIXELS
 
     result = await flow.async_step_init({CONF_MIN_CORE_PIXELS: DEFAULT_MIN_CORE_PIXELS + 1})
-    assert result["title"] == "Radar Hail Risk"
+    assert result["title"] == "Storm Detector"
     assert result["data"][CONF_MIN_CORE_PIXELS] == DEFAULT_MIN_CORE_PIXELS + 1
 
 
 @pytest.mark.asyncio
 async def test_options_flow_rejects_invalid_parameter_ranges() -> None:
-    flow = RadarHailRiskOptionsFlowHandler(FakeEntry())
+    flow = StormDetectorOptionsFlowHandler(FakeEntry())
 
     result = await flow.async_step_init({CONF_ANALYSIS_RADIUS_KM: 5})
 
@@ -348,11 +348,11 @@ async def test_options_flow_rejects_invalid_parameter_ranges() -> None:
 
 @pytest.mark.asyncio
 async def test_options_flow_coerces_numeric_strings_before_saving() -> None:
-    flow = RadarHailRiskOptionsFlowHandler(FakeEntry())
+    flow = StormDetectorOptionsFlowHandler(FakeEntry())
 
     result = await flow.async_step_init({CONF_ANALYSIS_RADIUS_KM: "60"})
 
-    assert result["title"] == "Radar Hail Risk"
+    assert result["title"] == "Storm Detector"
     assert result["data"][CONF_ANALYSIS_RADIUS_KM] == 60
 
 
@@ -383,13 +383,13 @@ async def test_coordinator_degrades_to_lightning_when_radar_source_fails() -> No
         raise TimeoutError("rainviewer unavailable")
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _broken_meta,
     ):
-        coordinator = RadarHailRiskCoordinator(
+        coordinator = StormDetectorCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             FakeEntry(),
             session_factory=FakeSessionContext,
         )
@@ -442,19 +442,19 @@ async def test_coordinator_uses_configured_location_entity_as_single_source() ->
         )
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         _fake_analysis,
     ):
-        coordinator = RadarHailRiskCoordinator(
+        coordinator = StormDetectorCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             LocationEntry(),
             session_factory=FakeSessionContext,
         )
@@ -471,10 +471,10 @@ async def test_missing_configured_location_entity_degrades_cleanly() -> None:
     class LocationEntry(FakeEntry):
         options = {CONF_LOCATION_ENTITY_ID: "zone.missing"}
 
-    coordinator = RadarHailRiskCoordinator(
+    coordinator = StormDetectorCoordinator(
         hass,
         None,
-        "Radar Hail Risk",
+        "Storm Detector",
         LocationEntry(),
         session_factory=FakeSessionContext,
     )
@@ -519,19 +519,19 @@ async def test_radar_only_mode_marks_lightning_not_configured_without_degradatio
         )
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata",
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
         _fake_meta,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         _fake_analysis,
     ):
-        coordinator = RadarHailRiskCoordinator(
+        coordinator = StormDetectorCoordinator(
             hass,
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             RadarOnlyEntry(),
             session_factory=FakeSessionContext,
         )

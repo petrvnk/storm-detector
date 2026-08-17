@@ -1,4 +1,4 @@
-"""Config and options flow for radar_hail_risk."""
+"""Config and options flow for storm_detector."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ from .const import (
 from .lightning import autodetect_blitzortung_entities
 
 
-class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
+class StormDetectorConfigFlow(ConfigFlow, domain=DOMAIN):
     """Configuration flow for adding the integration."""
 
     VERSION = 1
@@ -82,7 +82,7 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(title="Radar Hail Risk", data=user_input)
+            return self.async_create_entry(title="Storm Detector", data=user_input)
 
         return self.async_show_form(
             step_id="user",
@@ -90,10 +90,10 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     @staticmethod
-    def async_get_options_flow(config_entry: ConfigEntry) -> "RadarHailRiskOptionsFlowHandler":
+    def async_get_options_flow(config_entry: ConfigEntry) -> "StormDetectorOptionsFlowHandler":
         """Return the options flow handler for this config entry."""
 
-        return RadarHailRiskOptionsFlowHandler(config_entry)
+        return StormDetectorOptionsFlowHandler(config_entry)
 
     def _base_schema(self) -> dict[str, Any]:
         """Return the simple setup schema with optional autodetected lightning sensors."""
@@ -128,7 +128,7 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
         }
 
 
-class RadarHailRiskOptionsFlowHandler(OptionsFlow):
+class StormDetectorOptionsFlowHandler(OptionsFlow):
     """Options flow for post-setup thresholds and lightning source selection."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
@@ -162,7 +162,7 @@ class RadarHailRiskOptionsFlowHandler(OptionsFlow):
             ):
                 if key in current_options:
                     user_input.setdefault(key, current_options[key])
-            return self.async_create_entry(title="Radar Hail Risk", data=user_input)
+            return self.async_create_entry(title="Storm Detector", data=user_input)
 
         current_options = self._current_options()
         schema = self._options_schema(current_options)

@@ -11,15 +11,15 @@ import importlib
 
 def test_stage2_modules_import_without_homeassistant_installed() -> None:
     modules = [
-        "custom_components.radar_hail_risk",
-        "custom_components.radar_hail_risk.config_flow",
-        "custom_components.radar_hail_risk.sensor",
-        "custom_components.radar_hail_risk.binary_sensor",
-        "custom_components.radar_hail_risk.device_tracker",
-        "custom_components.radar_hail_risk.coordinator",
-        "custom_components.radar_hail_risk.lightning",
-        "custom_components.radar_hail_risk.rainviewer",
-        "custom_components.radar_hail_risk.risk",
+        "custom_components.storm_detector",
+        "custom_components.storm_detector.config_flow",
+        "custom_components.storm_detector.sensor",
+        "custom_components.storm_detector.binary_sensor",
+        "custom_components.storm_detector.device_tracker",
+        "custom_components.storm_detector.coordinator",
+        "custom_components.storm_detector.lightning",
+        "custom_components.storm_detector.rainviewer",
+        "custom_components.storm_detector.risk",
     ]
 
     for module in modules:

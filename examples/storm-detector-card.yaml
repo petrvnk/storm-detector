@@ -1,0 +1,15 @@
+# Manual Lovelace example. The integration never edits dashboards automatically.
+type: custom:storm-detector-card
+title: Bouřky v okolí
+# auto (default): live overlay for current radar storm/hail evidence
+# off: always use the schematic view; always: show any valid current radar overlay
+radar_overlay: auto
+level_entity: sensor.storm_detector_level
+summary_entity: sensor.storm_detector_summary
+max_dbz_entity: sensor.storm_detector_max_dbz
+core_distance_entity: sensor.storm_detector_core_distance
+lightning_distance_entity: sensor.storm_detector_lightning_distance
+frame_age_entity: sensor.storm_detector_frame_age
+active_entity: binary_sensor.storm_detector_active
+stale_entity: binary_sensor.storm_detector_data_stale
+home_label: Domov

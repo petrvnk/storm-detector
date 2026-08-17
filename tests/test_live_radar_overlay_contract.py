@@ -8,23 +8,23 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
-from custom_components.radar_hail_risk.const import (
+from custom_components.storm_detector.const import (
     ATTR_RADAR_OVERLAY,
     ATTR_STORM_CORES,
     DEFAULT_STALE_CLEAR_SECONDS,
 )
-from custom_components.radar_hail_risk.coordinator import (
-    RadarHailRiskCoordinator,
+from custom_components.storm_detector.coordinator import (
+    StormDetectorCoordinator,
     _build_radar_overlay,
 )
-from custom_components.radar_hail_risk.rainviewer import (
+from custom_components.storm_detector.rainviewer import (
     _analyse_dbz_grid,
     analyze_recent_frames,
     build_rainviewer_tile_url_template,
 )
-from custom_components.radar_hail_risk.sensor import (
-    RadarHailRiskLevelSensor,
-    RadarHailRiskSummarySensor,
+from custom_components.storm_detector.sensor import (
+    StormDetectorLevelSensor,
+    StormDetectorSummarySensor,
 )
 
 
@@ -118,7 +118,7 @@ def _current_analysis(*, frame_age_seconds: int = 120) -> SimpleNamespace:
 
 async def _coordinator_payload(
     analysis: Any, *, has_color_lookup: bool = True
-) -> tuple[RadarHailRiskCoordinator, dict]:
+) -> tuple[StormDetectorCoordinator, dict]:
     async def _fake_meta(*_args: object, **_kwargs: object) -> dict:
         return {
             "generated": 1_710_000_060,
@@ -134,18 +134,18 @@ async def _coordinator_payload(
         return {(255, 0, 0, 255): 57} if has_color_lookup else {}
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_radar_metadata", _fake_meta
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata", _fake_meta
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.fetch_rainviewer_color_lookup",
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
         _fake_color,
     ), patch(
-        "custom_components.radar_hail_risk.coordinator.analyze_recent_frames",
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
         lambda *_args, **_kwargs: analysis,
     ):
-        coordinator = RadarHailRiskCoordinator(
+        coordinator = StormDetectorCoordinator(
             _FakeHass(),
             None,
-            "Radar Hail Risk",
+            "Storm Detector",
             _FakeEntry(),
             session_factory=_FakeSessionContext,
         )
@@ -162,7 +162,7 @@ async def _aggregate_frame(frame: Any) -> Any:
         },
     }
     with patch(
-        "custom_components.radar_hail_risk.rainviewer.analyze_single_radar_frame",
+        "custom_components.storm_detector.rainviewer.analyze_single_radar_frame",
         AsyncMock(return_value=frame),
     ):
         analysis = await analyze_recent_frames(
@@ -240,7 +240,7 @@ async def test_current_radar_overlay_is_synchronized_selected_and_json_safe() ->
     assert len(json.dumps(overlay)) < 16 * 1024
 
     coordinator.data = payload
-    sensor = RadarHailRiskLevelSensor(coordinator, _FakeEntry())
+    sensor = StormDetectorLevelSensor(coordinator, _FakeEntry())
     sensor._coordinator = coordinator
     assert sensor.extra_state_attributes[ATTR_RADAR_OVERLAY] == overlay
 
@@ -249,8 +249,8 @@ async def test_radar_overlay_is_exposed_only_on_level_sensor() -> None:
     coordinator, payload = await _coordinator_payload(_current_analysis())
     coordinator.data = payload
 
-    level_sensor = RadarHailRiskLevelSensor(coordinator, _FakeEntry())
-    summary_sensor = RadarHailRiskSummarySensor(coordinator, _FakeEntry())
+    level_sensor = StormDetectorLevelSensor(coordinator, _FakeEntry())
+    summary_sensor = StormDetectorSummarySensor(coordinator, _FakeEntry())
 
     assert ATTR_RADAR_OVERLAY in level_sensor.extra_state_attributes
     assert ATTR_RADAR_OVERLAY not in summary_sensor.extra_state_attributes
@@ -571,7 +571,7 @@ def test_oversized_radar_overlay_payload_fails_closed() -> None:
     long_template = "https://tilecache.rainviewer.com/" + "x" * 25000
 
     with patch(
-        "custom_components.radar_hail_risk.coordinator.build_rainviewer_tile_url_template",
+        "custom_components.storm_detector.coordinator.build_rainviewer_tile_url_template",
         return_value=long_template,
     ):
         overlay = _build_radar_overlay(
@@ -667,7 +667,7 @@ async def test_radar_overlay_payload_is_json_serializable() -> None:
     coordinator, payload = await _coordinator_payload(_current_analysis())
 
     coordinator.data = payload
-    level_sensor = RadarHailRiskLevelSensor(coordinator, _FakeEntry())
+    level_sensor = StormDetectorLevelSensor(coordinator, _FakeEntry())
     payload_json = json.dumps(payload, sort_keys=True)
 
     assert json.loads(payload_json)[ATTR_RADAR_OVERLAY] == payload[ATTR_RADAR_OVERLAY]

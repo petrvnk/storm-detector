@@ -113,7 +113,7 @@ class LightningEntityCandidates:
 
 @dataclass(frozen=True)
 class LightningSnapshot:
-    """Normalized lightning state used by the hail-risk evaluator."""
+    """Normalized lightning state used by the storm evaluator."""
 
     distance_km: float | None
     counter: int | None

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from custom_components.radar_hail_risk.rainviewer import (
+from custom_components.storm_detector.rainviewer import (
     AnalyzedFrame,
     _decode_dbz_grid,
     analyze_recent_frames,

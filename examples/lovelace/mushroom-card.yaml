@@ -1,13 +1,13 @@
-# Mushroom card example for Radar Hail Risk.
+# Mushroom card example for Storm Detector.
 # Requires Mushroom cards. Adjust entity IDs if you renamed the integration.
 type: vertical-stack
 cards:
   - type: custom:mushroom-template-card
-    primary: Radar Hail Risk
-    secondary: "{{ states('sensor.radar_hail_risk_summary') }}"
+    primary: Storm Detector
+    secondary: "{{ states('sensor.storm_detector_summary') }}"
     icon: mdi:weather-hail
     icon_color: >-
-      {% set level = states('sensor.radar_hail_risk_level') %}
+      {% set level = states('sensor.storm_detector_level') %}
       {% if level == 'urgent' %}red
       {% elif level == 'warning' %}orange
       {% elif level == 'watch' %}yellow
@@ -16,15 +16,15 @@ cards:
       {% endif %}
     tap_action:
       action: more-info
-      entity: sensor.radar_hail_risk_level
+      entity: sensor.storm_detector_level
   - type: custom:mushroom-chips-card
     chips:
       - type: entity
-        entity: sensor.radar_hail_risk_max_dbz
+        entity: sensor.storm_detector_max_dbz
         icon: mdi:radar
       - type: entity
-        entity: sensor.radar_hail_risk_lightning_distance
+        entity: sensor.storm_detector_lightning_distance
         icon: mdi:flash
       - type: entity
-        entity: binary_sensor.radar_hail_risk_data_stale
+        entity: binary_sensor.storm_detector_data_stale
         icon: mdi:clock-alert-outline

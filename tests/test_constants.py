@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from custom_components.radar_hail_risk.const import (
+from custom_components.storm_detector.const import (
     ATTR_RADAR_OVERLAY,
     CONF_ANALYSIS_RADIUS_KM,
     DATA_KEY_RESULT,
@@ -18,7 +18,7 @@ from custom_components.radar_hail_risk.const import (
 
 
 def test_constants_default_contract() -> None:
-    assert DOMAIN == "radar_hail_risk"
+    assert DOMAIN == "storm_detector"
     assert DEFAULT_ANALYSIS_RADIUS_KM == 80
     assert DEFAULT_CORE_WARNING_DBZ == 55
     assert DEFAULT_URGENT_CORE_DISTANCE_KM == 15

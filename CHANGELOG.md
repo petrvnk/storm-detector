@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.0 - 2026-08-17
+
+### Changed
+
+- Rename the integration, repository surfaces, entities, custom card, and notification
+  blueprint to the frozen Storm Detector public contract.
+- Localize every card-owned visible and accessibility string for Czech with English
+  fallback, and keep current radar or lightning evidence when the other source degrades.
+- Qualify all hail wording as radar-supported possibility and keep official-warning advice.
+
+### Removed
+
+- Remove obsolete private release-candidate bundle and handoff artifacts.
+
 ## 0.0.7 - 2026-07-23
 
 ### Fixed

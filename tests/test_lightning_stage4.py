@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
-from custom_components.radar_hail_risk.lightning import (
+from custom_components.storm_detector.lightning import (
     HomeAssistantLightningSource,
     autodetect_blitzortung_entities,
     build_lightning_snapshot,
