@@ -42,18 +42,18 @@ Ranking:
 
 A notification can be sent only when `rank(current_level) >= rank(minimum_level)` and cooldown allows it.
 
-`evidence_kind` from the level sensor attribute is the primary branch key. Do not parse localized summary text to decide whether to mention hail.
+`evidence_kind` from the level sensor attribute is the primary branch key. Do not parse localized summary text to decide whether to use possible-hail wording.
 
 ## Evidence-based notification contract
 
 | Evidence kind | Allowed notification meaning |
 |---|---|
 | `none` | No attention notification by default. |
-| `radar_storm` | Storm watch/nearby storm, no hail claim. |
-| `lightning_only` | Thunderstorm/lightning nearby; explicitly says hail is not radar-confirmed. |
+| `radar_storm` | Storm watch/nearby storm. |
+| `lightning_only` | Thunderstorm/lightning nearby. |
 | `radar_hail` | Possible radar-supported hail. |
 | `radar_hail_with_lightning` | Possible radar-supported hail plus lightning context. |
-| `unavailable` | Data unavailable/degraded; no storm or hail claim. |
+| `unavailable` | Data unavailable/degraded; no weather-attention claim. |
 
 Lightning-only can produce attention up to `warning`, never `urgent`. `urgent` copy must require current urgent radar-supported possible-hail evidence.
 
@@ -65,7 +65,7 @@ This table freezes the required Czech and English meanings for shared card/notif
 |---|---|---|---|---|
 | Clear | Clear nearby | No strong radar core detected nearby. | Klid v okolí | Silné radarové jádro v okolí nezjištěno. |
 | Storm | Storm watch | Storm activity detected nearby. | Sledování bouřky | V okolí byla detekována bouřková aktivita. |
-| Lightning-only | Thunderstorm / lightning nearby | Thunderstorm / lightning nearby; hail not radar-confirmed. | Blízká bouřka / blesky poblíž | Blízká bouřka / blesky poblíž; kroupy nejsou radarově potvrzené. |
+| Lightning-only | Thunderstorm / lightning nearby | Thunderstorm / lightning nearby. | Blízká bouřka / blesky poblíž | Blízká bouřka / blesky poblíž. |
 | Possible hail | Possible hail nearby | Radar indicates possible hail nearby. | Možné kroupy poblíž | Radar ukazuje možné kroupy poblíž. |
 | Stale | Data stale | Detection data is stale; previous event details are hidden. | Data jsou zastaralá | Detekční data jsou zastaralá; předchozí hodnoty jsou skryté. |
 | Degraded | Detection degraded | Some data sources are unavailable; use only current trusted evidence. | Detekce je omezená | Některé zdroje dat nejsou dostupné; používejte jen aktuální důvěryhodné údaje. |
@@ -81,17 +81,17 @@ Urgent radar-supported possible hail may use:
 ## Recommended notification branch behavior
 
 - `radar_storm` + `watch`: title `Storm watch` / `Sledování bouřky`.
-- `lightning_only`: title `Thunderstorm / lightning nearby` / `Blízká bouřka / blesky poblíž`; message must include hail-not-radar-confirmed wording.
+- `lightning_only`: title `Thunderstorm / lightning nearby` / `Blízká bouřka / blesky poblíž`; message must use only thunderstorm/lightning wording and must not add radar-specific attention text.
 - `radar_hail` + `warning`: title `Possible hail nearby` / `Možné kroupy poblíž`.
 - `radar_hail_with_lightning` + `warning`: possible-hail title; message adds lightning also nearby.
 - `radar_hail` + `urgent`: urgent possible-hail title.
 - `radar_hail_with_lightning` + `urgent`: urgent possible-hail title; message adds lightning also nearby.
-- Unknown or missing `evidence_kind`: use degraded/unavailable weather-risk copy without hail wording.
+- Unknown or missing `evidence_kind`: use degraded/unavailable weather-risk copy without unsupported evidence claims.
 
 ## Safety and stale/degraded behavior
 
 - Clear states normally do not notify; if a user builds a clear notification, it must not imply all weather is safe.
-- Stale/unavailable states hide old storm, hail, distance, dBZ, and ETA details.
+- Stale/unavailable states hide old attention, distance, dBZ, and ETA details.
 - Degraded source states can notify only about degraded detection unless there is separate current trusted evidence.
 - Notification text must never say confirmed hail, observed hail, official warning, calibrated probability, or guaranteed arrival.
 - The notification is advisory and must leave official weather warnings and local safety procedures as the authority.

@@ -14,6 +14,8 @@ Scope: card behavior, copy, accessibility, and RainViewer attribution. This docu
 | Default title, Czech | `Bouřky v okolí` |
 | Default overlay mode | `auto` |
 
+The card chooses its default title from `hass.language`: Czech (`Bouřky v okolí`) for `cs`, English (`Storms nearby`) otherwise. A configured explicit `title` always overrides the localized default.
+
 Default entities:
 
 - `sensor.storm_detector_level`
@@ -29,19 +31,20 @@ Default entities:
 - Status first: the first visible message must answer whether the user should pay attention now.
 - Progressive disclosure: clear/unavailable states remain compact; radar facts appear only when current evidence makes them useful.
 - Practical, not diagnostic: show distance, dBZ, area, motion, ETA, lightning distance, and source freshness when relevant; hide confidence internals and raw diagnostic markers by default.
-- Truthful evidence wording: lightning-only never claims hail; possible-hail wording requires `radar_hail` or `radar_hail_with_lightning`.
+- Truthful evidence wording: `radar_storm` and `lightning_only` use generic storm/lightning wording.
+- Possible-hail wording requires `radar_hail` or `radar_hail_with_lightning`.
 - Fail closed: stale/degraded/unavailable data hides old event details instead of presenting them as current.
-- No safety overclaim: card copy must remind users that radar activity is not confirmed hail and official warnings remain authoritative.
+- No safety overclaim: generic storm/lightning copy points to official warnings using generic weather/storm language; hail-specific safety copy appears only for current radar-supported possible-hail evidence.
 
 ## Display modes
 
 | Mode | Inputs | Layout | Required behavior |
 |---|---|---|---|
 | Clear | `level: none`, `evidence_kind: none` | Compact | Show calm/clear copy; no radar, dBZ, ETA, confidence, or diagnostics. |
-| Storm | `evidence_kind: radar_storm` | Expanded when current radar facts exist | Show nearby storm core, distance, dBZ/area if current, movement/ETA if reliable. No hail claim. |
-| Lightning-only | `evidence_kind: lightning_only` | Expanded lightning state | Show lightning context and explicit no-radar-hail confirmation. Hide radar-hail safety note unless radar facts are also shown. |
+| Storm | `evidence_kind: radar_storm` | Expanded when current radar facts exist | Show nearby storm core, distance, dBZ/area if current, movement/ETA if reliable. |
+| Lightning-only | `evidence_kind: lightning_only` | Expanded lightning state | Show current lightning context with storm/lightning wording only; hide radar-specific facts unless current radar evidence is also shown. |
 | Possible hail | `evidence_kind: radar_hail` or `radar_hail_with_lightning` | Expanded attention state | Show possible radar-supported hail, selected core distance, dBZ, area, motion/ETA, and lightning context when current. |
-| Stale | stale flag or stale source gating | Compact unavailable-style | Hide previous storm/hail details; show stale/current-data warning. |
+| Stale | stale flag or stale source gating | Compact unavailable-style | Hide previous attention details; show stale/current-data warning. |
 | Degraded | source degraded but still safe to render partial state | Compact or expanded with caution | Show the current valid state plus degraded-source caution; never invent missing source values. |
 | Unavailable | `level: unavailable` or invalid state | Compact unavailable | Show detection unavailable; no previous event details. |
 
@@ -51,7 +54,7 @@ Default entities:
 |---|---|---|---|---|
 | Clear | Clear nearby | No strong radar core detected nearby. | Klid v okolí | Silné radarové jádro v okolí nezjištěno. |
 | Storm | Storm nearby | Radar detected a storm core near the monitored location. | Bouřka v okolí | Radar zachytil bouřkové jádro v okolí. |
-| Lightning-only | Lightning nearby | Current lightning activity is nearby; hail is not radar-confirmed. | Blesky poblíž | V okolí byla zaznamenána aktuální blesková aktivita; kroupy nejsou radarově potvrzené. |
+| Lightning-only | Lightning nearby | Current lightning activity is near the monitored location. | Blesky poblíž | V okolí byla zaznamenána aktuální blesková aktivita. |
 | Possible hail | Possible hail nearby | Radar indicates a strong core that may support hail. | Možné kroupy poblíž | Radar ukazuje silné jádro s možností krup. |
 | Stale | Data is stale | Detection data is too old; previous event details are hidden. | Data jsou zastaralá | Detekční data jsou příliš stará; předchozí hodnoty jsou skryté. |
 | Degraded | Detection degraded | Some data sources are unavailable; only current trusted evidence is shown. | Detekce je omezená | Některé zdroje dat nejsou dostupné; zobrazují se jen aktuální důvěryhodné údaje. |
@@ -111,9 +114,16 @@ The attribution must not be hidden behind hover, collapsed diagnostics, or an ic
 
 ## Safety copy
 
-Expanded radar-supported storm/hail modes must include or make available this safety meaning:
+Generic storm or lightning-only modes must include or make available this safety meaning:
+
+- English: `Follow official weather warnings.`
+- Czech: `Sledujte oficiální výstrahy.`
+
+This generic safety copy must use only storm/weather language.
+
+Expanded radar-supported possible-hail modes must include or make available this hail-specific safety meaning only when current `radar_hail` or `radar_hail_with_lightning` evidence is rendered:
 
 - English: `Radar activity is not confirmed hail; follow official warnings.`
 - Czech: `Radarová aktivita není potvrzené krupobití; sledujte oficiální výstrahy.`
 
-The copy may be shortened in tight spaces only if it preserves both ideas: radar is not confirmed hail, and official warnings are authoritative.
+The copy may be shortened in tight spaces only if generic storm/lightning states still preserve official-warning authority using storm/weather language, and possible-hail states still preserve both ideas: radar is not confirmed hail, and official warnings are authoritative.

@@ -48,8 +48,8 @@ The level tells how much attention is needed. `evidence_kind` tells why.
 | Evidence kind | Meaning | Hail wording allowed? |
 |---|---|---|
 | `none` | No current qualifying evidence | No. |
-| `radar_storm` | Current radar storm core evidence, below possible-hail claim threshold | No. Use storm wording. |
-| `lightning_only` | Current lightning nearby without current radar-supported hail evidence | No. Say thunderstorm/lightning; explicitly avoid hail claims. |
+| `radar_storm` | Current radar storm core evidence assigned to the generic storm branch | No. Use storm wording. |
+| `lightning_only` | Current nearby lightning signal when no current qualifying radar evidence contributes | No. Say thunderstorm/lightning only. |
 | `radar_hail` | Current radar evidence supports possible hail | Yes, only as possible radar-supported hail. |
 | `radar_hail_with_lightning` | Current radar-supported possible hail plus current nearby lightning | Yes, only as possible radar-supported hail with lightning context. |
 | `unavailable` | Evidence cannot be trusted | No. |
@@ -62,7 +62,7 @@ The level tells how much attention is needed. `evidence_kind` tells why.
 - Stale lightning data is gated out of lightning classification.
 - Stale source data may set the data-stale binary sensor even if another current source still produces a valid attention state.
 - A stale or unusable radar source with no current contributing lightning must fail closed to `unavailable`, not false-clear `none`.
-- A current nearby lightning signal while radar is stale/degraded may produce `warning` with `evidence_kind: lightning_only`, never hail and never urgent.
+- A current nearby lightning signal while radar is stale/degraded may produce `warning` with `evidence_kind: lightning_only`; it must use the lightning-only copy branch and never produce `urgent`.
 - `source_status` is diagnostic context. It can explain degraded radar/lightning/location inputs, but it must not be exposed as scary raw diagnostic text in the primary summary.
 
 ## Safety limitations
@@ -70,6 +70,10 @@ The level tells how much attention is needed. `evidence_kind` tells why.
 Storm Detector is not an official warning source. It does not detect hail on the ground, does not provide a calibrated hail probability, and must not be the only input for safety-critical automation.
 
 Radar and lightning feeds can be delayed, unavailable, blocked, inaccurate, or spatially imprecise. Users must follow official weather warnings and local safety procedures as the authority.
+
+Generic storm and lightning-only safety copy may point users to official warnings and local safety procedures. It must use only generic weather/storm language.
+
+Hail-specific safety copy is allowed only when current `radar_hail` or `radar_hail_with_lightning` evidence is rendered.
 
 ## Rename refactor guardrails
 
@@ -92,8 +96,7 @@ All runtime behavior changes must be proposed as separate, explicitly approved f
 - Minimum journey: install, choose location, optionally choose lightning sensors, receive state, optionally enable notifications.
 - User-facing copy must distinguish storm, lightning-only, possible hail, stale/degraded, and unavailable states.
 - RainViewer attribution remains visible wherever live radar imagery is shown.
-
-## Open questions
-
-- Whether Czech integration translations should be added in Phase 4 alongside English translations, or whether Czech remains limited to card and notification copy until a later localization pass.
-- Whether the default card title should ship as English (`Storms nearby`) or preserve the current Czech-friendly default (`Bouřky v okolí`) for Petr's live deployment. The public tag/resource/entity identifiers are frozen either way.
+- Phase 4 will add Czech Home Assistant integration translations alongside English translations.
+- The card default title localizes from `hass.language`: Czech (`Bouřky v okolí`) for `cs`, English (`Storms nearby`) otherwise. An explicit user-configured title always overrides the localized default.
+- Hail wording and hail-specific safety copy are reserved for current `radar_hail` or `radar_hail_with_lightning` evidence.
+- Generic `radar_storm` and `lightning_only` user-facing copy must use storm/lightning wording only.

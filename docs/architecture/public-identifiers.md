@@ -150,5 +150,5 @@ Do not provide compatibility aliases, migration shims, duplicate services, dupli
 
 - Use `git mv` for package, card, blueprint, and examples so history remains traceable.
 - Update tests before code where deterministic behavior is affected by public identifiers.
-- Public identifier tests should fail on old product/domain strings while allowlisting legitimate evidence terms (`radar_hail`, `radar_hail_with_lightning`) and safety copy about possible hail.
+- Public identifier tests should fail on old product/domain strings while allowlisting only legitimate radar-supported possible-hail evidence terms (`radar_hail`, `radar_hail_with_lightning`) and hail-specific safety copy in current possible-hail contexts.
 - Preserve all thresholds and algorithm behavior during the rename.
