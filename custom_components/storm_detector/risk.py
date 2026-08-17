@@ -97,7 +97,7 @@ class RiskLevelHysteresis:
 
 
 @dataclass(frozen=True)
-class HailRiskResult:
+class StormRiskResult:
     """Structured risk output contract used by the coordinator entities."""
 
     level: RiskLevel
@@ -242,7 +242,7 @@ def build_summary(
         return "Risk unavailable"
 
     if evidence_kind == EVIDENCE_KIND_LIGHTNING_ONLY:
-        return "Thunderstorm/lightning nearby; hail not confirmed"
+        return "Thunderstorm / lightning nearby"
 
     if evidence_kind in {EVIDENCE_KIND_RADAR_HAIL, EVIDENCE_KIND_RADAR_HAIL_WITH_LIGHTNING}:
         if level == RISK_LEVEL_URGENT:

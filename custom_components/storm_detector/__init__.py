@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .const import COORDINATOR_KEY, DATA_KEY_RESULT, DOMAIN, INTEGRATION_NAME, PLATFORMS
-from .coordinator import RadarHailRiskCoordinator
+from .coordinator import StormDetectorCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault(entry.entry_id, {})
-    coordinator = RadarHailRiskCoordinator(hass, _LOGGER, INTEGRATION_NAME, entry)
+    coordinator = StormDetectorCoordinator(hass, _LOGGER, INTEGRATION_NAME, entry)
     hass.data[DOMAIN][entry.entry_id][COORDINATOR_KEY] = coordinator
     hass.data[DOMAIN][entry.entry_id][DATA_KEY_RESULT] = coordinator
 

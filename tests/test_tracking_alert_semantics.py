@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from custom_components.storm_detector.binary_sensor import RadarHailRiskActiveBinarySensor
+from custom_components.storm_detector.binary_sensor import StormDetectorActiveBinarySensor
 from custom_components.storm_detector.const import (
     EVIDENCE_KIND_LIGHTNING_ONLY,
     EVIDENCE_KIND_NONE,
@@ -15,9 +15,40 @@ from custom_components.storm_detector.const import (
 from custom_components.storm_detector.rainviewer import AnalyzedFrame, _motion_from_frame_results
 from custom_components.storm_detector.risk import (
     RiskLevelHysteresis,
+    build_summary,
     classify_from_thresholds,
     evidence_kind_for_levels,
 )
+
+
+def test_lightning_only_summary_never_uses_hail_wording() -> None:
+    summary = build_summary(
+        level="warning",
+        evidence_kind="lightning_only",
+        max_dbz=None,
+        core_distance_km=None,
+        lightning_distance_km=4.0,
+        frame_age_seconds=None,
+        selected_core_threshold_dbz=None,
+    )
+
+    assert summary == "Thunderstorm / lightning nearby"
+    assert "hail" not in summary.lower()
+
+
+def test_radar_storm_summary_never_uses_hail_wording() -> None:
+    summary = build_summary(
+        level="watch",
+        evidence_kind="radar_storm",
+        max_dbz=48,
+        core_distance_km=12.0,
+        lightning_distance_km=None,
+        frame_age_seconds=20,
+        selected_core_threshold_dbz=45,
+    )
+
+    assert summary == "Storm activity detected nearby"
+    assert "hail" not in summary.lower()
 
 
 def _frame(
@@ -318,7 +349,7 @@ def test_active_sensor_requires_a_current_contributing_signal() -> None:
     coordinator = SimpleNamespace(
         data={"level": RISK_LEVEL_WARNING, "has_current_signal": False}
     )
-    sensor = RadarHailRiskActiveBinarySensor(coordinator)
+    sensor = StormDetectorActiveBinarySensor(coordinator)
     sensor._coordinator = coordinator
 
     assert sensor.is_on is False

@@ -18,9 +18,94 @@ ConfigEntryState = pytest.importorskip("homeassistant.config_entries").ConfigEnt
 async_get_clientsession = pytest.importorskip(
     "homeassistant.helpers.aiohttp_client"
 ).async_get_clientsession
+entity_registry = pytest.importorskip("homeassistant.helpers.entity_registry")
 MockConfigEntry = pytest.importorskip(
     "pytest_homeassistant_custom_component.common"
 ).MockConfigEntry
+
+
+async def test_static_card_url_is_registered_once_with_real_ha_router(
+    hass, hass_client
+) -> None:
+    """Register the bundled card on the real HA HTTP application, idempotently."""
+
+    import custom_components.storm_detector as integration
+    from homeassistant.setup import async_setup_component
+
+    assert await async_setup_component(hass, "http", {"http": {}})
+    client = await hass_client()
+    await integration.async_setup(hass, {})
+    first_registration = {
+        id(route.resource)
+        for route in hass.http.app.router.routes()
+        if route.resource.canonical.startswith("/storm_detector")
+    }
+    await integration.async_setup(hass, {})
+
+    canonical = "/storm_detector/storm-detector-card.js"
+    matching = [
+        route
+        for route in hass.http.app.router.routes()
+        if route.resource.canonical.startswith("/storm_detector")
+    ]
+    assert first_registration
+    assert {id(route.resource) for route in matching} == first_registration
+    response = await client.get(canonical)
+    assert response.status == 200
+    assert "storm-detector-card" in await response.text()
+
+
+async def test_clean_install_registers_every_frozen_entity_id(
+    hass, hass_client, monkeypatch
+) -> None:
+    """Create all default and diagnostic entities through HA's entity platforms."""
+
+    import custom_components.storm_detector.coordinator as coordinator_module
+    from homeassistant.setup import async_setup_component
+
+    assert await async_setup_component(hass, "http", {"http": {}})
+    await hass_client()
+
+    async def fake_metadata(_session: object) -> dict[str, object]:
+        return {
+            "radar": {"past": [{"time": 1_710_000_000, "path": "/frame"}]},
+            "host": "https://tilecache.rainviewer.com",
+        }
+
+    async def fake_colors(_session: object) -> dict[tuple[int, int, int, int], int]:
+        return {(255, 255, 255, 255): 0}
+
+    async def fake_analysis(*_args: object, **_kwargs: object) -> SimpleNamespace:
+        return _analysis_payload()
+
+    monkeypatch.setattr(coordinator_module, "fetch_radar_metadata", fake_metadata)
+    monkeypatch.setattr(coordinator_module, "fetch_rainviewer_color_lookup", fake_colors)
+    monkeypatch.setattr(coordinator_module, "analyze_recent_frames", fake_analysis)
+
+    entry = MockConfigEntry(domain=DOMAIN, title="Storm Detector", data={}, options={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id) is True
+    await hass.async_block_till_done()
+
+    registry = entity_registry.async_get(hass)
+    frozen = {
+        "sensor.storm_detector_level",
+        "sensor.storm_detector_summary",
+        "binary_sensor.storm_detector_active",
+        "binary_sensor.storm_detector_data_stale",
+        "sensor.storm_detector_max_dbz",
+        "sensor.storm_detector_core_distance",
+        "sensor.storm_detector_lightning_distance",
+        "sensor.storm_detector_frame_age",
+        "sensor.storm_detector_last_error",
+        "device_tracker.storm_detector_storm_core",
+    }
+    assert frozen <= set(registry.entities)
+
+    for entity_id in frozen:
+        entry = registry.async_get(entity_id)
+        assert entry is not None
+        assert entry.platform == DOMAIN
 
 
 def _analysis_payload() -> SimpleNamespace:
@@ -69,7 +154,7 @@ def test_coordinator_omits_config_entry_for_ha_2024_10_signature(monkeypatch) ->
         options={},
     )
 
-    coordinator = coordinator_module.RadarHailRiskCoordinator(
+    coordinator = coordinator_module.StormDetectorCoordinator(
         hass,
         logger,
         "Storm Detector",

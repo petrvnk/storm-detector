@@ -55,7 +55,7 @@ from .const import (
 from .lightning import autodetect_blitzortung_entities
 
 
-class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
+class StormDetectorConfigFlow(ConfigFlow, domain=DOMAIN):
     """Configuration flow for adding the integration."""
 
     VERSION = 1
@@ -90,10 +90,10 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     @staticmethod
-    def async_get_options_flow(config_entry: ConfigEntry) -> "RadarHailRiskOptionsFlowHandler":
+    def async_get_options_flow(config_entry: ConfigEntry) -> "StormDetectorOptionsFlowHandler":
         """Return the options flow handler for this config entry."""
 
-        return RadarHailRiskOptionsFlowHandler(config_entry)
+        return StormDetectorOptionsFlowHandler(config_entry)
 
     def _base_schema(self) -> dict[str, Any]:
         """Return the simple setup schema with optional autodetected lightning sensors."""
@@ -128,7 +128,7 @@ class RadarHailRiskConfigFlow(ConfigFlow, domain=DOMAIN):
         }
 
 
-class RadarHailRiskOptionsFlowHandler(OptionsFlow):
+class StormDetectorOptionsFlowHandler(OptionsFlow):
     """Options flow for post-setup thresholds and lightning source selection."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:

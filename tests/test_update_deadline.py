@@ -16,7 +16,7 @@ from custom_components.storm_detector.const import (
     ATTR_SOURCE_STATUS,
     DOMAIN,
 )
-from custom_components.storm_detector.coordinator import RadarHailRiskCoordinator
+from custom_components.storm_detector.coordinator import StormDetectorCoordinator
 from custom_components.storm_detector.rainviewer import (
     MAX_PARALLEL_TILE_FETCHES,
     analyze_single_radar_frame,
@@ -146,7 +146,7 @@ async def test_frame_analysis_deadline_cancels_and_publishes_timeout_diagnostic(
     monkeypatch.setattr(coordinator_module.asyncio, "wait_for", expire_after_start)
 
     entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
-    coordinator = RadarHailRiskCoordinator(hass, None, "Storm Detector", entry)
+    coordinator = StormDetectorCoordinator(hass, None, "Storm Detector", entry)
     payload = await coordinator._async_update_data()
 
     assert observed_timeouts == [coordinator_module.RADAR_ANALYSIS_DEADLINE_SECONDS]

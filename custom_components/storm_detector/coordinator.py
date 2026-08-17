@@ -1,4 +1,4 @@
-"""DataUpdateCoordinator for radar/lighting risk evaluation."""
+"""DataUpdateCoordinator for radar and lightning storm evaluation."""
 
 from __future__ import annotations
 
@@ -112,8 +112,8 @@ from .rainviewer import (
     fetch_rainviewer_color_lookup,
 )
 from .risk import (
-    HailRiskResult,
     RiskLevelHysteresis,
+    StormRiskResult,
     build_summary,
     classify_from_thresholds,
     evidence_kind_for_levels,
@@ -762,7 +762,7 @@ def _build_radar_overlay(
     return base
 
 
-class RadarHailRiskCoordinator(DataUpdateCoordinator):
+class StormDetectorCoordinator(DataUpdateCoordinator):
     """Polls RainViewer and optional lightning sensor states and publishes risk."""
 
     def __init__(
@@ -836,7 +836,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
             return 0.0, 0.0, "hass.config", "invalid_hass_location"
 
     def _payload(
-        self, result: HailRiskResult, *, extras: dict[str, Any] | None = None
+        self, result: StormRiskResult, *, extras: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         payload = asdict(result)
         # Keep both list-like attrs for easier template consumption.
@@ -969,7 +969,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
         location_lat, location_lon, location_source, location_error = self._location()
         if location_error is not None:
             return self._payload(
-                HailRiskResult(
+                StormRiskResult(
                     level=RISK_LEVEL_UNAVAILABLE,
                     summary="Location source is not configured or has no coordinates",
                     evidence_kind=EVIDENCE_KIND_UNAVAILABLE,
@@ -994,7 +994,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                 close_session = False
             elif aiohttp is None:
                 return self._payload(
-                    HailRiskResult(
+                    StormRiskResult(
                         level=RISK_LEVEL_UNAVAILABLE,
                         summary="aiohttp is not available in this environment",
                         evidence_kind=EVIDENCE_KIND_UNAVAILABLE,
@@ -1278,6 +1278,39 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                         is_stale=lightning_stale,
                     ),
                 }
+                if source_status["radar"] != "ok":
+                    max_dbz = None
+                    max_core_dbz = None
+                    core50_distance = None
+                    core55_distance = None
+                    core60_distance = None
+                    watch_distance_km = None
+                    warning_distance_km = None
+                    urgent_distance_km = None
+                    selected_threshold = None
+                    selected_distance = None
+                    selected_lat = None
+                    selected_lon = None
+                    selected_area = None
+                    selected_pixels = None
+                    selected_max_dbz = None
+                    storm_cores = ()
+                    core_count = None
+                    motion_bearing = None
+                    motion_speed = None
+                    approaching = None
+                    eta = None
+                    dbz_trend = None
+                    distance_trend = None
+                if source_status["lightning"] != "ok":
+                    lightning_distance_km = None
+                    lightning_azimuth_degrees = None
+                    lightning_latitude = None
+                    lightning_longitude = None
+                    lightning_core_distance_km = None
+                    lightning_counter_delta = None
+                    lightning_triggered = False
+                    lightning_new_strike = False
                 radar_overlay = _build_radar_overlay(
                     analysis,
                     radar_status=source_status["radar"],
@@ -1301,7 +1334,13 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     radar_diagnostics=radar_diagnostics,
                     lightning_diagnostics=tuple(lightning_diagnostics),
                 )
-                source_data_stale = bool(radar_stale or analysis is None)
+                source_data_stale = bool(
+                    radar_stale
+                    or analysis is None
+                    or lightning_stale
+                    or source_status["radar"] == "degraded"
+                    or source_status["lightning"] == "degraded"
+                )
                 warning_lightning_distance_km = normalize_optional_int(
                     cfg.get(CONF_WARNING_LIGHTNING_DISTANCE_KM),
                     default=DEFAULT_WARNING_LIGHTNING_DISTANCE_KM,
@@ -1311,9 +1350,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                     default=DEFAULT_URGENT_LIGHTNING_DISTANCE_KM,
                 )
 
-                level_max_dbz = (
-                    None if radar_stale or analysis is None else (max_core_dbz or 0)
-                )
+                level_max_dbz = None if source_status["radar"] != "ok" else (max_core_dbz or 0)
 
                 candidate_level = classify_from_thresholds(
                     max_dbz=level_max_dbz,
@@ -1410,7 +1447,7 @@ class RadarHailRiskCoordinator(DataUpdateCoordinator):
                 )
 
                 return self._payload(
-                    HailRiskResult(
+                    StormRiskResult(
                         level=level,
                         summary=summary,
                         evidence_kind=evidence_kind,
@@ -1523,6 +1560,8 @@ def _lightning_source_status(
     diagnostics_tuple = tuple(diagnostics)
     if not snapshot_configured:
         return "not_configured"
+    if is_stale:
+        return "stale"
     non_actionable = {
         "lightning_not_configured",
         "lightning_strike_delta",
@@ -1534,11 +1573,6 @@ def _lightning_source_status(
     actionable = [item for item in diagnostics_tuple if item not in non_actionable]
     if actionable:
         return "degraded"
-    if is_stale:
-        # Blitzortung-compatible event sensors normally retain the last strike
-        # until another strike arrives. An old timestamp therefore means there
-        # is no current lightning context, not that the source is broken.
-        return "idle"
     return "ok"
 
 

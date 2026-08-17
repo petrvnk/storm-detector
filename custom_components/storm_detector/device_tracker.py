@@ -1,4 +1,4 @@
-"""Device tracker for selected hail-risk core position."""
+"""Device tracker for the selected storm-core position."""
 
 from __future__ import annotations
 
@@ -35,14 +35,14 @@ async def async_setup_entry(hass: Any, config_entry: ConfigEntry, async_add_enti
     """Register core tracker entity."""
 
     coordinator = hass.data[DOMAIN][config_entry.entry_id][DATA_KEY_RESULT]
-    async_add_entities([RadarHailStormCoreTracker(coordinator, config_entry)])
+    async_add_entities([StormDetectorStormCoreTracker(coordinator, config_entry)])
 
 
-class RadarHailStormCoreTracker(CoordinatorEntity[Any], TrackerEntity):
-    """Expose the nearest detected hail core position for map rendering."""
+class StormDetectorStormCoreTracker(CoordinatorEntity[Any], TrackerEntity):
+    """Expose the selected storm core position for map rendering."""
 
     _attr_has_entity_name = True
-    _attr_name = "Storm Core"
+    _attr_translation_key = "storm_core"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
 
