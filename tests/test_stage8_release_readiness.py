@@ -76,7 +76,7 @@ def test_notification_blueprint_includes_minimal_entities_and_cooldown() -> None
     ).read_text(encoding="utf-8")
 
     assert "storm_level_sensor" in blueprint
-    assert "storm_summary_sensor" in blueprint
+    assert "storm_summary_sensor" not in blueprint
     assert "cooldown_minutes" in blueprint
     assert "message_text" in blueprint
 
@@ -101,3 +101,17 @@ def test_release_checklist_tag_matches_manifest_version() -> None:
 
     assert f"`v{manifest['version']}`" in checklist
     assert "`v0.0.1`" not in checklist
+
+
+def test_bug_report_sets_safe_diagnostics_expectations() -> None:
+    template = (
+        ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "omit" in template
+    assert "identifying config" in template
+    assert "location details" in template
+    assert "review" in template
+    assert "private entity names" in template
+    assert "addresses" in template
+    assert "log details" in template

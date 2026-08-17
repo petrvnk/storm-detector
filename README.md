@@ -120,7 +120,6 @@ blueprints/automation/storm_detector/storm_notification.yaml
 Import it into Home Assistant, create an automation, and select:
 
 - the level sensor;
-- the optional summary sensor;
 - a notify service;
 - minimum level (`watch`, `warning`, or `urgent`);
 - Czech or English titles;

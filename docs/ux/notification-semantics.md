@@ -11,20 +11,23 @@ Scope: optional Home Assistant notification blueprint, evidence-based text, and 
 | Blueprint name | `Storm Detector notification` |
 | Notification tag | `storm_detector` |
 | Source sensor | `sensor.storm_detector_level` |
-| Optional summary sensor | `sensor.storm_detector_summary` |
 
 The blueprint is opt-in. Storm Detector must not create automations, helpers, dashboards, or notification targets automatically.
 
 ## Required blueprint inputs
 
 - `storm_level_sensor`: level sensor exposing `none`, `watch`, `warning`, `urgent`, or `unavailable`.
-- `storm_summary_sensor`: optional summary sensor for body text fallback.
 - `notify_service`: Home Assistant notify service.
 - `minimum_level`: `watch`, `warning`, or `urgent`.
 - `title_language`: `en` or `cs`.
 - `cooldown_minutes`: minimum time between repeated notifications from the same automation.
 
 The blueprint must not require max-dBZ, core-distance, lightning-distance, or diagnostic sensors as user inputs.
+
+Contract correction: `storm_summary_sensor` was removed. Coordinator summaries are
+English-only free-form text, so they cannot be safely matched to effective evidence
+or the selected notification language without parsing user-facing text. Notification
+bodies therefore remain fixed by the evidence and language contract below.
 
 ## Trigger and ranking semantics
 

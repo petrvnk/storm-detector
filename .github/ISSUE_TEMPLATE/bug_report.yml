@@ -32,5 +32,5 @@ body:
     id: diagnostics
     attributes:
       label: Diagnostics
-      description: Include relevant entity states/attributes, logs, and whether RainViewer/Blitzortung data was stale.
+      description: Generated diagnostics omit identifying config and location details. Still review attachments and remove private entity names, addresses, and log details before posting.
       render: text

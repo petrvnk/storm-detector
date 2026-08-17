@@ -12,7 +12,6 @@ Template = homeassistant_template.Template
 
 ROOT = Path(__file__).resolve().parents[1]
 BLUEPRINT = ROOT / "blueprints" / "automation" / "storm_detector" / "storm_notification.yaml"
-ENGLISH_SUMMARY = "English coordinator summary: hail warning"
 
 
 def _blueprint_variable_template(name: str) -> str:
@@ -76,14 +75,11 @@ def test_blueprint_message_renders_by_language_and_evidence(
             "evidence_kind": evidence_kind,
             "effective_evidence": evidence_kind,
             "degraded_sources": False,
-            "summary_text": ENGLISH_SUMMARY,
             "detail_text": "",
         },
     )
 
     assert normalized == expected
-    if language == "cs":
-        assert ENGLISH_SUMMARY not in normalized
     if evidence_kind in {None, "unknown"}:
         assert "hail" not in normalized.lower()
         assert "kroup" not in normalized.lower()
@@ -183,3 +179,10 @@ def test_blueprint_reduces_aggregate_stale_partial_sources_to_current_evidence(
         _render_variable(hass, "message_text", rendered_variables)
         == expected_message
     )
+
+
+def test_blueprint_has_no_free_form_summary_input_or_variable() -> None:
+    text = BLUEPRINT.read_text(encoding="utf-8")
+
+    assert "storm_summary_sensor" not in text
+    assert "summary_text" not in text

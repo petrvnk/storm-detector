@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 BLUEPRINT = ROOT / "blueprints" / "automation" / "storm_detector" / "storm_notification.yaml"
+NOTIFICATION_SEMANTICS = ROOT / "docs" / "ux" / "notification-semantics.md"
 
 
 def test_readme_contains_manual_dashboard_snippets_and_no_auto_write_claims() -> None:
@@ -33,7 +34,7 @@ def test_notification_blueprint_is_opt_in_and_has_required_inputs() -> None:
 
     assert "domain: automation" in text
     assert "storm_level_sensor:" in text
-    assert "storm_summary_sensor:" in text
+    assert "storm_summary_sensor:" not in text
     assert "level_entity:" not in text
     assert "summary_entity:" not in text
     assert "notify_service:" in text
@@ -43,9 +44,8 @@ def test_notification_blueprint_is_opt_in_and_has_required_inputs() -> None:
     assert "max_dbz_sensor:" not in text
     assert "lightning_distance_sensor:" not in text
     assert "default: sensor.storm_detector_level" in text
-    assert "default: sensor.storm_detector_summary" in text
     assert "!input storm_level_sensor" in text
-    assert "!input storm_summary_sensor" in text
+    assert "!input storm_summary_sensor" not in text
     assert "!input notify_service" in text
     assert "tag: storm_detector" in text
     assert "https://github.com/petrvnk/storm-detector/blob/main/blueprints/automation/storm_detector/storm_notification.yaml" in text
@@ -58,13 +58,13 @@ def test_readme_blueprint_instructions_match_minimal_blueprint_inputs() -> None:
 
     for input_name in (
         "storm_level_sensor",
-        "storm_summary_sensor",
         "notify_service",
         "minimum_level",
         "title_language",
         "cooldown_minutes",
     ):
         assert f"{input_name}:" in blueprint
+    assert "storm_summary_sensor" not in readme
     assert "optional max dBZ sensor" not in readme
     assert "optional lightning distance sensor" not in readme
 
@@ -97,3 +97,13 @@ def test_blueprint_branches_titles_and_messages_on_evidence_kind() -> None:
     assert "Detekce není dostupná" in text
     assert "Detection degraded" in text
     assert "Detekce je omezená" in text
+
+
+def test_notification_contract_explains_summary_input_correction() -> None:
+    text = NOTIFICATION_SEMANTICS.read_text(encoding="utf-8")
+
+    assert text.count("storm_summary_sensor") == 1
+    assert "English-only" in text
+    assert "free-form" in text
+    assert "evidence" in text
+    assert "language" in text

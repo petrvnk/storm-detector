@@ -16,13 +16,6 @@ blueprint:
       selector:
         entity:
           domain: sensor
-    storm_summary_sensor:
-      name: Storm Detector summary entity
-      description: Optional summary sensor used in the notification body.
-      default: sensor.storm_detector_summary
-      selector:
-        entity:
-          domain: sensor
     notify_service:
       name: Notify service
       description: "Example: notify.mobile_app_phone or notify.persistent_notification."
@@ -64,10 +57,13 @@ max_exceeded: silent
 trigger:
   - platform: state
     entity_id: !input storm_level_sensor
+    to:
+      - watch
+      - warning
+      - urgent
 
 variables:
   storm_level_sensor_id: !input storm_level_sensor
-  storm_summary_sensor_id: !input storm_summary_sensor
   minimum_level: !input minimum_level
   title_language: !input title_language
   cooldown_minutes: !input cooldown_minutes
@@ -75,12 +71,6 @@ variables:
   evidence_kind: "{{ state_attr(storm_level_sensor_id, 'evidence_kind') or 'unknown' }}"
   source_status: "{{ state_attr(storm_level_sensor_id, 'source_status') or {} }}"
   aggregate_stale: "{{ state_attr(storm_level_sensor_id, 'is_stale') == true }}"
-  summary_text: >-
-    {% if storm_summary_sensor_id %}
-      {{ states(storm_summary_sensor_id) }}
-    {% else %}
-      {{ state_attr(storm_level_sensor_id, 'summary') or current_level }}
-    {% endif %}
   effective_evidence: >-
     {% set radar_current = source_status.get('radar') == 'ok' %}
     {% set lightning_current = source_status.get('lightning') == 'ok' %}
@@ -111,13 +101,15 @@ variables:
   notification_icon: >-
     {% if effective_evidence == 'lightning_only' %}mdi:weather-lightning{% elif effective_evidence in ['radar_hail', 'radar_hail_with_lightning'] %}mdi:weather-hail{% else %}mdi:weather-cloudy-alert{% endif %}
 
-action:
+condition:
   - condition: template
     value_template: "{{ level_rank | int >= min_rank | int }}"
   - condition: template
     value_template: >-
       {% set last = this.attributes.last_triggered %}
       {{ last is none or cooldown_minutes | int(0) == 0 or (now() - last).total_seconds() >= cooldown_minutes | int * 60 }}
+
+action:
   - service: !input notify_service
     data:
       title: "{{ title_text }}"
