@@ -123,6 +123,60 @@ async def test_frame_cache_deduplicates_concurrent_analysis() -> None:
     assert len(rainviewer._ANALYZED_FRAME_CACHE) == 1
 
 
+@pytest.mark.asyncio
+async def test_cancelled_only_waiter_returns_promptly_and_cancels_shared_work() -> None:
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def analyze(*_args: Any, **_kwargs: Any) -> AnalyzedFrame:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        raise AssertionError("unreachable")
+
+    args, kwargs = _analysis_args(100)
+    with patch.object(rainviewer, "analyze_single_radar_frame", analyze):
+        task = asyncio.create_task(rainviewer._analyze_frame_cached(*args, **kwargs))
+        await started.wait()
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(task, timeout=0.01)
+        await asyncio.wait_for(cancelled.wait(), timeout=0.1)
+        await asyncio.sleep(0)
+
+    assert not rainviewer._ANALYZED_FRAME_INFLIGHT
+    assert not rainviewer._ANALYZED_FRAME_CACHE
+
+
+@pytest.mark.asyncio
+async def test_cancelling_one_waiter_keeps_shared_work_for_other_waiter() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+    sentinel = cast(AnalyzedFrame, object())
+
+    async def analyze(*_args: Any, **_kwargs: Any) -> AnalyzedFrame:
+        started.set()
+        await release.wait()
+        return sentinel
+
+    args, kwargs = _analysis_args(100)
+    with patch.object(rainviewer, "analyze_single_radar_frame", analyze):
+        first = asyncio.create_task(rainviewer._analyze_frame_cached(*args, **kwargs))
+        await started.wait()
+        second = asyncio.create_task(rainviewer._analyze_frame_cached(*args, **kwargs))
+        await asyncio.sleep(0)
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        release.set()
+        assert await second is sentinel
+
+    assert not rainviewer._ANALYZED_FRAME_INFLIGHT
+    assert len(rainviewer._ANALYZED_FRAME_CACHE) == 1
+
+
 class FakeResponse:
     def __init__(
         self,

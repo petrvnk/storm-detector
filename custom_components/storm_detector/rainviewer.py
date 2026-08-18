@@ -91,10 +91,14 @@ class _RequestBackoffState:
     blocked_until: float
 
 
+@dataclass
+class _InFlightFrameAnalysis:
+    task: asyncio.Task["AnalyzedFrame | None"]
+    waiters: int = 0
+
+
 _ANALYZED_FRAME_CACHE: OrderedDict[_FrameAnalysisCacheKey, "AnalyzedFrame"] = OrderedDict()
-_ANALYZED_FRAME_INFLIGHT: dict[
-    _FrameAnalysisCacheKey, asyncio.Task["AnalyzedFrame | None"]
-] = {}
+_ANALYZED_FRAME_INFLIGHT: dict[_FrameAnalysisCacheKey, _InFlightFrameAnalysis] = {}
 _REQUEST_BACKOFF: OrderedDict[str, _RequestBackoffState] = OrderedDict()
 
 
@@ -526,6 +530,8 @@ def _clear_runtime_caches() -> None:
     _METADATA_CACHE.clear()
     _COLOR_TABLE_CACHE.clear()
     _ANALYZED_FRAME_CACHE.clear()
+    for analysis in _ANALYZED_FRAME_INFLIGHT.values():
+        analysis.task.cancel()
     _ANALYZED_FRAME_INFLIGHT.clear()
     _REQUEST_BACKOFF.clear()
 
@@ -1774,6 +1780,30 @@ def _frame_analysis_cache_key(
     )
 
 
+def _cache_analyzed_frame(key: _FrameAnalysisCacheKey, result: AnalyzedFrame) -> None:
+    _ANALYZED_FRAME_CACHE[key] = result
+    _ANALYZED_FRAME_CACHE.move_to_end(key)
+    while len(_ANALYZED_FRAME_CACHE) > ANALYZED_FRAME_CACHE_MAX_ENTRIES:
+        _ANALYZED_FRAME_CACHE.popitem(last=False)
+
+
+def _finish_inflight_frame(
+    key: _FrameAnalysisCacheKey,
+    task: asyncio.Task[AnalyzedFrame | None],
+) -> None:
+    current = _ANALYZED_FRAME_INFLIGHT.get(key)
+    if current is not None and current.task is task:
+        _ANALYZED_FRAME_INFLIGHT.pop(key, None)
+    if task.cancelled():
+        return
+    try:
+        result = task.result()
+    except BaseException:
+        return
+    if result is not None:
+        _cache_analyzed_frame(key, result)
+
+
 async def _analyze_frame_cached(
     session: Any,
     host: str,
@@ -1812,8 +1842,8 @@ async def _analyze_frame_cached(
         _ANALYZED_FRAME_CACHE.move_to_end(key)
         return cached
 
-    task = _ANALYZED_FRAME_INFLIGHT.get(key)
-    if task is None:
+    inflight = _ANALYZED_FRAME_INFLIGHT.get(key)
+    if inflight is None:
         task = asyncio.create_task(
             analyze_single_radar_frame(
                 session,
@@ -1831,24 +1861,17 @@ async def _analyze_frame_cached(
                 tile_size=tile_size,
             )
         )
-        _ANALYZED_FRAME_INFLIGHT[key] = task
+        inflight = _InFlightFrameAnalysis(task=task)
+        _ANALYZED_FRAME_INFLIGHT[key] = inflight
+        task.add_done_callback(functools.partial(_finish_inflight_frame, key))
 
+    inflight.waiters += 1
     try:
-        result = await asyncio.shield(task)
-    except asyncio.CancelledError:
-        await drain_future(task)
-        raise
+        return await asyncio.shield(inflight.task)
     finally:
-        if task.done() and _ANALYZED_FRAME_INFLIGHT.get(key) is task:
-            _ANALYZED_FRAME_INFLIGHT.pop(key, None)
-
-    if result is None:
-        return None
-    _ANALYZED_FRAME_CACHE[key] = result
-    _ANALYZED_FRAME_CACHE.move_to_end(key)
-    while len(_ANALYZED_FRAME_CACHE) > ANALYZED_FRAME_CACHE_MAX_ENTRIES:
-        _ANALYZED_FRAME_CACHE.popitem(last=False)
-    return result
+        inflight.waiters -= 1
+        if inflight.waiters == 0 and not inflight.task.done():
+            inflight.task.cancel()
 
 
 async def analyze_recent_frames(
