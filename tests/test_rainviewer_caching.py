@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
@@ -38,9 +39,16 @@ def _analysis_args(
     )
 
 
+def _successful_frame(*, complete: bool = True) -> AnalyzedFrame:
+    return cast(
+        AnalyzedFrame,
+        SimpleNamespace(complete=complete, analyzed_pixels=1),
+    )
+
+
 @pytest.mark.asyncio
 async def test_frame_cache_reuses_unchanged_window_and_only_analyzes_new_frame() -> None:
-    sentinel = cast(AnalyzedFrame, object())
+    sentinel = _successful_frame()
     lookup = {(255, 0, 0, 255): 60}
     analyzer = AsyncMock(return_value=sentinel)
 
@@ -58,7 +66,7 @@ async def test_frame_cache_reuses_unchanged_window_and_only_analyzes_new_frame()
 
 @pytest.mark.asyncio
 async def test_frame_cache_invalidates_for_location_threshold_and_color_table() -> None:
-    sentinel = cast(AnalyzedFrame, object())
+    sentinel = _successful_frame()
     analyzer = AsyncMock(return_value=sentinel)
     first_lookup = {(255, 0, 0, 255): 60}
     second_lookup = {(255, 0, 0, 255): 59}
@@ -80,7 +88,7 @@ async def test_frame_cache_invalidates_for_location_threshold_and_color_table() 
 async def test_frame_cache_is_bounded_lru_and_does_not_cache_failures(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sentinel = cast(AnalyzedFrame, object())
+    sentinel = _successful_frame()
     lookup = {(255, 0, 0, 255): 60}
     analyzer = AsyncMock(side_effect=[sentinel, sentinel, sentinel, sentinel, None, sentinel])
     monkeypatch.setattr(rainviewer, "ANALYZED_FRAME_CACHE_MAX_ENTRIES", 2)
@@ -98,10 +106,25 @@ async def test_frame_cache_is_bounded_lru_and_does_not_cache_failures(
 
 
 @pytest.mark.asyncio
+async def test_partial_frame_analysis_is_used_once_but_not_cached() -> None:
+    partial = _successful_frame(complete=False)
+    complete = _successful_frame()
+    analyzer = AsyncMock(side_effect=[partial, complete])
+    args, kwargs = _analysis_args(100)
+
+    with patch.object(rainviewer, "analyze_single_radar_frame", analyzer):
+        assert await rainviewer._analyze_frame_cached(*args, **kwargs) is partial
+        assert await rainviewer._analyze_frame_cached(*args, **kwargs) is complete
+
+    assert analyzer.await_count == 2
+    assert len(rainviewer._ANALYZED_FRAME_CACHE) == 1
+
+
+@pytest.mark.asyncio
 async def test_frame_cache_deduplicates_concurrent_analysis() -> None:
     started = asyncio.Event()
     release = asyncio.Event()
-    sentinel = cast(AnalyzedFrame, object())
+    sentinel = _successful_frame()
 
     async def analyze(*_args: Any, **_kwargs: Any) -> AnalyzedFrame:
         started.set()
@@ -151,10 +174,50 @@ async def test_cancelled_only_waiter_returns_promptly_and_cancels_shared_work() 
 
 
 @pytest.mark.asyncio
+async def test_new_caller_does_not_attach_to_task_being_cancelled() -> None:
+    first_started = asyncio.Event()
+    first_cancelled = asyncio.Event()
+    finish_first_cancellation = asyncio.Event()
+    sentinel = _successful_frame()
+    calls = 0
+
+    async def analyze(*_args: Any, **_kwargs: Any) -> AnalyzedFrame:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            first_started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                first_cancelled.set()
+                await finish_first_cancellation.wait()
+                raise
+            raise AssertionError("unreachable")
+        return sentinel
+
+    args, kwargs = _analysis_args(100)
+    with patch.object(rainviewer, "analyze_single_radar_frame", analyze):
+        first = asyncio.create_task(rainviewer._analyze_frame_cached(*args, **kwargs))
+        await first_started.wait()
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        await first_cancelled.wait()
+        assert not rainviewer._ANALYZED_FRAME_INFLIGHT
+
+        assert await rainviewer._analyze_frame_cached(*args, **kwargs) is sentinel
+        finish_first_cancellation.set()
+        await asyncio.sleep(0)
+
+    assert calls == 2
+    assert len(rainviewer._ANALYZED_FRAME_CACHE) == 1
+
+
+@pytest.mark.asyncio
 async def test_cancelling_one_waiter_keeps_shared_work_for_other_waiter() -> None:
     started = asyncio.Event()
     release = asyncio.Event()
-    sentinel = cast(AnalyzedFrame, object())
+    sentinel = _successful_frame()
 
     async def analyze(*_args: Any, **_kwargs: Any) -> AnalyzedFrame:
         started.set()

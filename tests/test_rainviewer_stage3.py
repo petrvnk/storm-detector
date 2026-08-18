@@ -515,6 +515,7 @@ async def test_analyze_single_frame_keeps_analysis_with_partial_tile_failures() 
     assert isinstance(frame_result, AnalyzedFrame)
     assert frame_result.selected_core_threshold_dbz == 60
     assert frame_result.selected_core_pixel_count == 1
+    assert frame_result.complete is False
 
 
 @pytest.mark.asyncio

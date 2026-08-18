@@ -16,7 +16,7 @@ import math
 import random
 import time
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, TypeVar
 from urllib.parse import urlsplit
 
@@ -200,6 +200,7 @@ class AnalyzedFrame:
     frame_path: str = ""
     overlay_cores: tuple[dict[str, int | float], ...] = ()
     overlay_selected_core_forced_included: bool = False
+    complete: bool = True
 
 
 @dataclass(frozen=True)
@@ -1471,28 +1472,31 @@ async def analyze_single_radar_frame(
 
     async def fetch_tile_points(
         spec: tuple[int, int, int, str],
-    ) -> dict[tuple[int, int], tuple[int, float, float, float]]:
+    ) -> tuple[dict[tuple[int, int], tuple[int, float, float, float]], bool]:
         tile_x, wrapped_x, tile_y, tile_url = spec
         async with fetch_limit:
             tile_bytes = await _fetch_tile_bytes(session, tile_url, timeout=timeout)
             if not tile_bytes:
-                return {}
+                return {}, False
             try:
-                return await _run_in_executor_and_drain(
-                    _tile_points_from_bytes,
-                    tile_bytes,
-                    color_lookup,
-                    tile_x=tile_x,
-                    wrapped_x=wrapped_x,
-                    tile_y=tile_y,
-                    center_latitude=center_latitude,
-                    center_longitude=center_longitude,
-                    analysis_radius_km=analysis_radius_km,
-                    zoom=zoom,
-                    tile_size=tile_size,
+                return (
+                    await _run_in_executor_and_drain(
+                        _tile_points_from_bytes,
+                        tile_bytes,
+                        color_lookup,
+                        tile_x=tile_x,
+                        wrapped_x=wrapped_x,
+                        tile_y=tile_y,
+                        center_latitude=center_latitude,
+                        center_longitude=center_longitude,
+                        analysis_radius_km=analysis_radius_km,
+                        zoom=zoom,
+                        tile_size=tile_size,
+                    ),
+                    True,
                 )
             except Exception:
-                return {}
+                return {}, False
 
     tile_tasks = [asyncio.create_task(fetch_tile_points(spec)) for spec in tile_specs]
     try:
@@ -1514,13 +1518,14 @@ async def analyze_single_radar_frame(
         raise
 
     points: dict[tuple[int, int], tuple[int, float, float, float]] = {}
-    for tile_points in tile_point_maps:
+    all_tiles_complete = all(complete for _, complete in tile_point_maps)
+    for tile_points, _ in tile_point_maps:
         points.update(tile_points)
 
     if not points:
         return None
 
-    return await _run_in_executor_and_drain(
+    result = await _run_in_executor_and_drain(
         _analyse_dbz_grid,
         points,
         center_latitude,
@@ -1534,6 +1539,9 @@ async def analyze_single_radar_frame(
         core_urgent_dbz=core_urgent_dbz,
         min_core_pixels=min_core_pixels,
     )
+    if isinstance(result, AnalyzedFrame):
+        return replace(result, complete=all_tiles_complete)
+    return result
 
 
 def _selected_core_sample(frame: AnalyzedFrame) -> tuple[int, float, float, float] | None:
@@ -1792,7 +1800,8 @@ def _finish_inflight_frame(
     task: asyncio.Task[AnalyzedFrame | None],
 ) -> None:
     current = _ANALYZED_FRAME_INFLIGHT.get(key)
-    if current is not None and current.task is task:
+    owns_entry = current is not None and current.task is task
+    if owns_entry:
         _ANALYZED_FRAME_INFLIGHT.pop(key, None)
     if task.cancelled():
         return
@@ -1800,7 +1809,7 @@ def _finish_inflight_frame(
         result = task.result()
     except BaseException:
         return
-    if result is not None:
+    if owns_entry and result is not None and result.complete and result.analyzed_pixels > 0:
         _cache_analyzed_frame(key, result)
 
 
@@ -1871,6 +1880,8 @@ async def _analyze_frame_cached(
     finally:
         inflight.waiters -= 1
         if inflight.waiters == 0 and not inflight.task.done():
+            if _ANALYZED_FRAME_INFLIGHT.get(key) is inflight:
+                _ANALYZED_FRAME_INFLIGHT.pop(key, None)
             inflight.task.cancel()
 
 
