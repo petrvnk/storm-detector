@@ -107,6 +107,13 @@ The card is non-interactive: it has no pan, zoom, playback, or hover-only detail
 
 The live overlay loads image tiles directly from RainViewer in the browser for the displayed area. This adds browser-side requests to RainViewer's tile host; the frontend does not request RainViewer metadata or load external JavaScript.
 
+The integration backend caches RainViewer metadata for about five minutes and keeps a
+bounded in-memory cache of successful frame analyses. An unchanged radar window does not
+download the same tiles again; when RainViewer publishes one new frame, normally only that
+frame is fetched and analyzed. Transient failures use jittered retries and bounded cooldowns,
+including `Retry-After` handling for rate limits. Local lightning sensors continue to be
+evaluated at the configured refresh interval.
+
 The repository's MIT license covers the integration code, not RainViewer radar data. RainViewer data, terms, attribution, and availability are separate, and availability is not guaranteed. The live radar module therefore keeps a visible localized RainViewer attribution link and retains the schematic fallback when tile images cannot be loaded.
 
 ## Notification blueprint

@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Cache successful radar-frame analyses in a bounded in-memory LRU so unchanged frames
+  are not downloaded and decoded again; a rolling four-frame window normally fetches
+  only the newly published frame.
+- Align RainViewer metadata refreshes with a five-minute TTL while retaining the local
+  lightning evaluation cadence.
+- Add jittered exponential retry delays and bounded cooldowns for transient network,
+  `408`, `429`, and `5xx` responses, including numeric `Retry-After` handling.
+
+### Fixed
+
+- Preserve the last successful radar metadata during transient upstream outages so the
+  existing frame-age and stale rules control degradation and recovery.
+
 ## 0.1.0 - 2026-08-17
 
 ### Changed

@@ -9,11 +9,14 @@ from __future__ import annotations
 import asyncio
 import csv
 import functools
+import hashlib
 import io
 import json
 import math
+import random
 import time
-from dataclasses import dataclass
+from collections import OrderedDict
+from dataclasses import dataclass, replace
 from typing import Any, Callable, TypeVar
 from urllib.parse import urlsplit
 
@@ -45,6 +48,13 @@ RAINVIEWER_COLOR_SCHEME = "Universal Blue"
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 20
 DEFAULT_RETRY_ATTEMPTS = 1
 DEFAULT_RETRY_BACKOFF_SECONDS = 0.25
+RAINVIEWER_METADATA_TTL_SECONDS = 300
+ANALYZED_FRAME_CACHE_MAX_ENTRIES = 64
+REQUEST_BACKOFF_MAX_ENTRIES = 32
+REQUEST_BACKOFF_BASE_SECONDS = 5.0
+REQUEST_BACKOFF_429_SECONDS = 60.0
+REQUEST_BACKOFF_MAX_SECONDS = 300.0
+REQUEST_RETRY_JITTER_RATIO = 0.2
 MAX_PARALLEL_TILE_FETCHES = 4
 MAX_TRACK_SPEED_KMH = 180.0
 MAX_TRACK_INTENSITY_DELTA_DBZ = 15
@@ -56,6 +66,40 @@ _T = TypeVar("_T")
 
 _METADATA_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _COLOR_TABLE_CACHE: dict[str, tuple[float, dict[tuple[int, int, int, int], int]]] = {}
+
+
+@dataclass(frozen=True)
+class _FrameAnalysisCacheKey:
+    host: str
+    path: str
+    frame_time: int
+    center_latitude: float
+    center_longitude: float
+    analysis_radius_km: float
+    zoom: int
+    tile_size: int
+    core_watch_dbz: int
+    core_warning_dbz: int
+    core_urgent_dbz: int
+    min_core_pixels: int
+    color_lookup_digest: bytes
+
+
+@dataclass(frozen=True)
+class _RequestBackoffState:
+    failures: int
+    blocked_until: float
+
+
+@dataclass
+class _InFlightFrameAnalysis:
+    task: asyncio.Task["AnalyzedFrame | None"]
+    waiters: int = 0
+
+
+_ANALYZED_FRAME_CACHE: OrderedDict[_FrameAnalysisCacheKey, "AnalyzedFrame"] = OrderedDict()
+_ANALYZED_FRAME_INFLIGHT: dict[_FrameAnalysisCacheKey, _InFlightFrameAnalysis] = {}
+_REQUEST_BACKOFF: OrderedDict[str, _RequestBackoffState] = OrderedDict()
 
 
 async def _run_in_executor_and_drain(
@@ -156,6 +200,7 @@ class AnalyzedFrame:
     frame_path: str = ""
     overlay_cores: tuple[dict[str, int | float], ...] = ()
     overlay_selected_core_forced_included: bool = False
+    complete: bool = True
 
 
 @dataclass(frozen=True)
@@ -398,6 +443,100 @@ def _should_retry_status(status: int) -> bool:
     return status == 0 or status == 408 or status == 429 or status >= 500
 
 
+def _request_origin(url: str) -> str:
+    parsed = urlsplit(url)
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+
+def _request_backoff_remaining(url: str, *, now: float | None = None) -> float:
+    current = time.monotonic() if now is None else now
+    remaining = 0.0
+    for key in (_request_origin(url), url):
+        state = _REQUEST_BACKOFF.get(key)
+        if state is None:
+            continue
+        _REQUEST_BACKOFF.move_to_end(key)
+        remaining = max(remaining, state.blocked_until - current)
+    return max(0.0, remaining)
+
+
+def _response_retry_after_seconds(response: Any) -> float | None:
+    headers = getattr(response, "headers", None)
+    if headers is None or not hasattr(headers, "get"):
+        return None
+    try:
+        value = headers.get("Retry-After")
+        if value is None:
+            return None
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None
+    if seconds < 0:
+        return None
+    return min(seconds, REQUEST_BACKOFF_MAX_SECONDS)
+
+
+def _register_request_backoff(
+    url: str,
+    *,
+    status: int = 0,
+    retry_after_seconds: float | None = None,
+    now: float | None = None,
+) -> None:
+    key = _request_origin(url) if status == 429 else url
+    current = time.monotonic() if now is None else now
+    previous = _REQUEST_BACKOFF.get(key)
+    failures = (previous.failures if previous is not None else 0) + 1
+    base = REQUEST_BACKOFF_429_SECONDS if status == 429 else REQUEST_BACKOFF_BASE_SECONDS
+    exponential = min(base * (2 ** (failures - 1)), REQUEST_BACKOFF_MAX_SECONDS)
+    minimum = max(exponential, retry_after_seconds or 0.0)
+    delay = min(
+        minimum * random.uniform(1.0, 1.0 + REQUEST_RETRY_JITTER_RATIO),
+        REQUEST_BACKOFF_MAX_SECONDS,
+    )
+    blocked_until = current + delay
+    if previous is not None:
+        blocked_until = max(blocked_until, previous.blocked_until)
+    _REQUEST_BACKOFF[key] = _RequestBackoffState(
+        failures=failures,
+        blocked_until=blocked_until,
+    )
+    _REQUEST_BACKOFF.move_to_end(key)
+    while len(_REQUEST_BACKOFF) > REQUEST_BACKOFF_MAX_ENTRIES:
+        _REQUEST_BACKOFF.popitem(last=False)
+
+
+def _clear_request_backoff(url: str, *, now: float | None = None) -> None:
+    current = time.monotonic() if now is None else now
+    for key in (_request_origin(url), url):
+        state = _REQUEST_BACKOFF.get(key)
+        if state is not None and current >= state.blocked_until:
+            _REQUEST_BACKOFF.pop(key, None)
+
+
+def _retry_delay(base_seconds: float, attempt: int) -> float:
+    exponential = max(base_seconds, 0.0) * (2**attempt)
+    return float(
+        exponential
+        * random.uniform(
+            1.0 - REQUEST_RETRY_JITTER_RATIO,
+            1.0 + REQUEST_RETRY_JITTER_RATIO,
+        )
+    )
+
+
+def _clear_runtime_caches() -> None:
+    """Clear process-local caches for isolated tests and controlled reloads."""
+
+    _METADATA_CACHE.clear()
+    _COLOR_TABLE_CACHE.clear()
+    _ANALYZED_FRAME_CACHE.clear()
+    for analysis in _ANALYZED_FRAME_INFLIGHT.values():
+        analysis.task.cancel()
+    _ANALYZED_FRAME_INFLIGHT.clear()
+    _REQUEST_BACKOFF.clear()
+
+
 async def _sleep_between_retries(delay_seconds: float) -> None:
     if delay_seconds > 0:
         await asyncio.sleep(delay_seconds)
@@ -413,22 +552,42 @@ async def _safe_get_json(
 ) -> dict[str, Any] | None:
     """Fetch JSON with bounded transient retry/backoff and quiet failure."""
 
+    if _request_backoff_remaining(url) > 0:
+        return None
     for attempt in range(max(retry_attempts, 0) + 1):
+        if _request_backoff_remaining(url) > 0:
+            return None
         response = None
         try:
             response = await session.get(url, timeout=timeout)
             status = await _extract_status(response)
             if status and status >= 400:
+                retry_after = _response_retry_after_seconds(response)
+                if status == 429:
+                    _register_request_backoff(
+                        url,
+                        status=status,
+                        retry_after_seconds=retry_after,
+                    )
+                    return None
                 if _should_retry_status(status) and attempt < retry_attempts:
-                    await _sleep_between_retries(retry_backoff_seconds * (attempt + 1))
+                    await _sleep_between_retries(_retry_delay(retry_backoff_seconds, attempt))
                     continue
+                if _should_retry_status(status):
+                    _register_request_backoff(
+                        url,
+                        status=status,
+                        retry_after_seconds=retry_after,
+                    )
                 return None
             payload = await _extract_json(response)
+            _clear_request_backoff(url)
             return payload if isinstance(payload, dict) else None
         except Exception:
             if attempt >= retry_attempts:
+                _register_request_backoff(url)
                 return None
-            await _sleep_between_retries(retry_backoff_seconds * (attempt + 1))
+            await _sleep_between_retries(_retry_delay(retry_backoff_seconds, attempt))
         finally:
             if response is not None:
                 await _close_response(response)
@@ -447,6 +606,7 @@ async def fetch_rainviewer_color_lookup(
 
     if _is_mapping_cached(_COLOR_TABLE_CACHE, color_url, ttl_seconds):
         return _COLOR_TABLE_CACHE[color_url][1]
+    stale_lookup = _COLOR_TABLE_CACHE.get(color_url, (0.0, {}))[1]
 
     payload = await _safe_get_text(
         session,
@@ -456,9 +616,11 @@ async def fetch_rainviewer_color_lookup(
         retry_backoff_seconds=retry_backoff_seconds,
     )
     if payload is None:
-        return {}
+        return stale_lookup
 
     lookup = parse_color_table(payload)
+    if not lookup:
+        return stale_lookup
     _cache_set_colors(color_url, lookup, ttl_seconds)
     return lookup
 
@@ -473,24 +635,46 @@ async def _safe_get_text(
 ) -> str | None:
     """Fetch text with bounded transient retry/backoff and quiet failure."""
 
+    if _request_backoff_remaining(url) > 0:
+        return None
     for attempt in range(max(retry_attempts, 0) + 1):
+        if _request_backoff_remaining(url) > 0:
+            return None
         response = None
         try:
             response = await session.get(url, timeout=timeout)
             status = await _extract_status(response)
             if status and status >= 400:
+                retry_after = _response_retry_after_seconds(response)
+                if status == 429:
+                    _register_request_backoff(
+                        url,
+                        status=status,
+                        retry_after_seconds=retry_after,
+                    )
+                    return None
                 if _should_retry_status(status) and attempt < retry_attempts:
-                    await _sleep_between_retries(retry_backoff_seconds * (attempt + 1))
+                    await _sleep_between_retries(_retry_delay(retry_backoff_seconds, attempt))
                     continue
+                if _should_retry_status(status):
+                    _register_request_backoff(
+                        url,
+                        status=status,
+                        retry_after_seconds=retry_after,
+                    )
                 return None
             if hasattr(response, "text") and callable(response.text):
-                return await response.text()
-            data = await response.read()
+                payload = await response.text()
+                _clear_request_backoff(url)
+                return str(payload)
+            data = bytes(await response.read())
+            _clear_request_backoff(url)
             return data.decode("utf-8", "ignore")
         except Exception:
             if attempt >= retry_attempts:
+                _register_request_backoff(url)
                 return None
-            await _sleep_between_retries(retry_backoff_seconds * (attempt + 1))
+            await _sleep_between_retries(_retry_delay(retry_backoff_seconds, attempt))
         finally:
             if response is not None:
                 await _close_response(response)
@@ -511,7 +695,7 @@ async def fetch_radar_metadata(
     session: Any,
     api_base: str = RAINVIEWER_API_BASE,
     paths: tuple[str, ...] = RAINVIEWER_METADATA_ENDPOINTS,
-    ttl_seconds: int = 120,
+    ttl_seconds: int = RAINVIEWER_METADATA_TTL_SECONDS,
     timeout: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
     retry_attempts: int = DEFAULT_RETRY_ATTEMPTS,
     retry_backoff_seconds: float = DEFAULT_RETRY_BACKOFF_SECONDS,
@@ -521,6 +705,7 @@ async def fetch_radar_metadata(
     cache_key = f"{api_base}:{','.join(paths)}"
     if _is_mapping_cached(_METADATA_CACHE, cache_key, ttl_seconds):
         return _METADATA_CACHE[cache_key][1]
+    stale_payload = _METADATA_CACHE.get(cache_key, (0.0, {}))[1]
 
     for path in paths:
         url = f"{api_base.rstrip('/')}{path}"
@@ -535,8 +720,7 @@ async def fetch_radar_metadata(
             _cache_set_metadata(cache_key, payload, ttl_seconds)
             return payload
 
-    _cache_set_metadata(cache_key, {}, ttl_seconds)
-    return {}
+    return stale_payload if stale_payload.get("radar") else {}
 
 
 def latlon_to_global_px(lat: float, lon: float, z: int, tile_size: int = RAINVIEWER_TILE_SIZE) -> tuple[float, float]:
@@ -614,21 +798,42 @@ async def _fetch_tile_bytes(
 ) -> bytes | None:
     if Image is None:
         return None
+    if _request_backoff_remaining(url) > 0:
+        return None
     for attempt in range(max(retry_attempts, 0) + 1):
+        if _request_backoff_remaining(url) > 0:
+            return None
         response = None
         try:
             response = await session.get(url, timeout=timeout)
             status = await _extract_status(response)
             if status and status >= 400:
+                retry_after = _response_retry_after_seconds(response)
+                if status == 429:
+                    _register_request_backoff(
+                        url,
+                        status=status,
+                        retry_after_seconds=retry_after,
+                    )
+                    return None
                 if _should_retry_status(status) and attempt < retry_attempts:
-                    await _sleep_between_retries(retry_backoff_seconds * (attempt + 1))
+                    await _sleep_between_retries(_retry_delay(retry_backoff_seconds, attempt))
                     continue
+                if _should_retry_status(status):
+                    _register_request_backoff(
+                        url,
+                        status=status,
+                        retry_after_seconds=retry_after,
+                    )
                 return None
-            return await response.read()
+            payload = bytes(await response.read())
+            _clear_request_backoff(url)
+            return payload
         except Exception:
             if attempt >= retry_attempts:
+                _register_request_backoff(url)
                 return None
-            await _sleep_between_retries(retry_backoff_seconds * (attempt + 1))
+            await _sleep_between_retries(_retry_delay(retry_backoff_seconds, attempt))
         finally:
             if response is not None:
                 await _close_response(response)
@@ -1267,28 +1472,31 @@ async def analyze_single_radar_frame(
 
     async def fetch_tile_points(
         spec: tuple[int, int, int, str],
-    ) -> dict[tuple[int, int], tuple[int, float, float, float]]:
+    ) -> tuple[dict[tuple[int, int], tuple[int, float, float, float]], bool]:
         tile_x, wrapped_x, tile_y, tile_url = spec
         async with fetch_limit:
             tile_bytes = await _fetch_tile_bytes(session, tile_url, timeout=timeout)
             if not tile_bytes:
-                return {}
+                return {}, False
             try:
-                return await _run_in_executor_and_drain(
-                    _tile_points_from_bytes,
-                    tile_bytes,
-                    color_lookup,
-                    tile_x=tile_x,
-                    wrapped_x=wrapped_x,
-                    tile_y=tile_y,
-                    center_latitude=center_latitude,
-                    center_longitude=center_longitude,
-                    analysis_radius_km=analysis_radius_km,
-                    zoom=zoom,
-                    tile_size=tile_size,
+                return (
+                    await _run_in_executor_and_drain(
+                        _tile_points_from_bytes,
+                        tile_bytes,
+                        color_lookup,
+                        tile_x=tile_x,
+                        wrapped_x=wrapped_x,
+                        tile_y=tile_y,
+                        center_latitude=center_latitude,
+                        center_longitude=center_longitude,
+                        analysis_radius_km=analysis_radius_km,
+                        zoom=zoom,
+                        tile_size=tile_size,
+                    ),
+                    True,
                 )
             except Exception:
-                return {}
+                return {}, False
 
     tile_tasks = [asyncio.create_task(fetch_tile_points(spec)) for spec in tile_specs]
     try:
@@ -1310,13 +1518,14 @@ async def analyze_single_radar_frame(
         raise
 
     points: dict[tuple[int, int], tuple[int, float, float, float]] = {}
-    for tile_points in tile_point_maps:
+    all_tiles_complete = all(complete for _, complete in tile_point_maps)
+    for tile_points, _ in tile_point_maps:
         points.update(tile_points)
 
     if not points:
         return None
 
-    return await _run_in_executor_and_drain(
+    result = await _run_in_executor_and_drain(
         _analyse_dbz_grid,
         points,
         center_latitude,
@@ -1330,6 +1539,9 @@ async def analyze_single_radar_frame(
         core_urgent_dbz=core_urgent_dbz,
         min_core_pixels=min_core_pixels,
     )
+    if isinstance(result, AnalyzedFrame):
+        return replace(result, complete=all_tiles_complete)
+    return result
 
 
 def _selected_core_sample(frame: AnalyzedFrame) -> tuple[int, float, float, float] | None:
@@ -1536,6 +1748,143 @@ def _motion_from_frame_results(frame_results: list[AnalyzedFrame]) -> StormMotio
     )
 
 
+def _frame_analysis_cache_key(
+    host: str,
+    frame: dict[str, Any],
+    *,
+    center_latitude: float,
+    center_longitude: float,
+    analysis_radius_km: float,
+    zoom: int,
+    tile_size: int,
+    core_watch_dbz: int,
+    core_warning_dbz: int,
+    core_urgent_dbz: int,
+    min_core_pixels: int,
+    color_lookup: dict[tuple[int, int, int, int], int],
+) -> _FrameAnalysisCacheKey | None:
+    if not _frame_is_valid(frame):
+        return None
+    try:
+        frame_time = int(frame["time"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return _FrameAnalysisCacheKey(
+        host=host,
+        path=str(frame["path"]),
+        frame_time=frame_time,
+        center_latitude=round(float(center_latitude), 6),
+        center_longitude=round(float(center_longitude), 6),
+        analysis_radius_km=round(float(analysis_radius_km), 3),
+        zoom=int(zoom),
+        tile_size=int(tile_size),
+        core_watch_dbz=int(core_watch_dbz),
+        core_warning_dbz=int(core_warning_dbz),
+        core_urgent_dbz=int(core_urgent_dbz),
+        min_core_pixels=int(min_core_pixels),
+        color_lookup_digest=hashlib.sha256(
+            repr(sorted(color_lookup.items())).encode("ascii")
+        ).digest(),
+    )
+
+
+def _cache_analyzed_frame(key: _FrameAnalysisCacheKey, result: AnalyzedFrame) -> None:
+    _ANALYZED_FRAME_CACHE[key] = result
+    _ANALYZED_FRAME_CACHE.move_to_end(key)
+    while len(_ANALYZED_FRAME_CACHE) > ANALYZED_FRAME_CACHE_MAX_ENTRIES:
+        _ANALYZED_FRAME_CACHE.popitem(last=False)
+
+
+def _finish_inflight_frame(
+    key: _FrameAnalysisCacheKey,
+    task: asyncio.Task[AnalyzedFrame | None],
+) -> None:
+    current = _ANALYZED_FRAME_INFLIGHT.get(key)
+    owns_entry = current is not None and current.task is task
+    if owns_entry:
+        _ANALYZED_FRAME_INFLIGHT.pop(key, None)
+    if task.cancelled():
+        return
+    try:
+        result = task.result()
+    except BaseException:
+        return
+    if owns_entry and result is not None and result.complete and result.analyzed_pixels > 0:
+        _cache_analyzed_frame(key, result)
+
+
+async def _analyze_frame_cached(
+    session: Any,
+    host: str,
+    frame: dict[str, Any],
+    center_latitude: float,
+    center_longitude: float,
+    analysis_radius_km: float,
+    zoom: int,
+    color_lookup: dict[tuple[int, int, int, int], int],
+    *,
+    core_watch_dbz: int,
+    core_warning_dbz: int,
+    core_urgent_dbz: int,
+    min_core_pixels: int,
+    tile_size: int = RAINVIEWER_TILE_SIZE,
+) -> AnalyzedFrame | None:
+    key = _frame_analysis_cache_key(
+        host,
+        frame,
+        center_latitude=center_latitude,
+        center_longitude=center_longitude,
+        analysis_radius_km=analysis_radius_km,
+        zoom=zoom,
+        tile_size=tile_size,
+        core_watch_dbz=core_watch_dbz,
+        core_warning_dbz=core_warning_dbz,
+        core_urgent_dbz=core_urgent_dbz,
+        min_core_pixels=min_core_pixels,
+        color_lookup=color_lookup,
+    )
+    if key is None:
+        return None
+
+    cached = _ANALYZED_FRAME_CACHE.get(key)
+    if cached is not None:
+        _ANALYZED_FRAME_CACHE.move_to_end(key)
+        return cached
+
+    inflight = _ANALYZED_FRAME_INFLIGHT.get(key)
+    if inflight is None:
+        task = asyncio.create_task(
+            analyze_single_radar_frame(
+                session,
+                host,
+                frame,
+                center_latitude,
+                center_longitude,
+                analysis_radius_km,
+                zoom,
+                color_lookup,
+                core_watch_dbz=core_watch_dbz,
+                core_warning_dbz=core_warning_dbz,
+                core_urgent_dbz=core_urgent_dbz,
+                min_core_pixels=min_core_pixels,
+                tile_size=tile_size,
+            )
+        )
+        inflight = _InFlightFrameAnalysis(task=task)
+        _ANALYZED_FRAME_INFLIGHT[key] = inflight
+        task.add_done_callback(functools.partial(_finish_inflight_frame, key))
+
+    inflight.waiters += 1
+    try:
+        return await asyncio.shield(inflight.task)
+    finally:
+        inflight.waiters -= 1
+        if inflight.waiters == 0 and not inflight.task.done():
+            if _ANALYZED_FRAME_INFLIGHT.get(key) is inflight:
+                _ANALYZED_FRAME_INFLIGHT.pop(key, None)
+            inflight.task.cancel()
+
+
 async def analyze_recent_frames(
     session: Any,
     metadata: dict[str, Any],
@@ -1578,7 +1927,7 @@ async def analyze_recent_frames(
 
     frame_results: list[AnalyzedFrame] = []
     for frame in selected:
-        result = await analyze_single_radar_frame(
+        result = await _analyze_frame_cached(
             session,
             host,
             frame,
