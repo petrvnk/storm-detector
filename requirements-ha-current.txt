@@ -1,0 +1,3 @@
+# Pins the test stack to the current stable Home Assistant release (2026.8.2).
+# Update this pin deliberately when the supported current-stable lane advances.
+pytest-homeassistant-custom-component==0.13.356

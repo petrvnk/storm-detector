@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Validate the integration against both its minimum supported Home Assistant release
+  and the current stable Home Assistant test stack, with a dedicated Hassfest workflow.
 - Cache successful radar-frame analyses in a bounded in-memory LRU so unchanged frames
   are not downloaded and decoded again; a rolling four-frame window normally fetches
   only the newly published frame.

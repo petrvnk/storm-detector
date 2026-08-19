@@ -1,0 +1,9 @@
+# pytest-homeassistant-custom-component 0.13.171 pins Home Assistant 2024.10.0,
+# the minimum release declared in hacs.json.
+pytest-homeassistant-custom-component==0.13.171
+
+# The 2024.10 dependency graph predates josepy 2.x and pycares 4.5+;
+# without historical constraints, a fresh resolver produces an incompatible ACME
+# import and a background DNS shutdown thread rejected by the legacy test plugin.
+josepy==1.14.0
+pycares==4.4.0
