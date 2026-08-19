@@ -16,6 +16,9 @@
 
 - Preserve the last successful radar metadata during transient upstream outages so the
   existing frame-age and stale rules control degradation and recovery.
+- Do not report the event-driven lightning source as stale merely because no strikes
+  occurred; old event values remain excluded from risk evidence, while explicitly
+  unavailable or missing entities still degrade the source.
 
 ## 0.1.0 - 2026-08-17
 

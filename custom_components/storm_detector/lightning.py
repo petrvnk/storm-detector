@@ -49,6 +49,12 @@ def is_empty_state(value: Any) -> bool:
     return False
 
 
+def is_unavailable_state(value: Any) -> bool:
+    """Return true only when Home Assistant explicitly marks an entity unavailable."""
+
+    return isinstance(value, str) and value.strip().lower() == "unavailable"
+
+
 def normalize_counter_state(value: Any) -> int | None:
     """Normalize counter-like values to non-negative integers."""
 
@@ -220,6 +226,11 @@ def build_lightning_snapshot(
     if azimuth_state is not None and azimuth is None and not is_empty_state(raw_azimuth):
         diagnostics.append("invalid_azimuth_state")
 
+    if distance_state is not None and is_unavailable_state(raw_distance):
+        diagnostics.append("unavailable_distance_entity")
+    if counter_state is not None and is_unavailable_state(raw_counter):
+        diagnostics.append("unavailable_counter_entity")
+
     distance_age = _state_age_seconds(distance_state, now)
     counter_age = _state_age_seconds(counter_state, now)
 
@@ -235,7 +246,11 @@ def build_lightning_snapshot(
     source_available = (distance is not None or counter is not None) and not (
         distance_state is None and counter_state is None
     )
-    is_stale = bool(source_available and (distance_stale or counter_stale))
+
+    # Distance and counter are event-driven values: their HA timestamps describe
+    # the last lightning event, not a provider heartbeat. Keep age diagnostics to
+    # suppress old event evidence, but never infer source health from inactivity.
+    is_stale = False
 
     return LightningSnapshot(
         distance_km=distance,
