@@ -32,6 +32,7 @@ async def test_static_card_url_is_registered_once_with_real_ha_router(
     import custom_components.storm_detector as integration
     from homeassistant.setup import async_setup_component
 
+    assert integration.CONFIG_SCHEMA is not None
     assert await async_setup_component(hass, "http", {"http": {}})
     await integration.async_setup(hass, {})
     client = await hass_client()

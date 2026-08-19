@@ -32,8 +32,7 @@ _FRONTEND_PATH = Path(__file__).parent / "frontend"
 _FRONTEND_URL = f"/{DOMAIN}"
 _STATIC_REGISTERED = "frontend_static_registered"
 
-if cv is not None:
-    CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN) if cv is not None else {}
 
 
 async def async_setup(hass: HomeAssistant, _config: dict[str, Any]) -> bool:

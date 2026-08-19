@@ -1,14 +1,14 @@
 {
   "domain": "storm_detector",
   "name": "Storm Detector",
-  "version": "0.1.0",
-  "documentation": "https://github.com/petrvnk/storm-detector",
-  "issue_tracker": "https://github.com/petrvnk/storm-detector/issues",
-  "codeowners": ["@petrvnk"],
-  "requirements": [],
-  "dependencies": ["http"],
   "after_dependencies": ["blitzortung"],
+  "codeowners": ["@petrvnk"],
   "config_flow": true,
+  "dependencies": ["http"],
+  "documentation": "https://github.com/petrvnk/storm-detector",
   "iot_class": "cloud_polling",
-  "loggers": ["custom_components.storm_detector"]
+  "issue_tracker": "https://github.com/petrvnk/storm-detector/issues",
+  "loggers": ["custom_components.storm_detector"],
+  "requirements": [],
+  "version": "0.1.0"
 }

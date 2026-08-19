@@ -34,6 +34,9 @@ def test_manifest_and_hacs_metadata_are_release_ready() -> None:
     )
     hacs = json.loads((ROOT / "hacs.json").read_text(encoding="utf-8"))
 
+    manifest_keys = list(manifest)
+    assert manifest_keys[:2] == ["domain", "name"]
+    assert manifest_keys[2:] == sorted(manifest_keys[2:])
     assert manifest["domain"] == "storm_detector"
     assert manifest["version"] == "0.1.0"
     assert manifest["documentation"].startswith("https://github.com/")
