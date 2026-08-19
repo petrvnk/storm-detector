@@ -48,6 +48,9 @@ def test_manifest_and_hacs_metadata_are_release_ready() -> None:
     assert hacs["homeassistant"] >= "2024.10.0"
     assert hacs["render_readme"] is True
 
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert f'version = "{manifest["version"]}"' in pyproject
+
 
 def test_readme_contains_release_limitations_credits_and_migration_notes() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
