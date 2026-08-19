@@ -17,6 +17,7 @@ def test_release_readiness_files_exist() -> None:
         ROOT / "examples" / "lovelace" / "mushroom-card.yaml",
         ROOT / "examples" / "lovelace" / "weather-tab.yaml",
         ROOT / ".github" / "workflows" / "validate.yml",
+        ROOT / ".github" / "workflows" / "hassfest.yml",
         ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml",
         ROOT / ".github" / "ISSUE_TEMPLATE" / "feature_request.yml",
     ]
@@ -33,12 +34,16 @@ def test_manifest_and_hacs_metadata_are_release_ready() -> None:
     )
     hacs = json.loads((ROOT / "hacs.json").read_text(encoding="utf-8"))
 
+    manifest_keys = list(manifest)
+    assert manifest_keys[:2] == ["domain", "name"]
+    assert manifest_keys[2:] == sorted(manifest_keys[2:])
     assert manifest["domain"] == "storm_detector"
     assert manifest["version"] == "0.1.0"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].endswith("/issues")
     assert manifest["config_flow"] is True
     assert manifest["iot_class"] == "cloud_polling"
+    assert "http" in manifest["dependencies"]
     assert hacs["name"] == "Storm Detector"
     assert hacs["homeassistant"] >= "2024.10.0"
     assert hacs["render_readme"] is True

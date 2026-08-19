@@ -32,9 +32,10 @@ async def test_static_card_url_is_registered_once_with_real_ha_router(
     import custom_components.storm_detector as integration
     from homeassistant.setup import async_setup_component
 
+    assert integration.CONFIG_SCHEMA is not None
     assert await async_setup_component(hass, "http", {"http": {}})
-    client = await hass_client()
     await integration.async_setup(hass, {})
+    client = await hass_client()
     first_registration = {
         id(route.resource)
         for route in hass.http.app.router.routes()
@@ -57,7 +58,7 @@ async def test_static_card_url_is_registered_once_with_real_ha_router(
 
 @pytest.mark.parametrize(("language", "level_name"), [("en", "Level"), ("cs", "Úroveň")])
 async def test_clean_install_registers_exact_locale_stable_entity_ids(
-    hass, hass_client, monkeypatch, language: str, level_name: str
+    hass, monkeypatch, language: str, level_name: str
 ) -> None:
     """Keep registry IDs stable while resolving localized entity display names."""
 
@@ -65,7 +66,6 @@ async def test_clean_install_registers_exact_locale_stable_entity_ids(
     from homeassistant.setup import async_setup_component
 
     assert await async_setup_component(hass, "http", {"http": {}})
-    await hass_client()
     hass.config.language = language
 
     async def fake_metadata(_session: object) -> dict[str, object]:

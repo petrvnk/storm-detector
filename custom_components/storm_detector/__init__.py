@@ -21,18 +21,22 @@ try:  # pragma: no cover - Home Assistant imports are validated in real runtime.
     from homeassistant.components.http import StaticPathConfig
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
+    from homeassistant.helpers import config_validation as cv
 except Exception:  # pragma: no cover
     ConfigEntry = Any
     HomeAssistant = Any
     StaticPathConfig = Any
+    cv = None
 
 _FRONTEND_PATH = Path(__file__).parent / "frontend"
 _FRONTEND_URL = f"/{DOMAIN}"
 _STATIC_REGISTERED = "frontend_static_registered"
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN) if cv is not None else {}
+
 
 async def async_setup(hass: HomeAssistant, _config: dict[str, Any]) -> bool:
-    """Set up the integration from yaml config (frontend static path only)."""
+    """Set up integration-level resources for config entries."""
 
     await _async_register_frontend_static_path(hass)
     return True
