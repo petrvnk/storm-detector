@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-08-19
+
 ### Changed
 
 - Validate the integration against both its minimum supported Home Assistant release
