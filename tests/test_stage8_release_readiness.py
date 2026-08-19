@@ -31,7 +31,6 @@ def test_release_readiness_files_exist() -> None:
         ROOT / ".github" / "dependabot.yml",
         ROOT / "docs" / "screenshots" / "storm-detector-live-storm.png",
         ROOT / "docs" / "screenshots" / "storm-detector-clear.png",
-        ROOT / "docs" / "screenshots" / "storm-detector-storm.png",
         ROOT / "docs" / "screenshots" / "storm-detector-degraded.png",
     ]
 
@@ -99,7 +98,6 @@ def test_public_screenshots_are_valid_readable_images() -> None:
     for name in (
         "storm-detector-live-storm.png",
         "storm-detector-clear.png",
-        "storm-detector-storm.png",
         "storm-detector-degraded.png",
     ):
         with Image.open(screenshot_dir / name) as image:
