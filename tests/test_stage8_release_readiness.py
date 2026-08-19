@@ -38,7 +38,7 @@ def test_manifest_and_hacs_metadata_are_release_ready() -> None:
     assert manifest_keys[:2] == ["domain", "name"]
     assert manifest_keys[2:] == sorted(manifest_keys[2:])
     assert manifest["domain"] == "storm_detector"
-    assert manifest["version"] == "0.1.0"
+    assert manifest["version"] == "0.2.0"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].endswith("/issues")
     assert manifest["config_flow"] is True
