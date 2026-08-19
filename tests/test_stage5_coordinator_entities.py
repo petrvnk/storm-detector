@@ -1062,12 +1062,12 @@ async def test_coordinator_projects_lightning_azimuth_and_correlates_with_core()
     assert payload[ATTR_CONFIDENCE_LEVEL] == "high"
 
 
-async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:
+async def test_inactive_lightning_is_not_used_or_reported_as_degraded() -> None:
     hass = FakeHass()
     now = datetime.now(timezone.utc)
     stale_time = now - timedelta(seconds=DEFAULT_STALE_CLEAR_SECONDS + 10)
-    hass.set_state("sensor.lightning_distance", "17.5", last_updated=stale_time)
-    hass.set_state("sensor.lightning_count", "25", last_updated=stale_time)
+    hass.set_state("sensor.lightning_distance", "unknown", last_updated=stale_time)
+    hass.set_state("sensor.lightning_count", "0", last_updated=stale_time)
 
     async def _fake_meta(*_args: object, **_kwargs: object):
         return {"radar": {"past": []}, "host": "https://tilecache.rainviewer.com"}
@@ -1114,12 +1114,52 @@ async def test_stale_lightning_is_not_used_in_urgent_risk_summary() -> None:
     assert payload[ATTR_LIGHTNING_TRIGGERED] is False
     assert payload[ATTR_LAST_ERROR] is None
     assert payload[ATTR_SUMMARY] == "High possible hail risk nearby"
-    assert payload[ATTR_STALE] is True
-    assert payload["source_status"]["lightning"] == "stale"
+    assert payload[ATTR_STALE] is False
+    assert payload["source_status"]["lightning"] == "ok"
     assert "stale_distance_entity" in payload[ATTR_LIGHTNING_DIAGNOSTICS]
     assert "stale_counter_entity" in payload[ATTR_LIGHTNING_DIAGNOSTICS]
     assert "stale_distance_entity" not in payload["degradation_reasons"]
     assert "stale_counter_entity" not in payload["degradation_reasons"]
+
+
+async def test_unavailable_lightning_entity_degrades_source_end_to_end() -> None:
+    hass = FakeHass()
+    now = datetime.now(timezone.utc)
+    hass.set_state("sensor.lightning_distance", "unavailable", last_updated=now)
+    hass.set_state("sensor.lightning_count", "0", last_updated=now)
+
+    async def _fake_meta(*_args: object, **_kwargs: object):
+        return {"radar": {"past": []}, "host": "https://tilecache.rainviewer.com"}
+
+    async def _fake_color(*_args: object, **_kwargs: object):
+        return {"#ffffff": 0}
+
+    with patch(
+        "custom_components.storm_detector.coordinator.fetch_radar_metadata",
+        _fake_meta,
+    ), patch(
+        "custom_components.storm_detector.coordinator.fetch_rainviewer_color_lookup",
+        _fake_color,
+    ), patch(
+        "custom_components.storm_detector.coordinator.analyze_recent_frames",
+        lambda *_args, **_kwargs: _analysis_payload(),
+    ):
+        coordinator = StormDetectorCoordinator(
+            hass,
+            None,
+            "Storm Detector",
+            FakeRadarOnlyEntry(),
+            session_factory=FakeSessionContext,
+        )
+        payload = await coordinator._async_update_data()
+
+    assert payload["source_status"]["lightning"] == "degraded"
+    assert payload[ATTR_STALE] is True
+    assert payload[ATTR_LIGHTNING_DISTANCE_KM] is None
+    assert payload[ATTR_LIGHTNING_TRIGGERED] is False
+    assert "unavailable_distance_entity" in payload[ATTR_LIGHTNING_DIAGNOSTICS]
+    assert "unavailable_distance_entity" in payload["degradation_reasons"]
+    assert payload[ATTR_LAST_ERROR] == "unavailable_distance_entity"
 
 
 async def test_coordinator_without_coordinates_is_unavailable() -> None:

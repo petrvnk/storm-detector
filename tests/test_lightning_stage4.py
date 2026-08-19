@@ -91,7 +91,7 @@ def test_build_lightning_snapshot_triggers_inside_radius() -> None:
     assert snapshot.diagnostics == ()
 
 
-def test_build_lightning_snapshot_marks_stale_source_and_suppresses_trigger() -> None:
+def test_build_lightning_snapshot_suppresses_old_event_without_staling_source() -> None:
     now = datetime(2026, 6, 30, 12, 0, tzinfo=UTC)
     old = now - timedelta(seconds=901)
 
@@ -105,9 +105,42 @@ def test_build_lightning_snapshot_marks_stale_source_and_suppresses_trigger() ->
     )
 
     assert snapshot.source_available is True
-    assert snapshot.is_stale is True
+    assert snapshot.is_stale is False
     assert snapshot.trigger_active is False
     assert "stale_distance_entity" in snapshot.diagnostics
+
+
+def test_no_lightning_activity_does_not_stale_event_driven_source() -> None:
+    now = datetime(2026, 6, 30, 12, 0, tzinfo=UTC)
+    old = now - timedelta(hours=8)
+
+    snapshot = build_lightning_snapshot(
+        distance_state={"state": "unknown", "last_updated": old},
+        counter_state={"state": "0", "last_updated": old},
+        previous_counter=0,
+        stale_after_seconds=900,
+        now=now,
+    )
+
+    assert snapshot.source_available is True
+    assert snapshot.distance_km is None
+    assert snapshot.counter == 0
+    assert snapshot.counter_delta == 0
+    assert snapshot.is_stale is False
+    assert snapshot.trigger_active is False
+    assert snapshot.has_new_strike is False
+    assert "stale_distance_entity" in snapshot.diagnostics
+    assert "stale_counter_entity" in snapshot.diagnostics
+
+
+def test_unavailable_lightning_entity_is_reported_as_source_failure() -> None:
+    snapshot = build_lightning_snapshot(
+        distance_state={"state": "unavailable"},
+        counter_state={"state": "0"},
+    )
+
+    assert snapshot.source_available is True
+    assert "unavailable_distance_entity" in snapshot.diagnostics
 
 
 def test_build_lightning_snapshot_reports_missing_and_invalid_entities() -> None:
@@ -229,7 +262,7 @@ def test_lightning_snapshot_keeps_fresh_proximity_when_counter_is_stale() -> Non
         now=now,
     )
 
-    assert snapshot.is_stale is True
+    assert snapshot.is_stale is False
     assert snapshot.proximity_active is True
     assert snapshot.has_new_strike is False
     assert snapshot.new_strike_nearby is False

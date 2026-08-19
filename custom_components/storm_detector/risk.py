@@ -36,6 +36,8 @@ INTERNAL_EVENT_DIAGNOSTICS = frozenset(
         "lightning_counter_delta",
         "lightning_counter_reset",
         "lightning_not_configured",
+        "stale_distance_entity",
+        "stale_counter_entity",
     }
 )
 
