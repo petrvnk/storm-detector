@@ -1,6 +1,7 @@
 {
   "name": "Storm Detector",
   "content_in_root": false,
+  "hide_default_branch": true,
   "render_readme": true,
   "homeassistant": "2024.10.0"
 }

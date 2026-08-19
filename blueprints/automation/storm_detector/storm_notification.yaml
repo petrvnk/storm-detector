@@ -5,7 +5,7 @@ blueprint:
     watch, warning, or urgent. This opt-in blueprint does not modify dashboards
     or helpers and is not an official warning source.
   domain: automation
-  source_url: https://github.com/petrvnk/storm-detector/blob/main/blueprints/automation/storm_detector/storm_notification.yaml
+  source_url: https://github.com/petrvnk/storm-detector/blob/v0.2.1/blueprints/automation/storm_detector/storm_notification.yaml
   input:
     storm_level_sensor:
       name: Storm Detector level entity

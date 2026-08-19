@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-08-19
+
+### Changed
+
+- Add public installation, upgrade, uninstall, troubleshooting, privacy, support, and
+  contribution guidance with representative released-card screenshots and one-click
+  HACS and blueprint import links.
+- Hide the unsupported default branch from HACS and add automated dependency updates,
+  a pull-request checklist, and private vulnerability-reporting guidance.
+- Move checkout and Python setup workflows to immutable Node 24 action revisions.
+- Pin HACS and Hassfest container execution to immutable image digests and import the
+  notification blueprint from the released tag instead of the mutable default branch.
+
 ## 0.2.0 - 2026-08-19
 
 ### Changed
