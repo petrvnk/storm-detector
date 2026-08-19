@@ -6,7 +6,7 @@
   "issue_tracker": "https://github.com/petrvnk/storm-detector/issues",
   "codeowners": ["@petrvnk"],
   "requirements": [],
-  "dependencies": [],
+  "dependencies": ["http"],
   "after_dependencies": ["blitzortung"],
   "config_flow": true,
   "iot_class": "cloud_polling",

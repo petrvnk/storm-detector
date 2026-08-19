@@ -16,6 +16,8 @@
 
 ### Fixed
 
+- Declare the Home Assistant HTTP dependency and config-entry-only schema so the bundled
+  frontend route is registered before the HTTP router starts accepting requests.
 - Preserve the last successful radar metadata during transient upstream outages so the
   existing frame-age and stale rules control degradation and recovery.
 - Do not report the event-driven lightning source as stale merely because no strikes
