@@ -4,6 +4,8 @@ A Home Assistant integration that monitors **nearby thunderstorms and possible h
 
 It combines RainViewer radar with optional Home Assistant lightning sensors. The integration only reports possible hail when current radar data supports that conclusion; lightning alone is shown as a nearby thunderstorm, never as hail.
 
+[![Open your Home Assistant instance and add this repository to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=petrvnk&repository=storm-detector&category=integration)
+
 ## What it does
 
 - Detects nearby radar storm cores.
@@ -23,22 +25,58 @@ It combines RainViewer radar with optional Home Assistant lightning sensors. The
 
 Storm Detector is heuristic only. It does not detect hail on the ground and does not provide a calibrated hail probability.
 
+## Screenshots
+
+The first screenshot was supplied from a live Storm Detector card. Its timestamp and weather values describe only the moment of capture, not current conditions. It contains no exact location or entity identifiers.
+
+### Live storm activity
+
+![Live Storm Detector card showing an approaching storm](docs/screenshots/storm-detector-live-storm.png)
+
+### Representative comparison states
+
+The following screenshots use representative coordinator payloads rendered by the released card.
+
+| Clear | Partial source degradation |
+|---|---|
+| ![Storm Detector clear state](docs/screenshots/storm-detector-clear.png) | ![Storm Detector degraded source state](docs/screenshots/storm-detector-degraded.png) |
+
 ## Install with HACS
 
 Minimum Home Assistant version: **2024.10.0**.
 
-1. In HACS, open **Integrations**.
-2. Open the menu and select **Custom repositories**.
-3. Add `https://github.com/petrvnk/storm-detector` as category **Integration**.
-4. Install **Storm Detector**.
-5. Restart Home Assistant.
-6. Go to **Settings → Devices & services → Add integration** and select **Storm Detector**.
+Storm Detector is currently installed as a **HACS custom repository**. Use normal HACS search only after this repository is accepted into the HACS default catalog.
+
+1. Use the **Open your Home Assistant** button above, or open **HACS → Integrations**.
+2. For manual HACS setup, open **Custom repositories** and add `https://github.com/petrvnk/storm-detector` as category **Integration**.
+3. Install the latest released version of **Storm Detector**.
+4. Restart Home Assistant.
+5. Go to **Settings → Devices & services → Add integration** and select **Storm Detector**.
 
 ### Manual installation
 
-1. Copy `custom_components/storm_detector/` into `<HA config>/custom_components/`.
-2. Restart Home Assistant.
-3. Add **Storm Detector** from **Settings → Devices & services**.
+1. Download the source archive for the latest GitHub release.
+2. Copy `custom_components/storm_detector/` into `<HA config>/custom_components/`.
+3. Restart Home Assistant.
+4. Add **Storm Detector** from **Settings → Devices & services**.
+
+## Upgrade
+
+1. Install the available Storm Detector update in HACS.
+2. Restart Home Assistant when HACS requests it.
+3. Verify that the Storm Detector entities are available and `binary_sensor.storm_detector_data_stale` is `off` under normal source conditions.
+4. If the custom card still shows old copy or layout, reload the dashboard and clear the Home Assistant frontend cache for that browser or app.
+
+Do not copy files from the default branch over a released installation. HACS releases are the supported upgrade path.
+
+## Uninstall
+
+1. Remove or replace dashboards and automations that reference Storm Detector entities or `custom:storm-detector-card`.
+2. Delete the Storm Detector integration entry under **Settings → Devices & services**.
+3. Remove Storm Detector in HACS, then restart Home Assistant.
+4. Remove `/storm_detector/storm-detector-card.js` from **Settings → Dashboards → Resources** if you added it manually and no other dashboard uses it.
+
+Never edit Home Assistant `.storage` files for a normal uninstall.
 
 ## Setup
 
@@ -71,13 +109,7 @@ For automations, use the `evidence_kind` attribute on the level sensor instead o
 
 Dashboard files are **manual examples only**; the integration never writes dashboards automatically.
 
-Recommended ready-made example:
-
-```text
-examples/lovelace/native-card.yaml
-```
-
-Additional examples are available in `examples/lovelace/`.
+Recommended ready-made example: [`examples/lovelace/native-card.yaml`](examples/lovelace/native-card.yaml). Additional examples are available in [`examples/lovelace/`](examples/lovelace/).
 
 ### Adaptive custom card
 
@@ -97,49 +129,65 @@ radar_overlay: auto
 
 `radar_overlay` controls the live RainViewer layer:
 
-- `auto` (default) shows it only for current radar-supported storm or hail activity. Clear, unavailable, and stale states stay compact; lightning-only keeps its lightning UX without a live layer.
+- `auto` (default) shows it only for current radar-supported storm or hail activity.
 - `off` always uses the schematic radar view.
 - `always` shows a valid current radar layer even without a detected core; stale or unavailable data still stays hidden.
 
-The card is non-interactive: it has no pan, zoom, playback, or hover-only details. Storm details appear only during current activity, and hail wording appears only with radar-supported evidence. If RainViewer tiles are unavailable or blocked, the card falls back to its schematic radar view without changing the reported risk state.
-
-### RainViewer data and browser requests
-
-The live overlay loads image tiles directly from RainViewer in the browser for the displayed area. This adds browser-side requests to RainViewer's tile host; the frontend does not request RainViewer metadata or load external JavaScript.
-
-The integration backend caches RainViewer metadata for about five minutes and keeps a
-bounded in-memory cache of successful frame analyses. An unchanged radar window does not
-download the same tiles again; when RainViewer publishes one new frame, normally only that
-frame is fetched and analyzed. Transient failures use jittered retries and bounded cooldowns,
-including `Retry-After` handling for rate limits. Local lightning sensors continue to be
-evaluated at the configured refresh interval.
-
-The repository's MIT license covers the integration code, not RainViewer radar data. RainViewer data, terms, attribution, and availability are separate, and availability is not guaranteed. The live radar module therefore keeps a visible localized RainViewer attribution link and retains the schematic fallback when tile images cannot be loaded.
+The card is non-interactive: it has no pan, zoom, playback, or hover-only details. If RainViewer tiles are unavailable or blocked, the card falls back to its schematic radar view without changing the reported risk state.
 
 ## Notification blueprint
 
-The optional blueprint is located at:
+[![Open your Home Assistant instance and import the Storm Detector notification blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fpetrvnk%2Fstorm-detector%2Fblob%2Fv0.2.1%2Fblueprints%2Fautomation%2Fstorm_detector%2Fstorm_notification.yaml)
 
-```text
-blueprints/automation/storm_detector/storm_notification.yaml
-```
+The optional blueprint is located at [`blueprints/automation/storm_detector/storm_notification.yaml`](blueprints/automation/storm_detector/storm_notification.yaml). The button imports the blueprint from the immutable `v0.2.1` release tag. Import it, create an automation, and select the level sensor, a notify service, minimum level, title language, and cooldown.
 
-Import it into Home Assistant, create an automation, and select:
-
-- the level sensor;
-- a notify service;
-- minimum level (`watch`, `warning`, or `urgent`);
-- Czech or English titles;
-- notification cooldown.
-
-The blueprint uses `evidence_kind`, so its Czech wording distinguishes:
+The blueprint is opt-in and does not create automations by itself. Its evidence-aware Czech wording distinguishes:
 
 - **Sledování bouřky**;
 - **Blízká bouřka / blesky poblíž**;
 - **Možné kroupy poblíž**;
 - **Vysoká možnost krup**.
 
-It is opt-in and does not create automations by itself.
+## Privacy and data flow
+
+Storm Detector has no project-operated cloud service, account, telemetry, or analytics.
+
+- The backend sends requests to RainViewer for public radar metadata and image tiles required for the configured monitored area.
+- The optional live card sends tile-image requests directly from the viewing browser or Home Assistant app to RainViewer.
+- Tile coordinates can reveal the approximate monitored map area to RainViewer and to normal network intermediaries. Exact Home Assistant coordinates are not intentionally included as query parameters.
+- Optional lightning entity states are read locally from Home Assistant and are not sent by Storm Detector to a project-operated server.
+- Configuration and computed state remain in Home Assistant. Generated diagnostics intentionally omit configured coordinates and entity IDs, but review every attachment before publishing it.
+
+The backend caches RainViewer metadata for about five minutes and keeps a bounded in-memory cache of successful frame analyses. An unchanged radar window is not downloaded repeatedly; transient failures use jittered retries and bounded cooldowns, including `Retry-After` handling.
+
+The repository's MIT license covers the integration code, not RainViewer radar data. RainViewer terms, attribution, and availability remain separate. The live radar module keeps a visible localized RainViewer attribution link.
+
+## Troubleshooting
+
+### The card is not found
+
+Confirm that `/storm_detector/storm-detector-card.js` is registered as a JavaScript module, restart Home Assistant after installing the integration, then reload the dashboard frontend.
+
+### The card still shows an old version
+
+Confirm the installed Storm Detector version in HACS, restart Home Assistant, and clear the frontend cache in the affected browser or companion app. Do not repeatedly reinstall the default branch.
+
+### Detection is degraded or stale
+
+Inspect `source_status`, `degradation_reasons`, `last_error`, and `is_stale` on `sensor.storm_detector_level`. A quiet event-driven lightning source with distance `unknown` and counter `0` is normal; genuinely missing, invalid, or unavailable entities should degrade the source.
+
+### Radar is unavailable
+
+Check general network access to RainViewer and wait for the bounded retry cooldown. Storm Detector preserves current trusted evidence but does not treat old radar data as current.
+
+For reproducible problems, open a bug report and attach reviewed Home Assistant diagnostics without private entity names, addresses, tokens, or raw logs containing identifying data.
+
+## Support and security
+
+- Usage questions and troubleshooting: [`SUPPORT.md`](SUPPORT.md)
+- Bug reports and feature requests: [GitHub Issues](https://github.com/petrvnk/storm-detector/issues)
+- Security vulnerabilities: [`SECURITY.md`](SECURITY.md)
+- Contributions: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Limitations
 

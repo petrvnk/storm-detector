@@ -13,7 +13,7 @@ def test_manifest_exists_and_has_required_fields() -> None:
 
     assert data["domain"] == "storm_detector"
     assert data["name"] == "Storm Detector"
-    assert data["version"] == "0.2.0"
+    assert data["version"] == "0.2.1"
     assert data["documentation"] == "https://github.com/petrvnk/storm-detector"
     assert data["issue_tracker"] == "https://github.com/petrvnk/storm-detector/issues"
     assert data.get("config_flow") is True

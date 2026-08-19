@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 BLUEPRINT = ROOT / "blueprints" / "automation" / "storm_detector" / "storm_notification.yaml"
+MANIFEST = ROOT / "custom_components" / "storm_detector" / "manifest.json"
 NOTIFICATION_SEMANTICS = ROOT / "docs" / "ux" / "notification-semantics.md"
 
 
@@ -31,6 +33,7 @@ def test_readme_contains_manual_dashboard_snippets_and_no_auto_write_claims() ->
 
 def test_notification_blueprint_is_opt_in_and_has_required_inputs() -> None:
     text = BLUEPRINT.read_text(encoding="utf-8")
+    version = json.loads(MANIFEST.read_text(encoding="utf-8"))["version"]
 
     assert "domain: automation" in text
     assert "storm_level_sensor:" in text
@@ -48,7 +51,7 @@ def test_notification_blueprint_is_opt_in_and_has_required_inputs() -> None:
     assert "!input storm_summary_sensor" not in text
     assert "!input notify_service" in text
     assert "tag: storm_detector" in text
-    assert "https://github.com/petrvnk/storm-detector/blob/main/blueprints/automation/storm_detector/storm_notification.yaml" in text
+    assert f"https://github.com/petrvnk/storm-detector/blob/v{version}/blueprints/automation/storm_detector/storm_notification.yaml" in text
     assert "Open-Meteo" not in text
 
 
